@@ -11,7 +11,13 @@
 
 struct expr {
     struct atom {std::string m_value;};
-    struct cons {box<expr> m_lhs, m_rhs;};
+    struct cons {
+        cons();
+        cons(const expr&, const expr&);
+        cons(const cons&);
+        cons& operator=(const cons&);
+        std::unique_ptr<expr> m_lhs, m_rhs;
+    };
     struct var {uint32_t m_index;};
     std::variant<atom, cons, var> m_content;
 };
