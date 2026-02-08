@@ -120,57 +120,34 @@ void test_var_constructor() {
 
 void test_cons_constructor() {
     // Basic cons with atoms
-    atom a1("left");
-    atom a2("right");
-    expr e1{std::variant<atom, cons, var>{a1}};
-    expr e2{std::variant<atom, cons, var>{a2}};
-    cons c1(e1, e2);
+    cons c1(expr{atom{"left"}}, expr{atom{"right"}});
     
     // Verify lhs and rhs
-    const expr& lhs1 = c1.lhs();
-    const expr& rhs1 = c1.rhs();
-    assert(std::get<atom>(lhs1.content()).value() == "left");
-    assert(std::get<atom>(rhs1.content()).value() == "right");
+    assert(std::get<atom>(c1.lhs().content()).value() == "left");
+    assert(std::get<atom>(c1.rhs().content()).value() == "right");
     
     // Cons with variables
-    var v1(0);
-    var v2(1);
-    expr e3{std::variant<atom, cons, var>{v1}};
-    expr e4{std::variant<atom, cons, var>{v2}};
-    cons c2(e3, e4);
+    cons c2(expr{var{0}}, expr{var{1}});
     
     assert(std::get<var>(c2.lhs().content()).index() == 0);
     assert(std::get<var>(c2.rhs().content()).index() == 1);
     
     // Cons with mixed types (atom and var)
-    atom a3("atom");
-    var v3(42);
-    expr e5{std::variant<atom, cons, var>{a3}};
-    expr e6{std::variant<atom, cons, var>{v3}};
-    cons c3(e5, e6);
+    cons c3(expr{atom{"atom"}}, expr{var{42}});
     
     assert(std::get<atom>(c3.lhs().content()).value() == "atom");
     assert(std::get<var>(c3.rhs().content()).index() == 42);
     
     // Cons with same expr on both sides
-    atom a4("same");
-    expr e7{std::variant<atom, cons, var>{a4}};
-    cons c4(e7, e7);
+    expr e1{atom{"same"}};
+    cons c4(e1, e1);
     
     assert(std::get<atom>(c4.lhs().content()).value() == "same");
     assert(std::get<atom>(c4.rhs().content()).value() == "same");
     
     // Nested cons - cons on left
-    atom a5("inner_left");
-    atom a6("inner_right");
-    expr e8{std::variant<atom, cons, var>{a5}};
-    expr e9{std::variant<atom, cons, var>{a6}};
-    cons c5(e8, e9);
-    
-    expr e10{std::variant<atom, cons, var>{c5}};
-    atom a7("outer_right");
-    expr e11{std::variant<atom, cons, var>{a7}};
-    cons c6(e10, e11);
+    cons c5(expr{atom{"inner_left"}}, expr{atom{"inner_right"}});
+    cons c6(expr{c5}, expr{atom{"outer_right"}});
     
     const cons& inner_left = std::get<cons>(c6.lhs().content());
     assert(std::get<atom>(inner_left.lhs().content()).value() == "inner_left");
@@ -178,10 +155,7 @@ void test_cons_constructor() {
     assert(std::get<atom>(c6.rhs().content()).value() == "outer_right");
     
     // Nested cons - cons on right
-    atom a8("outer_left");
-    expr e12{std::variant<atom, cons, var>{a8}};
-    expr e13{std::variant<atom, cons, var>{c5}};
-    cons c7(e12, e13);
+    cons c7(expr{atom{"outer_left"}}, expr{c5});
     
     assert(std::get<atom>(c7.lhs().content()).value() == "outer_left");
     const cons& inner_right = std::get<cons>(c7.rhs().content());
@@ -189,21 +163,9 @@ void test_cons_constructor() {
     assert(std::get<atom>(inner_right.rhs().content()).value() == "inner_right");
     
     // Nested cons - cons on both sides
-    atom a9("left1");
-    atom a10("left2");
-    expr e14{std::variant<atom, cons, var>{a9}};
-    expr e15{std::variant<atom, cons, var>{a10}};
-    cons c8(e14, e15);
-    
-    atom a11("right1");
-    atom a12("right2");
-    expr e16{std::variant<atom, cons, var>{a11}};
-    expr e17{std::variant<atom, cons, var>{a12}};
-    cons c9(e16, e17);
-    
-    expr e18{std::variant<atom, cons, var>{c8}};
-    expr e19{std::variant<atom, cons, var>{c9}};
-    cons c10(e18, e19);
+    cons c8(expr{atom{"left1"}}, expr{atom{"left2"}});
+    cons c9(expr{atom{"right1"}}, expr{atom{"right2"}});
+    cons c10(expr{c8}, expr{c9});
     
     const cons& left_cons = std::get<cons>(c10.lhs().content());
     const cons& right_cons = std::get<cons>(c10.rhs().content());
@@ -213,10 +175,7 @@ void test_cons_constructor() {
     assert(std::get<atom>(right_cons.rhs().content()).value() == "right2");
     
     // Deep nesting (3 levels)
-    expr e20{std::variant<atom, cons, var>{c10}};
-    var v4(999);
-    expr e21{std::variant<atom, cons, var>{v4}};
-    cons c11(e20, e21);
+    cons c11(expr{c10}, expr{var{999}});
     
     const cons& level2 = std::get<cons>(c11.lhs().content());
     const cons& level2_left = std::get<cons>(level2.lhs().content());
@@ -224,24 +183,29 @@ void test_cons_constructor() {
     assert(std::get<var>(c11.rhs().content()).index() == 999);
     
     // Empty string atoms in cons
-    atom a13("");
-    atom a14("");
-    expr e22{std::variant<atom, cons, var>{a13}};
-    expr e23{std::variant<atom, cons, var>{a14}};
-    cons c12(e22, e23);
+    cons c12(expr{atom{""}}, expr{atom{""}});
     
     assert(std::get<atom>(c12.lhs().content()).value() == "");
     assert(std::get<atom>(c12.rhs().content()).value() == "");
+    
+    // All-in-one deeply nested construction
+    expr deeply_nested{cons{
+        expr{cons{expr{atom{"a"}}, expr{atom{"b"}}}},
+        expr{cons{expr{var{1}}, expr{var{2}}}}
+    }};
+    
+    const cons& outer = std::get<cons>(deeply_nested.content());
+    const cons& left_inner = std::get<cons>(outer.lhs().content());
+    const cons& right_inner = std::get<cons>(outer.rhs().content());
+    assert(std::get<atom>(left_inner.lhs().content()).value() == "a");
+    assert(std::get<atom>(left_inner.rhs().content()).value() == "b");
+    assert(std::get<var>(right_inner.lhs().content()).index() == 1);
+    assert(std::get<var>(right_inner.rhs().content()).index() == 2);
 }
 
 void test_cons_copy() {
     // Basic copy constructor
-    atom a1("left");
-    atom a2("right");
-    expr e1{std::variant<atom, cons, var>{a1}};
-    expr e2{std::variant<atom, cons, var>{a2}};
-    cons c1(e1, e2);
-    
+    cons c1(expr{atom{"left"}}, expr{atom{"right"}});
     cons c2(c1);  // Copy constructor
     
     // Verify both have same values
@@ -255,11 +219,7 @@ void test_cons_copy() {
     assert(&c1.rhs() != &c2.rhs());
     
     // Copy constructor with variables
-    var v1(100);
-    var v2(200);
-    expr e3{std::variant<atom, cons, var>{v1}};
-    expr e4{std::variant<atom, cons, var>{v2}};
-    cons c3(e3, e4);
+    cons c3(expr{var{100}}, expr{var{200}});
     cons c4(c3);
     
     assert(std::get<var>(c3.lhs().content()).index() == 100);
@@ -268,17 +228,8 @@ void test_cons_copy() {
     assert(std::get<var>(c4.rhs().content()).index() == 200);
     
     // Copy constructor with nested cons
-    atom a3("inner1");
-    atom a4("inner2");
-    expr e5{std::variant<atom, cons, var>{a3}};
-    expr e6{std::variant<atom, cons, var>{a4}};
-    cons c5(e5, e6);
-    
-    expr e7{std::variant<atom, cons, var>{c5}};
-    atom a5("outer");
-    expr e8{std::variant<atom, cons, var>{a5}};
-    cons c6(e7, e8);
-    
+    cons c5(expr{atom{"inner1"}}, expr{atom{"inner2"}});
+    cons c6(expr{c5}, expr{atom{"outer"}});
     cons c7(c6);  // Copy nested cons
     
     const cons& orig_inner = std::get<cons>(c6.lhs().content());
@@ -292,17 +243,8 @@ void test_cons_copy() {
     assert(std::get<atom>(c7.rhs().content()).value() == "outer");
     
     // Basic copy assignment
-    atom a6("assign_left");
-    atom a7("assign_right");
-    expr e9{std::variant<atom, cons, var>{a6}};
-    expr e10{std::variant<atom, cons, var>{a7}};
-    cons c8(e9, e10);
-    
-    atom a8("old_left");
-    atom a9("old_right");
-    expr e11{std::variant<atom, cons, var>{a8}};
-    expr e12{std::variant<atom, cons, var>{a9}};
-    cons c9(e11, e12);
+    cons c8(expr{atom{"assign_left"}}, expr{atom{"assign_right"}});
+    cons c9(expr{atom{"old_left"}}, expr{atom{"old_right"}});
     
     c9 = c8;  // Copy assignment
     
@@ -312,17 +254,8 @@ void test_cons_copy() {
     assert(std::get<atom>(c9.rhs().content()).value() == "assign_right");
     
     // Copy assignment with variables
-    var v3(42);
-    var v4(84);
-    expr e13{std::variant<atom, cons, var>{v3}};
-    expr e14{std::variant<atom, cons, var>{v4}};
-    cons c10(e13, e14);
-    
-    var v5(1);
-    var v6(2);
-    expr e15{std::variant<atom, cons, var>{v5}};
-    expr e16{std::variant<atom, cons, var>{v6}};
-    cons c11(e15, e16);
+    cons c10(expr{var{42}}, expr{var{84}});
+    cons c11(expr{var{1}}, expr{var{2}});
     
     c11 = c10;
     
@@ -332,20 +265,9 @@ void test_cons_copy() {
     assert(std::get<var>(c11.rhs().content()).index() == 84);
     
     // Copy assignment with nested cons
-    atom a10("nested_a");
-    atom a11("nested_b");
-    expr e17{std::variant<atom, cons, var>{a10}};
-    expr e18{std::variant<atom, cons, var>{a11}};
-    cons c12(e17, e18);
-    
-    expr e19{std::variant<atom, cons, var>{c12}};
-    var v7(999);
-    expr e20{std::variant<atom, cons, var>{v7}};
-    cons c13(e19, e20);
-    
-    atom a12("target");
-    expr e21{std::variant<atom, cons, var>{a12}};
-    cons c14(e21, e21);
+    cons c12(expr{atom{"nested_a"}}, expr{atom{"nested_b"}});
+    cons c13(expr{c12}, expr{var{999}});
+    cons c14(expr{atom{"target"}}, expr{atom{"target"}});
     
     c14 = c13;
     
@@ -355,26 +277,16 @@ void test_cons_copy() {
     assert(std::get<var>(c14.rhs().content()).index() == 999);
     
     // Self-assignment
-    atom a13("self");
-    expr e22{std::variant<atom, cons, var>{a13}};
-    cons c15(e22, e22);
+    cons c15(expr{atom{"self"}}, expr{atom{"self"}});
     c15 = c15;
     
     assert(std::get<atom>(c15.lhs().content()).value() == "self");
     assert(std::get<atom>(c15.rhs().content()).value() == "self");
     
     // Chained copy assignment
-    atom a14("chain");
-    expr e23{std::variant<atom, cons, var>{a14}};
-    cons c16(e23, e23);
-    
-    atom a15("target1");
-    expr e24{std::variant<atom, cons, var>{a15}};
-    cons c17(e24, e24);
-    
-    atom a16("target2");
-    expr e25{std::variant<atom, cons, var>{a16}};
-    cons c18(e25, e25);
+    cons c16(expr{atom{"chain"}}, expr{atom{"chain"}});
+    cons c17(expr{atom{"target1"}}, expr{atom{"target1"}});
+    cons c18(expr{atom{"target2"}}, expr{atom{"target2"}});
     
     c18 = c17 = c16;
     
@@ -383,10 +295,7 @@ void test_cons_copy() {
     assert(std::get<atom>(c18.lhs().content()).value() == "chain");
     
     // Multiple copies from same source
-    atom a17("source");
-    expr e26{std::variant<atom, cons, var>{a17}};
-    cons c19(e26, e26);
-    
+    cons c19(expr{atom{"source"}}, expr{atom{"source"}});
     cons c20(c19);
     cons c21(c19);
     cons c22(c19);
@@ -396,15 +305,11 @@ void test_cons_copy() {
     assert(std::get<atom>(c22.lhs().content()).value() == "source");
     
     // Verify independence after copy
-    atom a18("original");
-    expr e27{std::variant<atom, cons, var>{a18}};
-    cons c23(e27, e27);
+    cons c23(expr{atom{"original"}}, expr{atom{"original"}});
     cons c24(c23);
     
     // Modify c23 via assignment
-    atom a19("modified");
-    expr e28{std::variant<atom, cons, var>{a19}};
-    cons c25(e28, e28);
+    cons c25(expr{atom{"modified"}}, expr{atom{"modified"}});
     c23 = c25;
     
     // c24 should still have original values
@@ -414,12 +319,7 @@ void test_cons_copy() {
 
 void test_cons_move() {
     // Basic move constructor
-    atom a1("left");
-    atom a2("right");
-    expr e1{std::variant<atom, cons, var>{a1}};
-    expr e2{std::variant<atom, cons, var>{a2}};
-    cons c1(e1, e2);
-    
+    cons c1(expr{atom{"left"}}, expr{atom{"right"}});
     cons c2(std::move(c1));  // Move constructor
     
     // c2 should have the values
@@ -427,29 +327,15 @@ void test_cons_move() {
     assert(std::get<atom>(c2.rhs().content()).value() == "right");
     
     // Move constructor with variables
-    var v1(123);
-    var v2(456);
-    expr e3{std::variant<atom, cons, var>{v1}};
-    expr e4{std::variant<atom, cons, var>{v2}};
-    cons c3(e3, e4);
-    
+    cons c3(expr{var{123}}, expr{var{456}});
     cons c4(std::move(c3));
     
     assert(std::get<var>(c4.lhs().content()).index() == 123);
     assert(std::get<var>(c4.rhs().content()).index() == 456);
     
     // Move constructor with nested cons
-    atom a3("inner_left");
-    atom a4("inner_right");
-    expr e5{std::variant<atom, cons, var>{a3}};
-    expr e6{std::variant<atom, cons, var>{a4}};
-    cons c5(e5, e6);
-    
-    expr e7{std::variant<atom, cons, var>{c5}};
-    atom a5("outer");
-    expr e8{std::variant<atom, cons, var>{a5}};
-    cons c6(e7, e8);
-    
+    cons c5(expr{atom{"inner_left"}}, expr{atom{"inner_right"}});
+    cons c6(expr{c5}, expr{atom{"outer"}});
     cons c7(std::move(c6));
     
     const cons& moved_inner = std::get<cons>(c7.lhs().content());
@@ -458,17 +344,8 @@ void test_cons_move() {
     assert(std::get<atom>(c7.rhs().content()).value() == "outer");
     
     // Basic move assignment
-    atom a6("move_left");
-    atom a7("move_right");
-    expr e9{std::variant<atom, cons, var>{a6}};
-    expr e10{std::variant<atom, cons, var>{a7}};
-    cons c8(e9, e10);
-    
-    atom a8("target_left");
-    atom a9("target_right");
-    expr e11{std::variant<atom, cons, var>{a8}};
-    expr e12{std::variant<atom, cons, var>{a9}};
-    cons c9(e11, e12);
+    cons c8(expr{atom{"move_left"}}, expr{atom{"move_right"}});
+    cons c9(expr{atom{"target_left"}}, expr{atom{"target_right"}});
     
     c9 = std::move(c8);  // Move assignment
     
@@ -476,17 +353,8 @@ void test_cons_move() {
     assert(std::get<atom>(c9.rhs().content()).value() == "move_right");
     
     // Move assignment with variables
-    var v3(777);
-    var v4(888);
-    expr e13{std::variant<atom, cons, var>{v3}};
-    expr e14{std::variant<atom, cons, var>{v4}};
-    cons c10(e13, e14);
-    
-    var v5(1);
-    var v6(2);
-    expr e15{std::variant<atom, cons, var>{v5}};
-    expr e16{std::variant<atom, cons, var>{v6}};
-    cons c11(e15, e16);
+    cons c10(expr{var{777}}, expr{var{888}});
+    cons c11(expr{var{1}}, expr{var{2}});
     
     c11 = std::move(c10);
     
@@ -494,20 +362,9 @@ void test_cons_move() {
     assert(std::get<var>(c11.rhs().content()).index() == 888);
     
     // Move assignment with nested cons
-    atom a10("deep_a");
-    atom a11("deep_b");
-    expr e17{std::variant<atom, cons, var>{a10}};
-    expr e18{std::variant<atom, cons, var>{a11}};
-    cons c12(e17, e18);
-    
-    expr e19{std::variant<atom, cons, var>{c12}};
-    var v7(555);
-    expr e20{std::variant<atom, cons, var>{v7}};
-    cons c13(e19, e20);
-    
-    atom a12("old");
-    expr e21{std::variant<atom, cons, var>{a12}};
-    cons c14(e21, e21);
+    cons c12(expr{atom{"deep_a"}}, expr{atom{"deep_b"}});
+    cons c13(expr{c12}, expr{var{555}});
+    cons c14(expr{atom{"old"}}, expr{atom{"old"}});
     
     c14 = std::move(c13);
     
@@ -517,9 +374,7 @@ void test_cons_move() {
     assert(std::get<var>(c14.rhs().content()).index() == 555);
     
     // Self-move (should be safe, though state may be unspecified)
-    atom a13("self");
-    expr e22{std::variant<atom, cons, var>{a13}};
-    cons c15(e22, e22);
+    cons c15(expr{atom{"self"}}, expr{atom{"self"}});
     c15 = std::move(c15);
     // Don't assert on values after self-move as behavior is unspecified
     
@@ -527,11 +382,7 @@ void test_cons_move() {
     std::vector<cons> vec;
     
     for (int i = 0; i < 10; i++) {
-        atom left("l" + std::to_string(i));
-        atom right("r" + std::to_string(i));
-        expr el{std::variant<atom, cons, var>{left}};
-        expr er{std::variant<atom, cons, var>{right}};
-        vec.push_back(cons(el, er));  // Move temporary into vector
+        vec.push_back(cons(expr{atom{"l" + std::to_string(i)}}, expr{atom{"r" + std::to_string(i)}}));
     }
     
     assert(vec.size() == 10);
@@ -551,45 +402,25 @@ void test_cons_move() {
     assert(std::get<atom>(vec2[5].lhs().content()).value() == "l5");
     
     // Chained move assignment
-    atom a14("chain_source");
-    expr e23{std::variant<atom, cons, var>{a14}};
-    cons c16(e23, e23);
-    
-    atom a15("target1");
-    expr e24{std::variant<atom, cons, var>{a15}};
-    cons c17(e24, e24);
-    
-    atom a16("target2");
-    expr e25{std::variant<atom, cons, var>{a16}};
-    cons c18(e25, e25);
+    cons c16(expr{atom{"chain_source"}}, expr{atom{"chain_source"}});
+    cons c17(expr{atom{"target1"}}, expr{atom{"target1"}});
+    cons c18(expr{atom{"target2"}}, expr{atom{"target2"}});
     
     c18 = std::move(c17 = std::move(c16));
     
     assert(std::get<atom>(c18.lhs().content()).value() == "chain_source");
     
     // Move with mixed types
-    atom a17("atom_val");
-    var v8(999);
-    expr e26{std::variant<atom, cons, var>{a17}};
-    expr e27{std::variant<atom, cons, var>{v8}};
-    cons c19(e26, e27);
-    
+    cons c19(expr{atom{"atom_val"}}, expr{var{999}});
     cons c20(std::move(c19));
     
     assert(std::get<atom>(c20.lhs().content()).value() == "atom_val");
     assert(std::get<var>(c20.rhs().content()).index() == 999);
     
     // Move deeply nested structure
-    atom a18("level3");
-    expr e28{std::variant<atom, cons, var>{a18}};
-    cons c21(e28, e28);
-    
-    expr e29{std::variant<atom, cons, var>{c21}};
-    cons c22(e29, e29);
-    
-    expr e30{std::variant<atom, cons, var>{c22}};
-    cons c23(e30, e30);
-    
+    cons c21(expr{atom{"level3"}}, expr{atom{"level3"}});
+    cons c22(expr{c21}, expr{c21});
+    cons c23(expr{c22}, expr{c22});
     cons c24(std::move(c23));
     
     const cons& level1 = std::get<cons>(c24.lhs().content());
@@ -599,53 +430,42 @@ void test_cons_move() {
 
 void test_expr_constructor() {
     // Expr with atom
-    atom a1("test_atom");
-    expr e1{std::variant<atom, cons, var>{a1}};
+    expr e1{atom{"test_atom"}};
     
     assert(std::holds_alternative<atom>(e1.content()));
     assert(std::get<atom>(e1.content()).value() == "test_atom");
     
     // Expr with empty string atom
-    atom a2("");
-    expr e2{std::variant<atom, cons, var>{a2}};
+    expr e2{atom{""}};
     
     assert(std::holds_alternative<atom>(e2.content()));
     assert(std::get<atom>(e2.content()).value() == "");
     
     // Expr with special character atom
-    atom a3("!@#$%^&*()");
-    expr e3{std::variant<atom, cons, var>{a3}};
+    expr e3{atom{"!@#$%^&*()"}};
     
     assert(std::holds_alternative<atom>(e3.content()));
     assert(std::get<atom>(e3.content()).value() == "!@#$%^&*()");
     
     // Expr with var - index 0
-    var v1(0);
-    expr e4{std::variant<atom, cons, var>{v1}};
+    expr e4{var{0}};
     
     assert(std::holds_alternative<var>(e4.content()));
     assert(std::get<var>(e4.content()).index() == 0);
     
     // Expr with var - various indices
-    var v2(42);
-    expr e5{std::variant<atom, cons, var>{v2}};
+    expr e5{var{42}};
     
     assert(std::holds_alternative<var>(e5.content()));
     assert(std::get<var>(e5.content()).index() == 42);
     
-    var v3(UINT32_MAX);
-    expr e6{std::variant<atom, cons, var>{v3}};
+    expr e6{var{UINT32_MAX}};
     
     assert(std::holds_alternative<var>(e6.content()));
     assert(std::get<var>(e6.content()).index() == UINT32_MAX);
     
     // Expr with cons - simple
-    atom a4("left");
-    atom a5("right");
-    expr e7{std::variant<atom, cons, var>{a4}};
-    expr e8{std::variant<atom, cons, var>{a5}};
-    cons c1(e7, e8);
-    expr e9{std::variant<atom, cons, var>{c1}};
+    expr e9{cons{expr{atom{"left"}}, expr{atom{"right"}}}};
     
     assert(std::holds_alternative<cons>(e9.content()));
     const cons& c1_ref = std::get<cons>(e9.content());
@@ -653,12 +473,7 @@ void test_expr_constructor() {
     assert(std::get<atom>(c1_ref.rhs().content()).value() == "right");
     
     // Expr with cons containing vars
-    var v4(10);
-    var v5(20);
-    expr e10{std::variant<atom, cons, var>{v4}};
-    expr e11{std::variant<atom, cons, var>{v5}};
-    cons c2(e10, e11);
-    expr e12{std::variant<atom, cons, var>{c2}};
+    expr e12{cons{expr{var{10}}, expr{var{20}}}};
     
     assert(std::holds_alternative<cons>(e12.content()));
     const cons& c2_ref = std::get<cons>(e12.content());
@@ -666,12 +481,7 @@ void test_expr_constructor() {
     assert(std::get<var>(c2_ref.rhs().content()).index() == 20);
     
     // Expr with cons containing mixed types
-    atom a6("atom");
-    var v6(100);
-    expr e13{std::variant<atom, cons, var>{a6}};
-    expr e14{std::variant<atom, cons, var>{v6}};
-    cons c3(e13, e14);
-    expr e15{std::variant<atom, cons, var>{c3}};
+    expr e15{cons{expr{atom{"atom"}}, expr{var{100}}}};
     
     assert(std::holds_alternative<cons>(e15.content()));
     const cons& c3_ref = std::get<cons>(e15.content());
@@ -679,18 +489,10 @@ void test_expr_constructor() {
     assert(std::get<var>(c3_ref.rhs().content()).index() == 100);
     
     // Expr with nested cons
-    atom a7("inner1");
-    atom a8("inner2");
-    expr e16{std::variant<atom, cons, var>{a7}};
-    expr e17{std::variant<atom, cons, var>{a8}};
-    cons c4(e16, e17);
-    
-    expr e18{std::variant<atom, cons, var>{c4}};
-    atom a9("outer");
-    expr e19{std::variant<atom, cons, var>{a9}};
-    cons c5(e18, e19);
-    
-    expr e20{std::variant<atom, cons, var>{c5}};
+    expr e20{cons{
+        expr{cons{expr{atom{"inner1"}}, expr{atom{"inner2"}}}},
+        expr{atom{"outer"}}
+    }};
     
     assert(std::holds_alternative<cons>(e20.content()));
     const cons& outer_cons = std::get<cons>(e20.content());
@@ -702,50 +504,40 @@ void test_expr_constructor() {
     
     // Multiple exprs with same atom
     atom a10("shared");
-    expr e21{std::variant<atom, cons, var>{a10}};
-    expr e22{std::variant<atom, cons, var>{a10}};
+    expr e21{a10};
+    expr e22{a10};
     
     assert(std::get<atom>(e21.content()).value() == "shared");
     assert(std::get<atom>(e22.content()).value() == "shared");
     
     // Multiple exprs with same var
     var v7(999);
-    expr e23{std::variant<atom, cons, var>{v7}};
-    expr e24{std::variant<atom, cons, var>{v7}};
+    expr e23{v7};
+    expr e24{v7};
     
     assert(std::get<var>(e23.content()).index() == 999);
     assert(std::get<var>(e24.content()).index() == 999);
     
     // Test all three types in sequence
-    atom a11("atom_type");
-    var v8(42);
-    
-    atom a12("cons_left");
-    atom a13("cons_right");
-    expr e25{std::variant<atom, cons, var>{a12}};
-    expr e26{std::variant<atom, cons, var>{a13}};
-    cons c6(e25, e26);
-    
-    expr e27{std::variant<atom, cons, var>{a11}};
-    expr e28{std::variant<atom, cons, var>{v8}};
-    expr e29{std::variant<atom, cons, var>{c6}};
+    expr e27{atom{"atom_type"}};
+    expr e28{var{42}};
+    expr e29{cons{expr{atom{"cons_left"}}, expr{atom{"cons_right"}}}};
     
     assert(std::holds_alternative<atom>(e27.content()));
     assert(std::holds_alternative<var>(e28.content()));
     assert(std::holds_alternative<cons>(e29.content()));
     
     // Deeply nested structure (3 levels)
-    atom a14("deep");
-    expr e30{std::variant<atom, cons, var>{a14}};
-    cons c7(e30, e30);
-    
-    expr e31{std::variant<atom, cons, var>{c7}};
-    cons c8(e31, e31);
-    
-    expr e32{std::variant<atom, cons, var>{c8}};
-    cons c9(e32, e32);
-    
-    expr e33{std::variant<atom, cons, var>{c9}};
+    expr e33{cons{
+        expr{cons{
+            expr{cons{expr{atom{"deep"}}, expr{atom{"deep"}}}},
+            expr{cons{expr{atom{"deep"}}, expr{atom{"deep"}}}}
+        }},
+        expr{cons{
+            expr{cons{expr{atom{"deep"}}, expr{atom{"deep"}}}},
+            expr{cons{expr{atom{"deep"}}, expr{atom{"deep"}}}}
+        }}
+    }};
     
     assert(std::holds_alternative<cons>(e33.content()));
     const cons& level1 = std::get<cons>(e33.content());
@@ -756,18 +548,9 @@ void test_expr_constructor() {
     // Vector of exprs with different types
     std::vector<expr> exprs;
     
-    atom a15("vec_atom");
-    exprs.push_back(expr{std::variant<atom, cons, var>{a15}});
-    
-    var v9(123);
-    exprs.push_back(expr{std::variant<atom, cons, var>{v9}});
-    
-    atom a16("l");
-    atom a17("r");
-    expr el{std::variant<atom, cons, var>{a16}};
-    expr er{std::variant<atom, cons, var>{a17}};
-    cons c10(el, er);
-    exprs.push_back(expr{std::variant<atom, cons, var>{c10}});
+    exprs.push_back(expr{atom{"vec_atom"}});
+    exprs.push_back(expr{var{123}});
+    exprs.push_back(expr{cons{expr{atom{"l"}}, expr{atom{"r"}}}});
     
     assert(exprs.size() == 3);
     assert(std::holds_alternative<atom>(exprs[0].content()));
@@ -795,4 +578,3 @@ int main() {
     unit_test_main();
     return 0;
 }
-
