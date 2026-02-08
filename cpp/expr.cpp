@@ -12,16 +12,16 @@ const std::string& atom::value() const
 }
 
 cons::cons(const cons& a_other)
-: m_lhs(a_other.m_lhs ? new expr(*a_other.m_lhs) : nullptr),
-  m_rhs(a_other.m_rhs ? new expr(*a_other.m_rhs) : nullptr)
+: m_lhs(new expr(*a_other.m_lhs)),
+  m_rhs(new expr(*a_other.m_rhs))
 {
 
 }
 
 cons& cons::operator=(const cons& a_other)
 {
-    m_lhs.reset(a_other.m_lhs ? new expr(*a_other.m_lhs) : nullptr);
-    m_rhs.reset(a_other.m_rhs ? new expr(*a_other.m_rhs) : nullptr);
+    m_lhs.reset(new expr(*a_other.m_lhs));
+    m_rhs.reset(new expr(*a_other.m_rhs));
     return *this;
 }
 
