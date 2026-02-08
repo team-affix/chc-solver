@@ -13,6 +13,7 @@ struct expr;
 
 struct atom {
     atom(const std::string&);
+    const std::string& value() const;
 private:
     std::string m_value;
 };
@@ -23,18 +24,22 @@ struct cons {
     cons(cons&&);
     cons& operator=(cons&&);
     cons(const expr&, const expr&);
+    const expr& lhs() const;
+    const expr& rhs() const;
 private:
     std::unique_ptr<expr> m_lhs, m_rhs;
 };
 
 struct var {
     var(uint32_t);
+    uint32_t index() const;
 private:
     uint32_t m_index;
 };
 
 struct expr {
     expr(const std::variant<atom, cons, var>&);
+    const std::variant<atom, cons, var>& content() const;
 private:
     std::variant<atom, cons, var> m_content;
 };
