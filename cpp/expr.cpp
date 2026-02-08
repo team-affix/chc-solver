@@ -20,6 +20,8 @@ cons::cons(const cons& a_other)
 
 cons& cons::operator=(const cons& a_other)
 {
+    if (this == &a_other)
+        return *this;
     m_lhs.reset(new expr(*a_other.m_lhs));
     m_rhs.reset(new expr(*a_other.m_rhs));
     return *this;
@@ -33,6 +35,8 @@ cons::cons(cons&& a_other)
 
 cons& cons::operator=(cons&& a_other)
 {
+    if (this == &a_other)
+        return *this;
     m_lhs = std::move(a_other.m_lhs);
     m_rhs = std::move(a_other.m_rhs);
     return *this;
