@@ -7,20 +7,35 @@
 #include <string>
 #include <map>
 #include <variant>
-#include "box.hpp"
+#include <memory>
+
+struct expr;
+
+struct atom {
+    atom(const std::string&);
+private:
+    std::string m_value;
+};
+
+struct cons {
+    cons(const cons&);
+    cons& operator=(const cons&);
+    cons(cons&&);
+    cons& operator=(cons&&);
+    cons(const expr&, const expr&);
+private:
+    std::unique_ptr<expr> m_lhs, m_rhs;
+};
+
+struct var {
+    var(uint32_t);
+private:
+    uint32_t m_index;
+};
 
 struct expr {
-    struct atom {std::string m_value;};
-    struct cons {
-        cons();
-        cons(const cons&);
-        cons& operator=(const cons&);
-        cons(cons&&);
-        cons& operator=(cons&&);
-        cons(const expr&, const expr&);
-        std::unique_ptr<expr> m_lhs, m_rhs;
-    };
-    struct var {uint32_t m_index;};
+    expr(const std::variant<atom, cons, var>&);
+private:
     std::variant<atom, cons, var> m_content;
 };
 
