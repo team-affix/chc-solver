@@ -25,4 +25,3 @@ const expr* expr_pool::intern(expr&& e) {
     if (inserted) trail_ref.log([this, it]() { exprs.erase(it); });
     return &*it;
 }
-

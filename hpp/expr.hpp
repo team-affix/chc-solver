@@ -7,7 +7,6 @@
 #include <string>
 #include <variant>
 #include <set>
-#include <stack>
 #include "trail.hpp"
 
 struct expr {
