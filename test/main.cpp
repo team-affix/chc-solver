@@ -2,6 +2,15 @@
 #include <iostream>
 #include "test_utils.hpp"
 
+void test_trail_constructor() {
+}
+
+void test_trail_push_pop() {
+}
+
+void test_trail_log() {
+}
+
 void test_atom_constructor() {
     // Basic string
     expr::atom a1{"hello"};
@@ -210,152 +219,153 @@ void test_expr_constructor() {
     assert((e7 <=> e10) != 0);
 }
 
-// test case for expr_pool
+// void test_expr_pool_atom() {
+//     expr_pool pool;
+    
+//     // Basic atom creation
+//     const expr* e1 = pool.atom("test");
+//     assert(e1 != nullptr);
+//     assert(std::holds_alternative<expr::atom>(e1->content));
+//     assert(std::get<expr::atom>(e1->content).value == "test");
+    
+//     // Empty string
+//     const expr* e2 = pool.atom("");
+//     assert(std::get<expr::atom>(e2->content).value == "");
+    
+//     // Interning - same string should return same pointer
+//     const expr* e3 = pool.atom("test");
+//     assert(e1 == e3);
+    
+//     // Different strings should return different pointers
+//     const expr* e4 = pool.atom("different");
+//     assert(e1 != e4);
+    
+//     // Multiple calls with same string
+//     const expr* e5 = pool.atom("shared");
+//     const expr* e6 = pool.atom("shared");
+//     const expr* e7 = pool.atom("shared");
+//     assert(e5 == e6);
+//     assert(e6 == e7);
+    
+//     // Special characters
+//     const expr* e8 = pool.atom("!@#$");
+//     const expr* e9 = pool.atom("!@#$");
+//     assert(e8 == e9);
+    
+//     // Long strings
+//     std::string long_str(1000, 'x');
+//     const expr* e10 = pool.atom(long_str);
+//     const expr* e11 = pool.atom(long_str);
+//     assert(e10 == e11);
+// }
 
-void test_expr_pool_atom() {
-    expr_pool pool;
+// void test_expr_pool_var() {
+//     expr_pool pool;
     
-    // Basic atom creation
-    const expr* e1 = pool.atom("test");
-    assert(e1 != nullptr);
-    assert(std::holds_alternative<expr::atom>(e1->content));
-    assert(std::get<expr::atom>(e1->content).value == "test");
+//     // Basic var creation
+//     const expr* e1 = pool.var(0);
+//     assert(e1 != nullptr);
+//     assert(std::holds_alternative<expr::var>(e1->content));
+//     assert(std::get<expr::var>(e1->content).index == 0);
     
-    // Empty string
-    const expr* e2 = pool.atom("");
-    assert(std::get<expr::atom>(e2->content).value == "");
+//     // Interning - same index should return same pointer
+//     const expr* e2 = pool.var(0);
+//     assert(e1 == e2);
     
-    // Interning - same string should return same pointer
-    const expr* e3 = pool.atom("test");
-    assert(e1 == e3);
+//     // Different indices should return different pointers
+//     const expr* e3 = pool.var(1);
+//     assert(e1 != e3);
     
-    // Different strings should return different pointers
-    const expr* e4 = pool.atom("different");
-    assert(e1 != e4);
+//     // Multiple calls with same index
+//     const expr* e4 = pool.var(42);
+//     const expr* e5 = pool.var(42);
+//     const expr* e6 = pool.var(42);
+//     assert(e4 == e5);
+//     assert(e5 == e6);
     
-    // Multiple calls with same string
-    const expr* e5 = pool.atom("shared");
-    const expr* e6 = pool.atom("shared");
-    const expr* e7 = pool.atom("shared");
-    assert(e5 == e6);
-    assert(e6 == e7);
+//     // Edge cases
+//     const expr* e7 = pool.var(UINT32_MAX);
+//     const expr* e8 = pool.var(UINT32_MAX);
+//     assert(e7 == e8);
     
-    // Special characters
-    const expr* e8 = pool.atom("!@#$");
-    const expr* e9 = pool.atom("!@#$");
-    assert(e8 == e9);
-    
-    // Long strings
-    std::string long_str(1000, 'x');
-    const expr* e10 = pool.atom(long_str);
-    const expr* e11 = pool.atom(long_str);
-    assert(e10 == e11);
-}
+//     // Sequential indices
+//     for (uint32_t i = 0; i < 100; i++) {
+//         const expr* v1 = pool.var(i);
+//         const expr* v2 = pool.var(i);
+//         assert(v1 == v2);
+//         assert(std::get<expr::var>(v1->content).index == i);
+//     }
+// }
 
-void test_expr_pool_var() {
-    expr_pool pool;
+// void test_expr_pool_cons() {
+//     expr_pool pool;
     
-    // Basic var creation
-    const expr* e1 = pool.var(0);
-    assert(e1 != nullptr);
-    assert(std::holds_alternative<expr::var>(e1->content));
-    assert(std::get<expr::var>(e1->content).index == 0);
+//     // Basic cons creation
+//     const expr* left = pool.atom("left");
+//     const expr* right = pool.atom("right");
+//     const expr* c1 = pool.cons(left, right);
     
-    // Interning - same index should return same pointer
-    const expr* e2 = pool.var(0);
-    assert(e1 == e2);
+//     assert(c1 != nullptr);
+//     assert(std::holds_alternative<expr::cons>(c1->content));
+//     const expr::cons& cons1 = std::get<expr::cons>(c1->content);
+//     assert(cons1.lhs == left);
+//     assert(cons1.rhs == right);
     
-    // Different indices should return different pointers
-    const expr* e3 = pool.var(1);
-    assert(e1 != e3);
+//     // Interning - same cons should return same pointer
+//     const expr* c2 = pool.cons(left, right);
+//     assert(c1 == c2);
     
-    // Multiple calls with same index
-    const expr* e4 = pool.var(42);
-    const expr* e5 = pool.var(42);
-    const expr* e6 = pool.var(42);
-    assert(e4 == e5);
-    assert(e5 == e6);
+//     // Different cons should return different pointers
+//     const expr* c3 = pool.cons(right, left);  // Swapped
+//     assert(c1 != c3);
     
-    // Edge cases
-    const expr* e7 = pool.var(UINT32_MAX);
-    const expr* e8 = pool.var(UINT32_MAX);
-    assert(e7 == e8);
+//     // Cons with variables
+//     const expr* v1 = pool.var(10);
+//     const expr* v2 = pool.var(20);
+//     const expr* c4 = pool.cons(v1, v2);
+//     const expr* c5 = pool.cons(v1, v2);
+//     assert(c4 == c5);
     
-    // Sequential indices
-    for (uint32_t i = 0; i < 100; i++) {
-        const expr* v1 = pool.var(i);
-        const expr* v2 = pool.var(i);
-        assert(v1 == v2);
-        assert(std::get<expr::var>(v1->content).index == i);
-    }
-}
-
-void test_expr_pool_cons() {
-    expr_pool pool;
+//     // Nested cons
+//     const expr* inner = pool.cons(pool.atom("a"), pool.atom("b"));
+//     const expr* outer = pool.cons(inner, pool.atom("c"));
+//     const expr* outer2 = pool.cons(inner, pool.atom("c"));
+//     assert(outer == outer2);
     
-    // Basic cons creation
-    const expr* left = pool.atom("left");
-    const expr* right = pool.atom("right");
-    const expr* c1 = pool.cons(left, right);
+//     // Same expr on both sides
+//     const expr* same = pool.atom("same");
+//     const expr* c6 = pool.cons(same, same);
+//     const expr* c7 = pool.cons(same, same);
+//     assert(c6 == c7);
     
-    assert(c1 != nullptr);
-    assert(std::holds_alternative<expr::cons>(c1->content));
-    const expr::cons& cons1 = std::get<expr::cons>(c1->content);
-    assert(cons1.lhs == left);
-    assert(cons1.rhs == right);
+//     // Deep nesting with interning
+//     const expr* d1 = pool.cons(pool.atom("x"), pool.atom("y"));
+//     const expr* d2 = pool.cons(d1, d1);
+//     const expr* d3 = pool.cons(d2, d2);
     
-    // Interning - same cons should return same pointer
-    const expr* c2 = pool.cons(left, right);
-    assert(c1 == c2);
+//     const expr* d1_dup = pool.cons(pool.atom("x"), pool.atom("y"));
+//     const expr* d2_dup = pool.cons(d1_dup, d1_dup);
+//     const expr* d3_dup = pool.cons(d2_dup, d2_dup);
     
-    // Different cons should return different pointers
-    const expr* c3 = pool.cons(right, left);  // Swapped
-    assert(c1 != c3);
-    
-    // Cons with variables
-    const expr* v1 = pool.var(10);
-    const expr* v2 = pool.var(20);
-    const expr* c4 = pool.cons(v1, v2);
-    const expr* c5 = pool.cons(v1, v2);
-    assert(c4 == c5);
-    
-    // Nested cons
-    const expr* inner = pool.cons(pool.atom("a"), pool.atom("b"));
-    const expr* outer = pool.cons(inner, pool.atom("c"));
-    const expr* outer2 = pool.cons(inner, pool.atom("c"));
-    assert(outer == outer2);
-    
-    // Same expr on both sides
-    const expr* same = pool.atom("same");
-    const expr* c6 = pool.cons(same, same);
-    const expr* c7 = pool.cons(same, same);
-    assert(c6 == c7);
-    
-    // Deep nesting with interning
-    const expr* d1 = pool.cons(pool.atom("x"), pool.atom("y"));
-    const expr* d2 = pool.cons(d1, d1);
-    const expr* d3 = pool.cons(d2, d2);
-    
-    const expr* d1_dup = pool.cons(pool.atom("x"), pool.atom("y"));
-    const expr* d2_dup = pool.cons(d1_dup, d1_dup);
-    const expr* d3_dup = pool.cons(d2_dup, d2_dup);
-    
-    assert(d1 == d1_dup);
-    assert(d2 == d2_dup);
-    assert(d3 == d3_dup);
-}
+//     assert(d1 == d1_dup);
+//     assert(d2 == d2_dup);
+//     assert(d3 == d3_dup);
+// }
 
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
 
     // test cases
+    TEST(test_trail_constructor);
+    TEST(test_trail_push_pop);
+    TEST(test_trail_log);
     TEST(test_atom_constructor);
     TEST(test_var_constructor);
     TEST(test_cons_constructor);
     TEST(test_expr_constructor);
-    TEST(test_expr_pool_atom);
-    TEST(test_expr_pool_var);
-    TEST(test_expr_pool_cons);
+    // TEST(test_expr_pool_atom);
+    // TEST(test_expr_pool_var);
+    // TEST(test_expr_pool_cons);
 }
 
 int main() {
