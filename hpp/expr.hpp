@@ -5,46 +5,25 @@
 // functions that operate on them such as unifications.
 
 #include <string>
-#include <map>
 #include <variant>
-#include <memory>
-
-struct expr;
-
-struct atom {
-    atom(const std::string&);
-    const std::string& value() const;
-private:
-    std::string m_value;
-};
-
-struct cons {
-    cons(const cons&);
-    cons& operator=(const cons&);
-    cons(cons&&);
-    cons& operator=(cons&&);
-    cons(const expr&, const expr&);
-    const expr& lhs() const;
-    const expr& rhs() const;
-private:
-    std::unique_ptr<expr> m_lhs, m_rhs;
-};
-
-struct var {
-    var(uint32_t);
-    uint32_t index() const;
-private:
-    uint32_t m_index;
-};
+#include <set>
 
 struct expr {
-    expr(const std::variant<atom, cons, var>&);
-    const std::variant<atom, cons, var>& content() const;
-private:
-    std::variant<atom, cons, var> m_content;
+    struct atom { std::string value; auto operator<=>(const atom&) const = default; };
+    struct var  { uint32_t index;    auto operator<=>(const var&) const = default; };
+    struct cons { const expr* lhs; const expr* rhs; auto operator<=>(const cons&) const = default; };
+    std::variant<atom, cons, var> content;
+    auto operator<=>(const expr&) const = default;
 };
 
-bool unify(expr& a_lhs, expr& a_rhs, std::map<uint32_t, expr>& a_bindings);
+struct expr_pool {
+    const expr* atom(const std::string& s);
+    const expr* var(uint32_t i);
+    const expr* cons(const expr* l, const expr* r);
+private:
+    const expr* intern(expr&& e);
+    std::set<expr> m_exprs;
+};
 
 #endif
 

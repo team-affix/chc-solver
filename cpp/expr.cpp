@@ -1,82 +1,18 @@
 #include "../hpp/expr.hpp"
 
-atom::atom(const std::string& a_value)
-    : m_value(a_value)
-{
-
+const expr* expr_pool::atom(const std::string& a_string) {
+    return intern(expr{expr::atom{a_string}});
 }
 
-const std::string& atom::value() const
-{
-    return m_value;
+const expr* expr_pool::var(uint32_t a_index) {
+    return intern(expr{expr::var{a_index}});
 }
 
-cons::cons(const cons& a_other)
-: m_lhs(new expr(*a_other.m_lhs)),
-  m_rhs(new expr(*a_other.m_rhs))
-{
-
+const expr* expr_pool::cons(const expr* a_lhs, const expr* a_rhs) {
+    return intern(expr{expr::cons{a_lhs, a_rhs}});
 }
 
-cons& cons::operator=(const cons& a_other)
-{
-    if (this == &a_other)
-        return *this;
-    m_lhs.reset(new expr(*a_other.m_lhs));
-    m_rhs.reset(new expr(*a_other.m_rhs));
-    return *this;
-}
-
-cons::cons(cons&& a_other)
-    : m_lhs(std::move(a_other.m_lhs)), m_rhs(std::move(a_other.m_rhs))
-{
-
-}
-
-cons& cons::operator=(cons&& a_other)
-{
-    if (this == &a_other)
-        return *this;
-    m_lhs = std::move(a_other.m_lhs);
-    m_rhs = std::move(a_other.m_rhs);
-    return *this;
-}
-
-cons::cons(const expr& a_lhs, const expr& a_rhs)
-    : m_lhs(new expr(a_lhs)), m_rhs(new expr(a_rhs))
-{
-
-}
-
-const expr& cons::lhs() const
-{
-    return *m_lhs;
-}
-
-const expr& cons::rhs() const
-{
-    return *m_rhs;
-}
-
-var::var(uint32_t a_index)
-    : m_index(a_index)
-{
-
-}
-
-uint32_t var::index() const
-{
-    return m_index;
-}
-
-expr::expr(const std::variant<atom, cons, var>& a_content)
-    : m_content(a_content)
-{
-
-}
-
-const std::variant<atom, cons, var>& expr::content() const
-{
-    return m_content;
+const expr* expr_pool::intern(expr&& a_expr) {
+    return &*m_exprs.insert(std::move(a_expr)).first;
 }
 
