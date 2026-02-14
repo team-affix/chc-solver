@@ -1,13 +1,15 @@
 #ifndef RULE_HPP
 #define RULE_HPP
 
-#include <list>
+#include <set>
 #include "expr.hpp"
 
+using rule_id = uint32_t;
+
 struct rule {
-private:
-    expr m_head;
-    std::list<expr> m_body;
+    rule_id id;
+    const expr* head;
+    std::set<const expr*> body;
 };
 
 #endif
