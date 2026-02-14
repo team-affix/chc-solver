@@ -387,8 +387,141 @@ void test_trail_log() {
         t2.pop();
         assert(x == 1 && y == 2);
     }
+    
+    // Test 13: Complex multiple independent trails with nested frames
+    {
+        trail t1, t2, t3;
+        
+        // Each trail manages its own independent data
+        int data1 = 100;
+        int data2 = 200;
+        int data3 = 300;
+        
+        assert(t1.depth() == 0);
+        assert(t2.depth() == 0);
+        assert(t3.depth() == 0);
+        
+        // === Trail 1: Nested frames with data1 ===
+        t1.push();  // Frame 1.1
+        assert(t1.depth() == 1);
+        data1 += 10;  // 110
+        t1.log([&data1]() { data1 -= 10; });
+        
+        t1.push();  // Frame 1.2
+        assert(t1.depth() == 2);
+        data1 *= 2;  // 220
+        t1.log([&data1]() { data1 /= 2; });
+        
+        t1.push();  // Frame 1.3
+        assert(t1.depth() == 3);
+        data1 += 80;  // 300
+        t1.log([&data1]() { data1 -= 80; });
+        
+        assert(data1 == 300);
+        
+        // === Trail 2: Nested frames with data2 ===
+        t2.push();  // Frame 2.1
+        assert(t2.depth() == 1);
+        data2 -= 50;  // 150
+        t2.log([&data2]() { data2 += 50; });
+        
+        t2.push();  // Frame 2.2
+        assert(t2.depth() == 2);
+        data2 *= 3;  // 450
+        t2.log([&data2]() { data2 /= 3; });
+        
+        assert(data2 == 450);
+        
+        // === Trail 3: Single frame with multiple operations on data3 ===
+        t3.push();  // Frame 3.1
+        assert(t3.depth() == 1);
+        data3 /= 3;  // 100
+        t3.log([&data3]() { data3 *= 3; });
+        data3 += 50;  // 150
+        t3.log([&data3]() { data3 -= 50; });
+        data3 *= 4;  // 600
+        t3.log([&data3]() { data3 /= 4; });
+        
+        assert(data3 == 600);
+        
+        // Verify all data is at expected state
+        assert(data1 == 300 && data2 == 450 && data3 == 600);
+        
+        // === Pop trail 1 innermost frame ===
+        t1.pop();  // Pop frame 1.3
+        assert(t1.depth() == 2);
+        assert(data1 == 220);  // Restored from frame 1.3
+        assert(data2 == 450);  // Unchanged
+        assert(data3 == 600);  // Unchanged
+        
+        // === Add more to trail 2 ===
+        t2.push();  // Frame 2.3
+        assert(t2.depth() == 3);
+        data2 += 50;  // 500
+        t2.log([&data2]() { data2 -= 50; });
+        
+        assert(data1 == 220 && data2 == 500 && data3 == 600);
+        
+        // === Pop trail 3 completely ===
+        t3.pop();  // Pop frame 3.1
+        assert(t3.depth() == 0);
+        assert(data1 == 220);  // Unchanged
+        assert(data2 == 500);  // Unchanged
+        assert(data3 == 300);  // Restored to original
+        
+        // === Add new frame to trail 3 ===
+        t3.push();  // New frame 3.1
+        assert(t3.depth() == 1);
+        data3 -= 100;  // 200
+        t3.log([&data3]() { data3 += 100; });
+        data3 *= 5;  // 1000
+        t3.log([&data3]() { data3 /= 5; });
+        
+        assert(data1 == 220 && data2 == 500 && data3 == 1000);
+        
+        // === Pop trail 2 innermost frame ===
+        t2.pop();  // Pop frame 2.3
+        assert(t2.depth() == 2);
+        assert(data1 == 220);  // Unchanged
+        assert(data2 == 450);  // Restored from frame 2.3
+        assert(data3 == 1000);  // Unchanged
+        
+        // === Pop trail 1 middle frame ===
+        t1.pop();  // Pop frame 1.2
+        assert(t1.depth() == 1);
+        assert(data1 == 110);  // Restored from frame 1.2
+        assert(data2 == 450);  // Unchanged
+        assert(data3 == 1000);  // Unchanged
+        
+        // === Pop trail 2 all remaining frames ===
+        t2.pop();  // Pop frame 2.2
+        assert(t2.depth() == 1);
+        assert(data2 == 150);  // Restored from frame 2.2
+        
+        t2.pop();  // Pop frame 2.1
+        assert(t2.depth() == 0);
+        assert(data2 == 200);  // Restored to original
+        
+        assert(data1 == 110 && data2 == 200 && data3 == 1000);
+        
+        // === Pop trail 3 ===
+        t3.pop();  // Pop frame 3.1
+        assert(t3.depth() == 0);
+        assert(data3 == 300);  // Restored to original
+        
+        assert(data1 == 110 && data2 == 200 && data3 == 300);
+        
+        // === Pop trail 1 last frame ===
+        t1.pop();  // Pop frame 1.1
+        assert(t1.depth() == 0);
+        assert(data1 == 100);  // Restored to original
+        
+        // All data restored to original values
+        assert(data1 == 100 && data2 == 200 && data3 == 300);
+        assert(t1.depth() == 0 && t2.depth() == 0 && t3.depth() == 0);
+    }
 
-    // Test 13: COMPREHENSIVE SEQUENCE REVERSAL TEST WITH CHECKPOINTS
+    // Test 14: COMPREHENSIVE SEQUENCE REVERSAL TEST WITH CHECKPOINTS
     {
         trail t;
         
