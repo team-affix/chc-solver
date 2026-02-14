@@ -13,7 +13,7 @@ struct unification_edge {
 
 struct unification_graph {
     unification_graph(trail&);
-    void unify(const expr*, const expr*);
+    bool unify(const expr*, const expr*);
 private:
     trail& trail_ref;
     std::map<const expr*, const std::set<unification_edge>> edges;
