@@ -1,18 +1,24 @@
 #include "../hpp/expr.hpp"
 
-const expr* expr_pool::atom(const std::string& a_string) {
-    return intern(expr{expr::atom{a_string}});
+expr_pool::expr_pool(trail& t) : trail_ref(t) {
+
 }
 
-const expr* expr_pool::var(uint32_t a_index) {
-    return intern(expr{expr::var{a_index}});
+const expr* expr_pool::atom(const std::string& s) {
+    return intern(expr{expr::atom{s}});
 }
 
-const expr* expr_pool::cons(const expr* a_lhs, const expr* a_rhs) {
-    return intern(expr{expr::cons{a_lhs, a_rhs}});
+const expr* expr_pool::var(uint32_t i) {
+    return intern(expr{expr::var{i}});
 }
 
-const expr* expr_pool::intern(expr&& a_expr) {
-    return &*m_exprs.insert(std::move(a_expr)).first;
+const expr* expr_pool::cons(const expr* l, const expr* r) {
+    return intern(expr{expr::cons{l, r}});
+}
+
+const expr* expr_pool::intern(expr&& e) {
+    auto [it, inserted] = exprs.insert(std::move(e));
+    if (inserted) trail_ref.log([this, it]() { exprs.erase(it); });
+    return &*it;
 }
 

@@ -7,6 +7,8 @@
 #include <string>
 #include <variant>
 #include <set>
+#include <stack>
+#include "trail.hpp"
 
 struct expr {
     struct atom { std::string value; auto operator<=>(const atom&) const = default; };
@@ -17,12 +19,16 @@ struct expr {
 };
 
 struct expr_pool {
-    const expr* atom(const std::string& s);
-    const expr* var(uint32_t i);
-    const expr* cons(const expr* l, const expr* r);
+    expr_pool(trail&);
+    const expr* atom(const std::string&);
+    const expr* var(uint32_t);
+    const expr* cons(const expr*, const expr*);
 private:
-    const expr* intern(expr&& e);
-    std::set<expr> m_exprs;
+    const expr* intern(expr&&);
+    trail& trail_ref;
+    std::set<expr> exprs;
+    std::stack<std::set<expr>::iterator> log;
+    std::stack<size_t> frame_boundaries;
 };
 
 #endif
