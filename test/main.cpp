@@ -212,69 +212,6 @@ void test_expr_constructor() {
 
 // test case for expr_pool
 
-void test_expr_pool_intern() {
-    expr_pool pool;
-    
-    // Test that intern is called by atom/var/cons
-    // Already tested above, but let's verify the interning behavior more explicitly
-    
-    // Create many atoms with same value
-    std::vector<const expr*> atoms;
-    for (int i = 0; i < 100; i++) {
-        atoms.push_back(pool.atom("interned"));
-    }
-    
-    // All should be the same pointer
-    for (size_t i = 1; i < atoms.size(); i++) {
-        assert(atoms[0] == atoms[i]);
-    }
-    
-    // Create many vars with same index
-    std::vector<const expr*> vars;
-    for (int i = 0; i < 100; i++) {
-        vars.push_back(pool.var(123));
-    }
-    
-    // All should be the same pointer
-    for (size_t i = 1; i < vars.size(); i++) {
-        assert(vars[0] == vars[i]);
-    }
-    
-    // Create many cons with same structure
-    const expr* a = pool.atom("a");
-    const expr* b = pool.atom("b");
-    std::vector<const expr*> conses;
-    for (int i = 0; i < 100; i++) {
-        conses.push_back(pool.cons(a, b));
-    }
-    
-    // All should be the same pointer
-    for (size_t i = 1; i < conses.size(); i++) {
-        assert(conses[0] == conses[i]);
-    }
-    
-    // Test that different structures get different pointers
-    const expr* c1 = pool.cons(pool.atom("x"), pool.atom("y"));
-    const expr* c2 = pool.cons(pool.atom("x"), pool.atom("z"));
-    const expr* c3 = pool.cons(pool.atom("y"), pool.atom("y"));
-    
-    assert(c1 != c2);
-    assert(c1 != c3);
-    assert(c2 != c3);
-    
-    // Test interning with nested structures
-    const expr* inner1 = pool.cons(pool.atom("inner"), pool.var(1));
-    const expr* outer1 = pool.cons(inner1, pool.atom("outer"));
-    
-    const expr* inner2 = pool.cons(pool.atom("inner"), pool.var(1));
-    const expr* outer2 = pool.cons(inner2, pool.atom("outer"));
-    
-    // inner1 and inner2 should be same (interned)
-    assert(inner1 == inner2);
-    // outer1 and outer2 should be same (interned)
-    assert(outer1 == outer2);
-}
-
 void test_expr_pool_atom() {
     expr_pool pool;
     
@@ -416,7 +353,6 @@ void unit_test_main() {
     TEST(test_var_constructor);
     TEST(test_cons_constructor);
     TEST(test_expr_constructor);
-    TEST(test_expr_pool_intern);
     TEST(test_expr_pool_atom);
     TEST(test_expr_pool_var);
     TEST(test_expr_pool_cons);
