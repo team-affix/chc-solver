@@ -1259,60 +1259,208 @@ void test_expr_pool_var() {
     assert(pool.size() == 0);
 }
 
-// void test_expr_pool_cons() {
-//     expr_pool pool;
+void test_expr_pool_cons() {
+    trail t;
+    expr_pool pool(t);
     
-//     // Basic cons creation
-//     const expr* left = pool.atom("left");
-//     const expr* right = pool.atom("right");
-//     const expr* c1 = pool.cons(left, right);
+    // Push initial frame before any operations
+    t.push();
     
-//     assert(c1 != nullptr);
-//     assert(std::holds_alternative<expr::cons>(c1->content));
-//     const expr::cons& cons1 = std::get<expr::cons>(c1->content);
-//     assert(cons1.lhs == left);
-//     assert(cons1.rhs == right);
+    // Basic cons creation
+    const expr* left = pool.atom("left");
+    const expr* right = pool.atom("right");
+    const expr* c1 = pool.cons(left, right);
     
-//     // Interning - same cons should return same pointer
-//     const expr* c2 = pool.cons(left, right);
-//     assert(c1 == c2);
+    assert(c1 != nullptr);
+    assert(std::holds_alternative<expr::cons>(c1->content));
+    const expr::cons& cons1 = std::get<expr::cons>(c1->content);
+    assert(cons1.lhs == left);
+    assert(cons1.rhs == right);
+    assert(pool.size() == 3);  // left, right, cons
     
-//     // Different cons should return different pointers
-//     const expr* c3 = pool.cons(right, left);  // Swapped
-//     assert(c1 != c3);
+    // Interning - same cons should return same pointer
+    const expr* c2 = pool.cons(left, right);
+    assert(c1 == c2);
+    assert(pool.size() == 3);  // No new entry added
     
-//     // Cons with variables
-//     const expr* v1 = pool.var(10);
-//     const expr* v2 = pool.var(20);
-//     const expr* c4 = pool.cons(v1, v2);
-//     const expr* c5 = pool.cons(v1, v2);
-//     assert(c4 == c5);
+    // Different cons should return different pointers
+    const expr* c3 = pool.cons(right, left);  // Swapped
+    assert(c1 != c3);
+    assert(pool.size() == 4);
     
-//     // Nested cons
-//     const expr* inner = pool.cons(pool.atom("a"), pool.atom("b"));
-//     const expr* outer = pool.cons(inner, pool.atom("c"));
-//     const expr* outer2 = pool.cons(inner, pool.atom("c"));
-//     assert(outer == outer2);
+    // Cons with variables
+    const expr* v1 = pool.var(10);
+    const expr* v2 = pool.var(20);
+    const expr* c4 = pool.cons(v1, v2);
+    const expr* c5 = pool.cons(v1, v2);
+    assert(c4 == c5);
+    assert(pool.size() == 7);  // v1, v2, cons(v1,v2)
     
-//     // Same expr on both sides
-//     const expr* same = pool.atom("same");
-//     const expr* c6 = pool.cons(same, same);
-//     const expr* c7 = pool.cons(same, same);
-//     assert(c6 == c7);
+    // Nested cons
+    const expr* inner = pool.cons(pool.atom("a"), pool.atom("b"));
+    const expr* outer = pool.cons(inner, pool.atom("c"));
+    const expr* outer2 = pool.cons(inner, pool.atom("c"));
+    assert(outer == outer2);
+    size_t size_after_nested = pool.size();
     
-//     // Deep nesting with interning
-//     const expr* d1 = pool.cons(pool.atom("x"), pool.atom("y"));
-//     const expr* d2 = pool.cons(d1, d1);
-//     const expr* d3 = pool.cons(d2, d2);
+    // Same expr on both sides
+    const expr* same = pool.atom("same");
+    const expr* c6 = pool.cons(same, same);
+    const expr* c7 = pool.cons(same, same);
+    assert(c6 == c7);
+    assert(pool.size() == size_after_nested + 2);  // same, cons(same,same)
     
-//     const expr* d1_dup = pool.cons(pool.atom("x"), pool.atom("y"));
-//     const expr* d2_dup = pool.cons(d1_dup, d1_dup);
-//     const expr* d3_dup = pool.cons(d2_dup, d2_dup);
+    // Deep nesting with interning
+    const expr* d1 = pool.cons(pool.atom("x"), pool.atom("y"));
+    const expr* d2 = pool.cons(d1, d1);
+    const expr* d3 = pool.cons(d2, d2);
     
-//     assert(d1 == d1_dup);
-//     assert(d2 == d2_dup);
-//     assert(d3 == d3_dup);
-// }
+    const expr* d1_dup = pool.cons(pool.atom("x"), pool.atom("y"));
+    const expr* d2_dup = pool.cons(d1_dup, d1_dup);
+    const expr* d3_dup = pool.cons(d2_dup, d2_dup);
+    
+    assert(d1 == d1_dup);
+    assert(d2 == d2_dup);
+    assert(d3 == d3_dup);
+    size_t size_after_deep = pool.size();
+    
+    // Test backtracking: push frame, add content, pop frame
+    size_t size_before = pool.size();
+    t.push();
+    const expr* temp_left = pool.atom("temp_left");
+    const expr* temp_right = pool.atom("temp_right");
+    const expr* temp_cons = pool.cons(temp_left, temp_right);
+    assert(pool.size() == size_before + 3);
+    t.pop();
+    assert(pool.size() == size_before);  // Should be back to original size
+    
+    // Test corner case: intern same cons in nested frames
+    t.push();  // Frame 1
+    const expr* cons_a = pool.atom("cons_a");
+    const expr* cons_b = pool.atom("cons_b");
+    const expr* cons_ab = pool.cons(cons_a, cons_b);
+    size_t checkpoint1 = pool.size();
+    assert(cons_ab != nullptr);
+    
+    t.push();  // Frame 2
+    const expr* cons_ab_again = pool.cons(cons_a, cons_b);  // Should return same pointer, no log
+    assert(cons_ab == cons_ab_again);
+    assert(pool.size() == checkpoint1);  // Size unchanged
+    
+    t.pop();  // Pop frame 2
+    assert(pool.size() == checkpoint1);  // Size still unchanged
+    
+    // Verify cons_ab is still there
+    const expr* cons_ab_verify = pool.cons(cons_a, cons_b);
+    assert(cons_ab == cons_ab_verify);
+    assert(pool.size() == checkpoint1);
+    
+    t.pop();  // Pop frame 1
+    // Now cons_ab, cons_a, cons_b should be removed
+    
+    // Test nested pushes with checkpoints
+    size_t checkpoint_start = pool.size();
+    
+    t.push();  // Level 1
+    const expr* l1_a = pool.atom("l1_a");
+    const expr* l1_b = pool.atom("l1_b");
+    pool.cons(l1_a, l1_b);
+    size_t checkpoint_level1 = pool.size();
+    assert(checkpoint_level1 == checkpoint_start + 3);
+    
+    t.push();  // Level 2
+    const expr* l2_a = pool.var(100);
+    const expr* l2_b = pool.var(200);
+    pool.cons(l2_a, l2_b);
+    pool.cons(l1_a, l2_a);  // Mix from level 1 and level 2
+    size_t checkpoint_level2 = pool.size();
+    assert(checkpoint_level2 == checkpoint_level1 + 4);  // l2_a, l2_b, cons(l2_a,l2_b), cons(l1_a,l2_a)
+    
+    t.push();  // Level 3
+    pool.cons(l1_a, l1_b);  // Re-intern from level 1, no new entry
+    const expr* l3_cons = pool.cons(l2_a, l1_a);
+    size_t checkpoint_level3 = pool.size();
+    assert(checkpoint_level3 == checkpoint_level2 + 1);
+    
+    // Pop level 3
+    t.pop();
+    assert(pool.size() == checkpoint_level2);
+    
+    // Pop level 2
+    t.pop();
+    assert(pool.size() == checkpoint_level1);
+    
+    // Pop level 1
+    t.pop();
+    assert(pool.size() == checkpoint_start);
+    
+    // Test corner case: content added in earlier frame should not be removed by later frame pop
+    t.push();  // Frame A
+    const expr* early_atom_1 = pool.atom("early_atom_1");
+    const expr* early_atom_2 = pool.atom("early_atom_2");
+    const expr* early_cons = pool.cons(early_atom_1, early_atom_2);
+    size_t checkpoint_a = pool.size();
+    assert(checkpoint_a == checkpoint_start + 3);
+    
+    t.push();  // Frame B
+    const expr* mid_atom = pool.atom("mid_atom");
+    const expr* mid_cons = pool.cons(early_atom_1, mid_atom);  // Uses early_atom_1
+    size_t checkpoint_b = pool.size();
+    assert(checkpoint_b == checkpoint_a + 2);  // mid_atom, mid_cons
+    
+    // Re-intern early cons in Frame B - should not log since already exists
+    const expr* early_cons_again = pool.cons(early_atom_1, early_atom_2);
+    assert(early_cons == early_cons_again);
+    assert(pool.size() == checkpoint_b);  // Size unchanged
+    
+    // Add more new content in Frame B
+    const expr* late_atom = pool.atom("late_atom");
+    const expr* late_cons = pool.cons(late_atom, mid_atom);
+    size_t checkpoint_b_final = pool.size();
+    assert(checkpoint_b_final == checkpoint_b + 2);
+    
+    t.push();  // Frame C
+    // Re-intern content from both Frame A and Frame B
+    const expr* early_cons_again2 = pool.cons(early_atom_1, early_atom_2);
+    assert(early_cons == early_cons_again2);
+    const expr* mid_cons_again = pool.cons(early_atom_1, mid_atom);
+    assert(mid_cons == mid_cons_again);
+    assert(pool.size() == checkpoint_b_final);  // Size unchanged
+    
+    // Add new content in Frame C
+    const expr* frame_c_atom = pool.atom("frame_c_atom");
+    const expr* frame_c_cons = pool.cons(frame_c_atom, early_atom_1);
+    size_t checkpoint_c = pool.size();
+    assert(checkpoint_c == checkpoint_b_final + 2);
+    
+    // Pop Frame C - only frame_c_atom and frame_c_cons should be removed
+    t.pop();
+    assert(pool.size() == checkpoint_b_final);
+    
+    // Verify early and mid content still exist
+    const expr* verify_early_cons = pool.cons(early_atom_1, early_atom_2);
+    assert(verify_early_cons == early_cons);
+    const expr* verify_mid_cons = pool.cons(early_atom_1, mid_atom);
+    assert(verify_mid_cons == mid_cons);
+    assert(pool.size() == checkpoint_b_final);  // Still unchanged
+    
+    // Pop Frame B - should remove mid_atom, mid_cons, late_atom, late_cons but NOT early content
+    t.pop();
+    assert(pool.size() == checkpoint_a);
+    
+    // Verify early content still exists
+    const expr* verify_early_cons_after_b = pool.cons(early_atom_1, early_atom_2);
+    assert(verify_early_cons_after_b == early_cons);
+    assert(pool.size() == checkpoint_a);  // Still unchanged
+    
+    // Pop Frame A - should remove early atoms and cons
+    t.pop();
+    assert(pool.size() == checkpoint_start);
+    
+    // Pop initial frame
+    t.pop();
+    assert(pool.size() == 0);
+}
 
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
@@ -1327,7 +1475,7 @@ void unit_test_main() {
     TEST(test_expr_constructor);
     TEST(test_expr_pool_atom);
     TEST(test_expr_pool_var);
-    // TEST(test_expr_pool_cons);
+    TEST(test_expr_pool_cons);
 }
 
 int main() {
