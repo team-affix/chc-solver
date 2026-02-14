@@ -894,6 +894,46 @@ void test_expr_constructor() {
     assert((e7 <=> e10) != 0);
 }
 
+void test_expr_pool_constructor() {
+    trail t;
+    
+    // Basic construction with trail reference
+    expr_pool pool1(t);
+    assert(pool1.size() == 0);
+    
+    // Multiple pools can be constructed with same trail
+    expr_pool pool2(t);
+    assert(pool2.size() == 0);
+    
+    // Multiple pools with different trails
+    trail t2;
+    expr_pool pool3(t2);
+    assert(pool3.size() == 0);
+    
+    // Pool should be usable immediately after construction
+    t.push();
+    const expr* e1 = pool1.atom("test");
+    assert(e1 != nullptr);
+    assert(pool1.size() == 1);
+    
+    // Other pools are independent
+    assert(pool2.size() == 0);
+    assert(pool3.size() == 0);
+    
+    // Add to pool2 with same trail
+    const expr* e2 = pool2.atom("test2");
+    assert(pool2.size() == 1);
+    assert(pool1.size() == 1);  // pool1 unchanged
+    
+    // Pop should affect both pool1 and pool2 since they share trail t
+    t.pop();
+    assert(pool1.size() == 0);
+    assert(pool2.size() == 0);
+    
+    // pool3 with different trail is unaffected
+    assert(pool3.size() == 0);
+}
+
 void test_expr_pool_atom() {
     trail t;
     expr_pool pool(t);
@@ -1473,6 +1513,7 @@ void unit_test_main() {
     TEST(test_var_constructor);
     TEST(test_cons_constructor);
     TEST(test_expr_constructor);
+    TEST(test_expr_pool_constructor);
     TEST(test_expr_pool_atom);
     TEST(test_expr_pool_var);
     TEST(test_expr_pool_cons);
