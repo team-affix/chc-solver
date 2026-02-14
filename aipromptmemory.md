@@ -47,9 +47,11 @@
   - Functions with unique_ptr: moved-from state, nullptr handling
   - Any other code pattern that might present known issues (etc.)
 - Consider the architecture of the program and test for architectural bugs
-- When a bug is found: **STOP TESTING IMMEDIATELY**
-- **DO NOT CORRECT THE BUG** - report it to the user and let them fix it
-- Tell the user which test found the bug and what the bug is
+- When a test throws an error:
+  - Analyze why the error was thrown
+  - If you suspect it was due to the test case being written wrong, fix the test case automatically
+  - If a bug in the core source code is highly likely, **STOP TESTING IMMEDIATELY** and report it to the user
+- **DO NOT CORRECT BUGS IN CORE SOURCE CODE** - report them to the user and let them fix it
 
 ## Communication
 
