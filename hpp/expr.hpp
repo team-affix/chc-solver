@@ -23,12 +23,11 @@ struct expr_pool {
     const expr* atom(const std::string&);
     const expr* var(uint32_t);
     const expr* cons(const expr*, const expr*);
+    size_t size() const;
 private:
     const expr* intern(expr&&);
     trail& trail_ref;
     std::set<expr> exprs;
-    std::stack<std::set<expr>::iterator> log;
-    std::stack<size_t> frame_boundaries;
 };
 
 #endif
