@@ -3,12 +3,340 @@
 #include "test_utils.hpp"
 
 void test_trail_constructor() {
+    // Basic construction - should not crash
+    trail t1;
+    
+    // Multiple trails can be constructed
+    trail t2;
+    trail t3;
+    
+    // Trail should be usable immediately after construction
+    t1.push();
+    t1.pop();
 }
 
 void test_trail_push_pop() {
+    trail t;
+    
+    // Single push/pop with no logged operations
+    t.push();
+    t.pop();
+    
+    // Multiple push/pop pairs with no logged operations
+    t.push();
+    t.pop();
+    t.push();
+    t.pop();
+    t.push();
+    t.pop();
+    
+    // Nested push/pop
+    t.push();
+    t.push();
+    t.pop();
+    t.pop();
+    
+    // Deeper nesting
+    t.push();
+    t.push();
+    t.push();
+    t.pop();
+    t.pop();
+    t.pop();
+    
+    // Mixed nesting
+    t.push();
+    t.push();
+    t.pop();
+    t.push();
+    t.pop();
+    t.pop();
 }
 
 void test_trail_log() {
+    trail t;
+    
+    // Test 1: Single log operation
+    {
+        int x = 5;
+        t.push();
+        x = 10;
+        t.log([&x]() { x = 5; });
+        assert(x == 10);
+        t.pop();
+        assert(x == 5);
+    }
+    
+    // Test 2: Multiple log operations in one frame
+    {
+        int a = 1, b = 2, c = 3;
+        t.push();
+        a = 10;
+        t.log([&a]() { a = 1; });
+        b = 20;
+        t.log([&b]() { b = 2; });
+        c = 30;
+        t.log([&c]() { c = 3; });
+        
+        assert(a == 10 && b == 20 && c == 30);
+        t.pop();
+        assert(a == 1 && b == 2 && c == 3);
+    }
+    
+    // Test 3: Nested frames with logs
+    {
+        int x = 0;
+        
+        t.push();  // Frame 1
+        x = 1;
+        t.log([&x]() { x = 0; });
+        
+        t.push();  // Frame 2
+        x = 2;
+        t.log([&x]() { x = 1; });
+        
+        assert(x == 2);
+        t.pop();  // Pop frame 2
+        assert(x == 1);
+        t.pop();  // Pop frame 1
+        assert(x == 0);
+    }
+    
+    // Test 4: Multiple operations per frame with nesting
+    {
+        int a = 100, b = 200, c = 300;
+        
+        t.push();  // Frame 1
+        a = 111;
+        t.log([&a]() { a = 100; });
+        b = 222;
+        t.log([&b]() { b = 200; });
+        
+        t.push();  // Frame 2
+        b = 333;
+        t.log([&b]() { b = 222; });
+        c = 444;
+        t.log([&c]() { c = 300; });
+        
+        t.push();  // Frame 3
+        a = 555;
+        t.log([&a]() { a = 111; });
+        
+        assert(a == 555 && b == 333 && c == 444);
+        
+        t.pop();  // Pop frame 3
+        assert(a == 111 && b == 333 && c == 444);
+        
+        t.pop();  // Pop frame 2
+        assert(a == 111 && b == 222 && c == 300);
+        
+        t.pop();  // Pop frame 1
+        assert(a == 100 && b == 200 && c == 300);
+    }
+    
+    // Test 5: Empty frame (push/pop with no logs)
+    {
+        int x = 42;
+        t.push();
+        // No logs
+        x = 99;
+        assert(x == 99);
+        t.pop();
+        assert(x == 99);  // Should remain unchanged since no undo was logged
+    }
+    
+    // Test 6: Complex nested scenario with partial pops
+    {
+        int val = 0;
+        
+        t.push();  // Frame A
+        val = 1;
+        t.log([&val]() { val = 0; });
+        
+        t.push();  // Frame B
+        val = 2;
+        t.log([&val]() { val = 1; });
+        
+        t.push();  // Frame C
+        val = 3;
+        t.log([&val]() { val = 2; });
+        
+        assert(val == 3);
+        t.pop();  // Pop C
+        assert(val == 2);
+        
+        // Add more to frame B
+        val = 4;
+        t.log([&val]() { val = 2; });
+        
+        assert(val == 4);
+        t.pop();  // Pop B (should undo both operations in B)
+        assert(val == 1);
+        
+        t.pop();  // Pop A
+        assert(val == 0);
+    }
+    
+    // Test 7: Multiple variables with complex state changes
+    {
+        int x = 10, y = 20, z = 30;
+        
+        t.push();  // Level 1
+        x += 5;
+        t.log([&x]() { x -= 5; });
+        y *= 2;
+        t.log([&y]() { y /= 2; });
+        
+        assert(x == 15 && y == 40 && z == 30);
+        
+        t.push();  // Level 2
+        z = x + y;  // z = 55
+        t.log([&z]() { z = 30; });
+        x = 0;
+        t.log([&x]() { x = 15; });
+        
+        assert(x == 0 && y == 40 && z == 55);
+        
+        t.push();  // Level 3
+        y = 100;
+        t.log([&y]() { y = 40; });
+        
+        assert(x == 0 && y == 100 && z == 55);
+        
+        t.pop();  // Pop level 3
+        assert(x == 0 && y == 40 && z == 55);
+        
+        t.pop();  // Pop level 2
+        assert(x == 15 && y == 40 && z == 30);
+        
+        t.pop();  // Pop level 1
+        assert(x == 10 && y == 20 && z == 30);
+    }
+    
+    // Test 8: Deeply nested frames (5 levels)
+    {
+        int depth = 0;
+        
+        t.push();
+        depth = 1;
+        t.log([&depth]() { depth = 0; });
+        
+        t.push();
+        depth = 2;
+        t.log([&depth]() { depth = 1; });
+        
+        t.push();
+        depth = 3;
+        t.log([&depth]() { depth = 2; });
+        
+        t.push();
+        depth = 4;
+        t.log([&depth]() { depth = 3; });
+        
+        t.push();
+        depth = 5;
+        t.log([&depth]() { depth = 4; });
+        
+        assert(depth == 5);
+        t.pop();
+        assert(depth == 4);
+        t.pop();
+        assert(depth == 3);
+        t.pop();
+        assert(depth == 2);
+        t.pop();
+        assert(depth == 1);
+        t.pop();
+        assert(depth == 0);
+    }
+    
+    // Test 9: Many operations in a single frame
+    {
+        std::vector<int> values(10, 0);
+        
+        t.push();
+        for (int i = 0; i < 10; i++) {
+            values[i] = i + 1;
+            t.log([&values, i]() { values[i] = 0; });
+        }
+        
+        for (int i = 0; i < 10; i++) {
+            assert(values[i] == i + 1);
+        }
+        
+        t.pop();
+        
+        for (int i = 0; i < 10; i++) {
+            assert(values[i] == 0);
+        }
+    }
+    
+    // Test 10: Interleaved push/pop/log operations
+    {
+        int state = 0;
+        
+        t.push();  // Frame 1
+        state = 1;
+        t.log([&state]() { state = 0; });
+        
+        t.push();  // Frame 2
+        state = 2;
+        t.log([&state]() { state = 1; });
+        
+        t.pop();  // Pop frame 2
+        assert(state == 1);
+        
+        t.push();  // New frame 2
+        state = 3;
+        t.log([&state]() { state = 1; });
+        
+        t.push();  // Frame 3
+        state = 4;
+        t.log([&state]() { state = 3; });
+        
+        assert(state == 4);
+        t.pop();  // Pop frame 3
+        assert(state == 3);
+        t.pop();  // Pop frame 2
+        assert(state == 1);
+        t.pop();  // Pop frame 1
+        assert(state == 0);
+    }
+    
+    // Test 11: String modifications
+    {
+        std::string str = "original";
+        
+        t.push();
+        str = "modified";
+        t.log([&str]() { str = "original"; });
+        
+        assert(str == "modified");
+        t.pop();
+        assert(str == "original");
+    }
+    
+    // Test 12: Multiple independent trails
+    {
+        trail t1, t2;
+        int x = 1, y = 2;
+        
+        t1.push();
+        x = 10;
+        t1.log([&x]() { x = 1; });
+        
+        t2.push();
+        y = 20;
+        t2.log([&y]() { y = 2; });
+        
+        assert(x == 10 && y == 20);
+        
+        t1.pop();
+        assert(x == 1 && y == 20);
+        
+        t2.pop();
+        assert(x == 1 && y == 2);
+    }
 }
 
 void test_atom_constructor() {

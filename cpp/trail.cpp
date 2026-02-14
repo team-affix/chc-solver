@@ -21,3 +21,7 @@ void trail::pop() {
 void trail::log(const std::function<void()>& a_function) {
     undo_stack.push(a_function);
 }
+
+size_t trail::depth() const {
+    return frame_boundary_stack.size();
+}
