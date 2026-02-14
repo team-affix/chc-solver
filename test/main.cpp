@@ -5,59 +5,90 @@
 void test_trail_constructor() {
     // Basic construction - should not crash
     trail t1;
+    assert(t1.depth() == 0);
     
     // Multiple trails can be constructed
     trail t2;
     trail t3;
+    assert(t2.depth() == 0);
+    assert(t3.depth() == 0);
     
     // Trail should be usable immediately after construction
     t1.push();
+    assert(t1.depth() == 1);
     t1.pop();
+    assert(t1.depth() == 0);
 }
 
 void test_trail_push_pop() {
     trail t;
+    assert(t.depth() == 0);
     
     // Single push/pop with no logged operations
     t.push();
+    assert(t.depth() == 1);
     t.pop();
+    assert(t.depth() == 0);
     
     // Multiple push/pop pairs with no logged operations
     t.push();
+    assert(t.depth() == 1);
     t.pop();
+    assert(t.depth() == 0);
+    
     t.push();
+    assert(t.depth() == 1);
     t.pop();
+    assert(t.depth() == 0);
+    
     t.push();
+    assert(t.depth() == 1);
     t.pop();
+    assert(t.depth() == 0);
     
     // Nested push/pop
     t.push();
+    assert(t.depth() == 1);
     t.push();
+    assert(t.depth() == 2);
     t.pop();
+    assert(t.depth() == 1);
     t.pop();
+    assert(t.depth() == 0);
     
     // Deeper nesting
     t.push();
+    assert(t.depth() == 1);
     t.push();
+    assert(t.depth() == 2);
     t.push();
+    assert(t.depth() == 3);
     t.pop();
+    assert(t.depth() == 2);
     t.pop();
+    assert(t.depth() == 1);
     t.pop();
+    assert(t.depth() == 0);
     
     // Mixed nesting
     t.push();
+    assert(t.depth() == 1);
     t.push();
+    assert(t.depth() == 2);
     t.pop();
+    assert(t.depth() == 1);
     t.push();
+    assert(t.depth() == 2);
     t.pop();
+    assert(t.depth() == 1);
     t.pop();
+    assert(t.depth() == 0);
 }
 
 void test_trail_log() {
-    trail t;
-    
     // Test 1: Single log operation
     {
+        trail t;
         int x = 5;
         t.push();
         x = 10;
@@ -69,6 +100,7 @@ void test_trail_log() {
     
     // Test 2: Multiple log operations in one frame
     {
+        trail t;
         int a = 1, b = 2, c = 3;
         t.push();
         a = 10;
@@ -85,6 +117,8 @@ void test_trail_log() {
     
     // Test 3: Nested frames with logs
     {
+        trail t;
+
         int x = 0;
         
         t.push();  // Frame 1
@@ -104,6 +138,8 @@ void test_trail_log() {
     
     // Test 4: Multiple operations per frame with nesting
     {
+        trail t;
+
         int a = 100, b = 200, c = 300;
         
         t.push();  // Frame 1
@@ -136,6 +172,8 @@ void test_trail_log() {
     
     // Test 5: Empty frame (push/pop with no logs)
     {
+        trail t;
+
         int x = 42;
         t.push();
         // No logs
@@ -147,6 +185,8 @@ void test_trail_log() {
     
     // Test 6: Complex nested scenario with partial pops
     {
+        trail t;
+
         int val = 0;
         
         t.push();  // Frame A
@@ -179,6 +219,8 @@ void test_trail_log() {
     
     // Test 7: Multiple variables with complex state changes
     {
+        trail t;
+
         int x = 10, y = 20, z = 30;
         
         t.push();  // Level 1
@@ -215,6 +257,8 @@ void test_trail_log() {
     
     // Test 8: Deeply nested frames (5 levels)
     {
+        trail t;
+
         int depth = 0;
         
         t.push();
@@ -252,6 +296,8 @@ void test_trail_log() {
     
     // Test 9: Many operations in a single frame
     {
+        trail t;
+
         std::vector<int> values(10, 0);
         
         t.push();
@@ -273,6 +319,8 @@ void test_trail_log() {
     
     // Test 10: Interleaved push/pop/log operations
     {
+        trail t;
+
         int state = 0;
         
         t.push();  // Frame 1
@@ -305,6 +353,8 @@ void test_trail_log() {
     
     // Test 11: String modifications
     {
+        trail t;
+        
         std::string str = "original";
         
         t.push();
@@ -336,6 +386,170 @@ void test_trail_log() {
         
         t2.pop();
         assert(x == 1 && y == 2);
+    }
+
+    // Test 13: COMPREHENSIVE SEQUENCE REVERSAL TEST WITH CHECKPOINTS
+    {
+        trail t;
+        
+        int val = 100;  // Starting value
+        
+        // === FRAME 1 ===
+        t.push();
+        assert(t.depth() == 1);
+        
+        // Step 1: Add 5 -> 105
+        val += 5;
+        t.log([&val]() { val -= 5; });
+        assert(val == 105);
+        
+        // Step 2: Multiply by 2 -> 210
+        val *= 2;
+        t.log([&val]() { val /= 2; });
+        assert(val == 210);
+        
+        // Step 3: Subtract 10 -> 200
+        val -= 10;
+        t.log([&val]() { val += 10; });
+        assert(val == 200);
+        
+        // Step 4: Add 50 -> 250
+        val += 50;
+        t.log([&val]() { val -= 50; });
+        assert(val == 250);
+        
+        // CHECKPOINT 1: val should be 250
+        int checkpoint1 = val;
+        assert(checkpoint1 == 250);
+        
+        // === FRAME 2 ===
+        t.push();
+        assert(t.depth() == 2);
+        
+        // Step 5: Divide by 5 -> 50
+        val /= 5;
+        t.log([&val]() { val *= 5; });
+        assert(val == 50);
+        
+        // Step 6: Add 150 -> 200
+        val += 150;
+        t.log([&val]() { val -= 150; });
+        assert(val == 200);
+        
+        // Step 7: Multiply by 3 -> 600
+        val *= 3;
+        t.log([&val]() { val /= 3; });
+        assert(val == 600);
+        
+        // Step 8: Subtract 100 -> 500
+        val -= 100;
+        t.log([&val]() { val += 100; });
+        assert(val == 500);
+        
+        // Step 9: Add 25 -> 525
+        val += 25;
+        t.log([&val]() { val -= 25; });
+        assert(val == 525);
+        
+        // CHECKPOINT 2: val should be 525
+        int checkpoint2 = val;
+        assert(checkpoint2 == 525);
+        
+        // === FRAME 3 ===
+        t.push();
+        assert(t.depth() == 3);
+        
+        // Step 10: Subtract 25 -> 500
+        val -= 25;
+        t.log([&val]() { val += 25; });
+        assert(val == 500);
+        
+        // Step 11: Divide by 4 -> 125
+        val /= 4;
+        t.log([&val]() { val *= 4; });
+        assert(val == 125);
+        
+        // Step 12: Add 75 -> 200
+        val += 75;
+        t.log([&val]() { val -= 75; });
+        assert(val == 200);
+        
+        // Step 13: Multiply by 2 -> 400
+        val *= 2;
+        t.log([&val]() { val /= 2; });
+        assert(val == 400);
+        
+        // Step 14: Subtract 50 -> 350
+        val -= 50;
+        t.log([&val]() { val += 50; });
+        assert(val == 350);
+        
+        // Step 15: Add 150 -> 500
+        val += 150;
+        t.log([&val]() { val -= 150; });
+        assert(val == 500);
+        
+        // CHECKPOINT 3: val should be 500
+        int checkpoint3 = val;
+        assert(checkpoint3 == 500);
+        
+        // === FRAME 4 ===
+        t.push();
+        assert(t.depth() == 4);
+        
+        // Step 16: Divide by 10 -> 50
+        val /= 10;
+        t.log([&val]() { val *= 10; });
+        assert(val == 50);
+        
+        // Step 17: Add 450 -> 500
+        val += 450;
+        t.log([&val]() { val -= 450; });
+        assert(val == 500);
+        
+        // Step 18: Multiply by 2 -> 1000
+        val *= 2;
+        t.log([&val]() { val /= 2; });
+        assert(val == 1000);
+        
+        // Step 19: Subtract 200 -> 800
+        val -= 200;
+        t.log([&val]() { val += 200; });
+        assert(val == 800);
+        
+        // Step 20: Add 100 -> 900
+        val += 100;
+        t.log([&val]() { val -= 100; });
+        assert(val == 900);
+        
+        // CHECKPOINT 4: val should be 900
+        int checkpoint4 = val;
+        assert(checkpoint4 == 900);
+        
+        // === NOW UNDO IN REVERSE ORDER ===
+        
+        // Pop frame 4 - should restore to checkpoint 3 (500)
+        t.pop();
+        assert(t.depth() == 3);
+        assert(val == checkpoint3);
+        assert(val == 500);
+        
+        // Pop frame 3 - should restore to checkpoint 2 (525)
+        t.pop();
+        assert(t.depth() == 2);
+        assert(val == checkpoint2);
+        assert(val == 525);
+        
+        // Pop frame 2 - should restore to checkpoint 1 (250)
+        t.pop();
+        assert(t.depth() == 1);
+        assert(val == checkpoint1);
+        assert(val == 250);
+        
+        // Pop frame 1 - should restore to original (100)
+        t.pop();
+        assert(t.depth() == 0);
+        assert(val == 100);
     }
 }
 
