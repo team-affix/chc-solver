@@ -894,45 +894,126 @@ void test_expr_constructor() {
     assert((e7 <=> e10) != 0);
 }
 
-// void test_expr_pool_atom() {
-//     expr_pool pool;
+void test_expr_pool_atom() {
+    trail t;
+    expr_pool pool(t);
     
-//     // Basic atom creation
-//     const expr* e1 = pool.atom("test");
-//     assert(e1 != nullptr);
-//     assert(std::holds_alternative<expr::atom>(e1->content));
-//     assert(std::get<expr::atom>(e1->content).value == "test");
+    // Push initial frame before any operations
+    t.push();
     
-//     // Empty string
-//     const expr* e2 = pool.atom("");
-//     assert(std::get<expr::atom>(e2->content).value == "");
+    // Basic atom creation
+    const expr* e1 = pool.atom("test");
+    assert(e1 != nullptr);
+    assert(std::holds_alternative<expr::atom>(e1->content));
+    assert(std::get<expr::atom>(e1->content).value == "test");
+    assert(pool.size() == 1);
     
-//     // Interning - same string should return same pointer
-//     const expr* e3 = pool.atom("test");
-//     assert(e1 == e3);
+    // Empty string
+    const expr* e2 = pool.atom("");
+    assert(std::get<expr::atom>(e2->content).value == "");
+    assert(pool.size() == 2);
     
-//     // Different strings should return different pointers
-//     const expr* e4 = pool.atom("different");
-//     assert(e1 != e4);
+    // Interning - same string should return same pointer
+    const expr* e3 = pool.atom("test");
+    assert(e1 == e3);
+    assert(pool.size() == 2);  // No new entry added
     
-//     // Multiple calls with same string
-//     const expr* e5 = pool.atom("shared");
-//     const expr* e6 = pool.atom("shared");
-//     const expr* e7 = pool.atom("shared");
-//     assert(e5 == e6);
-//     assert(e6 == e7);
+    // Different strings should return different pointers
+    const expr* e4 = pool.atom("different");
+    assert(e1 != e4);
+    assert(pool.size() == 3);
     
-//     // Special characters
-//     const expr* e8 = pool.atom("!@#$");
-//     const expr* e9 = pool.atom("!@#$");
-//     assert(e8 == e9);
+    // Multiple calls with same string
+    const expr* e5 = pool.atom("shared");
+    const expr* e6 = pool.atom("shared");
+    const expr* e7 = pool.atom("shared");
+    assert(e5 == e6);
+    assert(e6 == e7);
+    assert(pool.size() == 4);  // Only one "shared" added
     
-//     // Long strings
-//     std::string long_str(1000, 'x');
-//     const expr* e10 = pool.atom(long_str);
-//     const expr* e11 = pool.atom(long_str);
-//     assert(e10 == e11);
-// }
+    // Special characters
+    const expr* e8 = pool.atom("!@#$");
+    const expr* e9 = pool.atom("!@#$");
+    assert(e8 == e9);
+    assert(pool.size() == 5);
+    
+    // Long strings
+    std::string long_str(1000, 'x');
+    const expr* e10 = pool.atom(long_str);
+    const expr* e11 = pool.atom(long_str);
+    assert(e10 == e11);
+    assert(pool.size() == 6);
+    
+    // Test backtracking: push frame, add content, pop frame
+    size_t size_before = pool.size();
+    t.push();
+    const expr* temp1 = pool.atom("temporary1");
+    const expr* temp2 = pool.atom("temporary2");
+    assert(pool.size() == size_before + 2);
+    t.pop();
+    assert(pool.size() == size_before);  // Should be back to original size
+    
+    // Test corner case: intern same content in nested frames
+    t.push();  // Frame 1
+    const expr* content_c = pool.atom("content_c");
+    size_t checkpoint1 = pool.size();
+    assert(content_c != nullptr);
+    
+    t.push();  // Frame 2
+    const expr* content_c_again = pool.atom("content_c");  // Should return same pointer, no log
+    assert(content_c == content_c_again);
+    assert(pool.size() == checkpoint1);  // Size unchanged
+    
+    t.pop();  // Pop frame 2
+    assert(pool.size() == checkpoint1);  // Size still unchanged
+    
+    // Verify content_c is still there
+    const expr* content_c_verify = pool.atom("content_c");
+    assert(content_c == content_c_verify);
+    assert(pool.size() == checkpoint1);
+    
+    t.pop();  // Pop frame 1
+    // Now content_c should be removed
+
+    assert(pool.size() == size_before);
+    
+    // Test nested pushes with checkpoints
+    size_t checkpoint_start = pool.size();
+    
+    t.push();  // Level 1
+    pool.atom("level1_a");
+    pool.atom("level1_b");
+    size_t checkpoint_level1 = pool.size();
+    assert(checkpoint_level1 == checkpoint_start + 2);
+    
+    t.push();  // Level 2
+    pool.atom("level2_a");
+    pool.atom("level2_b");
+    pool.atom("level2_c");
+    size_t checkpoint_level2 = pool.size();
+    assert(checkpoint_level2 == checkpoint_level1 + 3);
+    
+    t.push();  // Level 3
+    pool.atom("level3_a");
+    size_t checkpoint_level3 = pool.size();
+    assert(checkpoint_level3 == checkpoint_level2 + 1);
+    
+    // Pop level 3
+    t.pop();
+    assert(pool.size() == checkpoint_level2);
+    
+    // Pop level 2
+    t.pop();
+    assert(pool.size() == checkpoint_level1);
+    
+    // Pop level 1
+    t.pop();
+    assert(pool.size() == checkpoint_start);
+    
+    // Pop initial frame
+    t.pop();
+    assert(pool.size() == 0);
+}
 
 // void test_expr_pool_var() {
 //     expr_pool pool;
@@ -1038,7 +1119,7 @@ void unit_test_main() {
     TEST(test_var_constructor);
     TEST(test_cons_constructor);
     TEST(test_expr_constructor);
-    // TEST(test_expr_pool_atom);
+    TEST(test_expr_pool_atom);
     // TEST(test_expr_pool_var);
     // TEST(test_expr_pool_cons);
 }
