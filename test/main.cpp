@@ -1079,43 +1079,185 @@ void test_expr_pool_atom() {
     assert(pool.size() == 0);
 }
 
-// void test_expr_pool_var() {
-//     expr_pool pool;
+void test_expr_pool_var() {
+    trail t;
+    expr_pool pool(t);
     
-//     // Basic var creation
-//     const expr* e1 = pool.var(0);
-//     assert(e1 != nullptr);
-//     assert(std::holds_alternative<expr::var>(e1->content));
-//     assert(std::get<expr::var>(e1->content).index == 0);
+    // Push initial frame before any operations
+    t.push();
     
-//     // Interning - same index should return same pointer
-//     const expr* e2 = pool.var(0);
-//     assert(e1 == e2);
+    // Basic var creation
+    const expr* e1 = pool.var(0);
+    assert(e1 != nullptr);
+    assert(std::holds_alternative<expr::var>(e1->content));
+    assert(std::get<expr::var>(e1->content).index == 0);
+    assert(pool.size() == 1);
     
-//     // Different indices should return different pointers
-//     const expr* e3 = pool.var(1);
-//     assert(e1 != e3);
+    // Interning - same index should return same pointer
+    const expr* e2 = pool.var(0);
+    assert(e1 == e2);
+    assert(pool.size() == 1);  // No new entry added
     
-//     // Multiple calls with same index
-//     const expr* e4 = pool.var(42);
-//     const expr* e5 = pool.var(42);
-//     const expr* e6 = pool.var(42);
-//     assert(e4 == e5);
-//     assert(e5 == e6);
+    // Different indices should return different pointers
+    const expr* e3 = pool.var(1);
+    assert(e1 != e3);
+    assert(pool.size() == 2);
     
-//     // Edge cases
-//     const expr* e7 = pool.var(UINT32_MAX);
-//     const expr* e8 = pool.var(UINT32_MAX);
-//     assert(e7 == e8);
+    // Multiple calls with same index
+    const expr* e4 = pool.var(42);
+    const expr* e5 = pool.var(42);
+    const expr* e6 = pool.var(42);
+    assert(e4 == e5);
+    assert(e5 == e6);
+    assert(pool.size() == 3);  // Only one var(42) added
     
-//     // Sequential indices
-//     for (uint32_t i = 0; i < 100; i++) {
-//         const expr* v1 = pool.var(i);
-//         const expr* v2 = pool.var(i);
-//         assert(v1 == v2);
-//         assert(std::get<expr::var>(v1->content).index == i);
-//     }
-// }
+    // Edge cases
+    const expr* e7 = pool.var(UINT32_MAX);
+    const expr* e8 = pool.var(UINT32_MAX);
+    assert(e7 == e8);
+    assert(pool.size() == 4);
+    
+    // Sequential indices
+    for (uint32_t i = 0; i < 100; i++) {
+        const expr* v1 = pool.var(i);
+        const expr* v2 = pool.var(i);
+        assert(v1 == v2);
+        assert(std::get<expr::var>(v1->content).index == i);
+    }
+    size_t size_after_sequential = pool.size();
+    
+    // Test backtracking: push frame, add content, pop frame
+    size_t size_before = pool.size();
+    t.push();
+    const expr* temp1 = pool.var(9999);
+    const expr* temp2 = pool.var(8888);
+    assert(pool.size() == size_before + 2);
+    t.pop();
+    assert(pool.size() == size_before);  // Should be back to original size
+    
+    // Test corner case: intern same content in nested frames
+    t.push();  // Frame 1
+    const expr* var_100 = pool.var(100);
+    size_t checkpoint1 = pool.size();
+    assert(var_100 != nullptr);
+    
+    t.push();  // Frame 2
+    const expr* var_100_again = pool.var(100);  // Should return same pointer, no log
+    assert(var_100 == var_100_again);
+    assert(pool.size() == checkpoint1);  // Size unchanged
+    
+    t.pop();  // Pop frame 2
+    assert(pool.size() == checkpoint1);  // Size still unchanged
+    
+    // Verify var_100 is still there
+    const expr* var_100_verify = pool.var(100);
+    assert(var_100 == var_100_verify);
+    assert(pool.size() == checkpoint1);
+    
+    t.pop();  // Pop frame 1
+    // Now var_100 should be removed
+    
+    // Test nested pushes with checkpoints
+    size_t checkpoint_start = pool.size();
+    
+    t.push();  // Level 1
+    pool.var(200);
+    pool.var(201);
+    size_t checkpoint_level1 = pool.size();
+    assert(checkpoint_level1 == checkpoint_start + 2);
+    
+    t.push();  // Level 2
+    pool.var(300);
+    pool.var(301);
+    pool.var(302);
+    size_t checkpoint_level2 = pool.size();
+    assert(checkpoint_level2 == checkpoint_level1 + 3);
+    
+    t.push();  // Level 3
+    pool.var(400);
+    size_t checkpoint_level3 = pool.size();
+    assert(checkpoint_level3 == checkpoint_level2 + 1);
+    
+    // Pop level 3
+    t.pop();
+    assert(pool.size() == checkpoint_level2);
+    
+    // Pop level 2
+    t.pop();
+    assert(pool.size() == checkpoint_level1);
+    
+    // Pop level 1
+    t.pop();
+    assert(pool.size() == checkpoint_start);
+    
+    // Test corner case: content added in earlier frame should not be removed by later frame pop
+    t.push();  // Frame A
+    const expr* early_var_1 = pool.var(500);
+    const expr* early_var_2 = pool.var(501);
+    size_t checkpoint_a = pool.size();
+    assert(checkpoint_a == checkpoint_start + 2);
+    
+    t.push();  // Frame B
+    const expr* mid_var = pool.var(600);
+    size_t checkpoint_b = pool.size();
+    assert(checkpoint_b == checkpoint_a + 1);
+    
+    // Re-intern early content in Frame B - should not log since already exists
+    const expr* early_var_1_again = pool.var(500);
+    assert(early_var_1 == early_var_1_again);
+    assert(pool.size() == checkpoint_b);  // Size unchanged
+    
+    // Add more new content in Frame B
+    const expr* late_var_1 = pool.var(700);
+    const expr* late_var_2 = pool.var(701);
+    size_t checkpoint_b_final = pool.size();
+    assert(checkpoint_b_final == checkpoint_b + 2);
+    
+    t.push();  // Frame C
+    // Re-intern content from both Frame A and Frame B
+    const expr* early_var_2_again = pool.var(501);
+    assert(early_var_2 == early_var_2_again);
+    const expr* mid_var_again = pool.var(600);
+    assert(mid_var == mid_var_again);
+    assert(pool.size() == checkpoint_b_final);  // Size unchanged
+    
+    // Add new content in Frame C
+    const expr* frame_c_var = pool.var(800);
+    size_t checkpoint_c = pool.size();
+    assert(checkpoint_c == checkpoint_b_final + 1);
+    
+    // Pop Frame C - only frame_c_var should be removed
+    t.pop();
+    assert(pool.size() == checkpoint_b_final);
+    
+    // Verify early and mid content still exist
+    const expr* verify_early_1 = pool.var(500);
+    assert(verify_early_1 == early_var_1);
+    const expr* verify_mid = pool.var(600);
+    assert(verify_mid == mid_var);
+    const expr* verify_late_1 = pool.var(700);
+    assert(verify_late_1 == late_var_1);
+    assert(pool.size() == checkpoint_b_final);  // Still unchanged
+    
+    // Pop Frame B - should remove mid_var, late_var_1, late_var_2 but NOT early vars
+    t.pop();
+    assert(pool.size() == checkpoint_a);
+    
+    // Verify early content still exists
+    const expr* verify_early_1_after_b = pool.var(500);
+    assert(verify_early_1_after_b == early_var_1);
+    const expr* verify_early_2_after_b = pool.var(501);
+    assert(verify_early_2_after_b == early_var_2);
+    assert(pool.size() == checkpoint_a);  // Still unchanged
+    
+    // Pop Frame A - should remove early vars
+    t.pop();
+    assert(pool.size() == checkpoint_start);
+    
+    // Pop initial frame
+    t.pop();
+    assert(pool.size() == 0);
+}
 
 // void test_expr_pool_cons() {
 //     expr_pool pool;
@@ -1184,7 +1326,7 @@ void unit_test_main() {
     TEST(test_cons_constructor);
     TEST(test_expr_constructor);
     TEST(test_expr_pool_atom);
-    // TEST(test_expr_pool_var);
+    TEST(test_expr_pool_var);
     // TEST(test_expr_pool_cons);
 }
 
