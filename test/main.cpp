@@ -2092,6 +2092,167 @@ void test_unification_graph_cin_dijkstra() {
         assert(cause3.count(make_fulfillment(16, 2)) == true);
     }
     
+    // Test 9: VERY COMPLEX GRAPH with overlapping causes - finds causally minimal path
+    {
+        unification_graph ug(t);
+        
+        // Create a complex graph with 8 vars and 3 atoms
+        expr v0{expr::var{300}};
+        expr v1{expr::var{301}};
+        expr v2{expr::var{302}};
+        expr v3{expr::var{303}};
+        expr v4{expr::var{304}};
+        expr v5{expr::var{305}};
+        expr v6{expr::var{306}};
+        expr v7{expr::var{307}};
+        expr atom_x{expr::atom{"target_x"}};
+        expr atom_y{expr::atom{"target_y"}};
+        expr atom_z{expr::atom{"target_z"}};
+        
+        // Define shared fulfillments that appear in multiple edges
+        // These create overlaps that reduce effective path costs
+        causal_set shared_a = make_cause({{100, 1}});
+        causal_set shared_b = make_cause({{200, 1}});
+        causal_set shared_c = make_cause({{300, 1}});
+        
+        // v0 <-> v1: uses shared_a + unique
+        causal_set c01 = make_cause({{100, 1}, {1, 1}});  // cost 2
+        
+        // v0 <-> v2: uses shared_b + unique
+        causal_set c02 = make_cause({{200, 1}, {2, 1}});  // cost 2
+        
+        // v1 <-> v3: uses shared_a + unique (overlap with c01!)
+        causal_set c13 = make_cause({{100, 1}, {3, 1}, {3, 2}});  // cost 3, but {100,1} overlaps
+        
+        // v2 <-> v4: uses shared_b + unique (overlap with c02!)
+        causal_set c24 = make_cause({{200, 1}, {4, 1}});  // cost 2, but {200,1} overlaps
+        
+        // v1 <-> v5: uses shared_c
+        causal_set c15 = make_cause({{300, 1}, {5, 1}, {5, 2}});  // cost 3
+        
+        // v3 <-> v6: uses shared_c (overlap with c15!)
+        causal_set c36 = make_cause({{300, 1}, {6, 1}});  // cost 2, but {300,1} overlaps
+        
+        // v4 <-> v6: unique
+        causal_set c46 = make_cause({{7, 1}, {7, 2}, {7, 3}});  // cost 3
+        
+        // v5 <-> v7: unique
+        causal_set c57 = make_cause({{8, 1}});  // cost 1
+        
+        // v6 <-> v7: unique
+        causal_set c67 = make_cause({{9, 1}, {9, 2}});  // cost 2
+        
+        // v7 <-> atom_x: unique
+        causal_set c7x = make_cause({{10, 1}});  // cost 1
+        
+        // v6 <-> atom_y: unique
+        causal_set c6y = make_cause({{11, 1}, {11, 2}});  // cost 2
+        
+        // v4 <-> atom_z: unique
+        causal_set c4z = make_cause({{12, 1}});  // cost 1
+        
+        // Add all bidirectional edges
+        ug.edges[&v0].insert({&v1, c01});
+        ug.edges[&v1].insert({&v0, c01});
+        
+        ug.edges[&v0].insert({&v2, c02});
+        ug.edges[&v2].insert({&v0, c02});
+        
+        ug.edges[&v1].insert({&v3, c13});
+        ug.edges[&v3].insert({&v1, c13});
+        
+        ug.edges[&v2].insert({&v4, c24});
+        ug.edges[&v4].insert({&v2, c24});
+        
+        ug.edges[&v1].insert({&v5, c15});
+        ug.edges[&v5].insert({&v1, c15});
+        
+        ug.edges[&v3].insert({&v6, c36});
+        ug.edges[&v6].insert({&v3, c36});
+        
+        ug.edges[&v4].insert({&v6, c46});
+        ug.edges[&v6].insert({&v4, c46});
+        
+        ug.edges[&v5].insert({&v7, c57});
+        ug.edges[&v7].insert({&v5, c57});
+        
+        ug.edges[&v6].insert({&v7, c67});
+        ug.edges[&v7].insert({&v6, c67});
+        
+        ug.edges[&v7].insert({&atom_x, c7x});
+        ug.edges[&atom_x].insert({&v7, c7x});
+        
+        ug.edges[&v6].insert({&atom_y, c6y});
+        ug.edges[&atom_y].insert({&v6, c6y});
+        
+        ug.edges[&v4].insert({&atom_z, c4z});
+        ug.edges[&atom_z].insert({&v4, c4z});
+        
+        // Test from v0: Multiple paths to multiple atoms
+        // Path to atom_z: v0 -> v2 -> v4 -> atom_z
+        //   Causes: {200,1},{2,1} + {200,1},{4,1} + {12,1}
+        //   Unique: {200,1}, {2,1}, {4,1}, {12,1} = 4 unique
+        //
+        // Path to atom_x: v0 -> v1 -> v5 -> v7 -> atom_x
+        //   Causes: {100,1},{1,1} + {300,1},{5,1},{5,2} + {8,1} + {10,1}
+        //   Unique: {100,1}, {1,1}, {300,1}, {5,1}, {5,2}, {8,1}, {10,1} = 7 unique
+        //
+        // Path to atom_x (alt): v0 -> v1 -> v3 -> v6 -> v7 -> atom_x
+        //   Causes: {100,1},{1,1} + {100,1},{3,1},{3,2} + {300,1},{6,1} + {9,1},{9,2} + {10,1}
+        //   Unique: {100,1}, {1,1}, {3,1}, {3,2}, {300,1}, {6,1}, {9,1}, {9,2}, {10,1} = 9 unique
+        //
+        // Shortest should be path to atom_z with 4 unique fulfillments
+        auto [found, cause] = ug.cin_dijkstra(&v0);
+        assert(found == true);
+        assert(cause.size() == 4);
+        assert(cause.count(make_fulfillment(200, 1)) == true);
+        assert(cause.count(make_fulfillment(2, 1)) == true);
+        assert(cause.count(make_fulfillment(4, 1)) == true);
+        assert(cause.count(make_fulfillment(12, 1)) == true);
+        
+        // Test from v1: Should find path with heavy overlap
+        // Path to atom_x: v1 -> v5 -> v7 -> atom_x
+        //   Causes: {300,1},{5,1},{5,2} + {8,1} + {10,1}
+        //   Unique: {300,1}, {5,1}, {5,2}, {8,1}, {10,1} = 5 unique
+        //
+        // Path to atom_y: v1 -> v3 -> v6 -> atom_y
+        //   Causes: {100,1},{3,1},{3,2} + {300,1},{6,1} + {11,1},{11,2}
+        //   Unique: {100,1}, {3,1}, {3,2}, {300,1}, {6,1}, {11,1}, {11,2} = 7 unique
+        auto [found2, cause2] = ug.cin_dijkstra(&v1);
+        assert(found2 == true);
+        assert(cause2.size() == 5);
+        assert(cause2.count(make_fulfillment(300, 1)) == true);
+        assert(cause2.count(make_fulfillment(5, 1)) == true);
+        assert(cause2.count(make_fulfillment(5, 2)) == true);
+        assert(cause2.count(make_fulfillment(8, 1)) == true);
+        assert(cause2.count(make_fulfillment(10, 1)) == true);
+        
+        // Test from v3: Multiple paths with different overlap patterns
+        // Path to atom_x: v3 -> v6 -> v7 -> atom_x
+        //   Causes: {300,1},{6,1} + {9,1},{9,2} + {10,1}
+        //   Unique: {300,1}, {6,1}, {9,1}, {9,2}, {10,1} = 5 unique
+        //
+        // Path to atom_y: v3 -> v6 -> atom_y
+        //   Causes: {300,1},{6,1} + {11,1},{11,2}
+        //   Unique: {300,1}, {6,1}, {11,1}, {11,2} = 4 unique
+        auto [found3, cause3] = ug.cin_dijkstra(&v3);
+        assert(found3 == true);
+        assert(cause3.size() == 4);
+        assert(cause3.count(make_fulfillment(300, 1)) == true);
+        assert(cause3.count(make_fulfillment(6, 1)) == true);
+        assert(cause3.count(make_fulfillment(11, 1)) == true);
+        assert(cause3.count(make_fulfillment(11, 2)) == true);
+        
+        // Test from v6: Direct access to two atoms
+        // Path to atom_y: direct, cost 2
+        // Path to atom_x: v6 -> v7 -> atom_x, cost 2+1 = 3
+        auto [found4, cause4] = ug.cin_dijkstra(&v6);
+        assert(found4 == true);
+        assert(cause4.size() == 2);  // Should choose atom_y
+        assert(cause4.count(make_fulfillment(11, 1)) == true);
+        assert(cause4.count(make_fulfillment(11, 2)) == true);
+    }
+    
     // Test 14: Self-loop edge (var points to itself)
     // COMMENTED OUT - may cause infinite loop
     // {
