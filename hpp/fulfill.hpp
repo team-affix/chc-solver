@@ -5,8 +5,9 @@
 #include "rule.hpp"
 
 struct fulfillment {
-    constraint_id constraint_id;
-    rule_id rule_id;
+    constraint_id clause_id;
+    rule_id candidate_id;
+    auto operator<=>(const fulfillment&) const = default;
 };
 
 #endif

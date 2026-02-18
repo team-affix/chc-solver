@@ -13,8 +13,8 @@ causal_set unification_graph::unify(const expr* lhs, const expr* rhs, const caus
     auto [rCinFound, rPath] = cin_dijkstra(rhs);
 
     // 3. Merge the lhs and rhs with a new edge
-    edges.at(lhs).insert(edge{rhs, cause});
-    edges.at(rhs).insert(edge{lhs, cause});
+    edges[lhs].insert(edge{rhs, cause});
+    edges[rhs].insert(edge{lhs, cause});
 
     // 4. If either CIN is not found, unification succeeds
     if (!lCinFound || !rCinFound)
