@@ -11,6 +11,7 @@ struct causal_set {
     causal_set operator+(const causal_set&) const;
     bool empty() const;
     size_t size() const;
+    bool count(const fulfillment&) const;
 private:
     std::set<fulfillment> fulfillments;
 };

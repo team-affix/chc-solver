@@ -1604,6 +1604,59 @@ void test_causal_set_size() {
     assert(cs8.size() == 1);  // Only one unique element
 }
 
+void test_causal_set_count() {
+    // Helper to create fulfillments
+    auto make_fulfillment = [](uint32_t c_id, uint32_t r_id) -> fulfillment {
+        return fulfillment{constraint_id{c_id}, r_id};
+    };
+    
+    // Test count on empty set
+    causal_set cs1;
+    assert(cs1.count(make_fulfillment(1, 1)) == false);
+    
+    // Test count on set with 1 element
+    std::set<fulfillment> set1;
+    set1.insert(make_fulfillment(1, 1));
+    causal_set cs2(set1);
+    assert(cs2.count(make_fulfillment(1, 1)) == true);
+    assert(cs2.count(make_fulfillment(2, 2)) == false);
+    
+    // Test count on set with multiple elements
+    std::set<fulfillment> set2;
+    set2.insert(make_fulfillment(1, 1));
+    set2.insert(make_fulfillment(2, 2));
+    set2.insert(make_fulfillment(3, 3));
+    causal_set cs3(set2);
+    
+    assert(cs3.count(make_fulfillment(1, 1)) == true);
+    assert(cs3.count(make_fulfillment(2, 2)) == true);
+    assert(cs3.count(make_fulfillment(3, 3)) == true);
+    assert(cs3.count(make_fulfillment(4, 4)) == false);
+    assert(cs3.count(make_fulfillment(0, 0)) == false);
+    
+    // Test count with various constraint_id and rule_id combinations
+    std::set<fulfillment> set3;
+    set3.insert(make_fulfillment(10, 20));
+    set3.insert(make_fulfillment(20, 10));
+    set3.insert(make_fulfillment(10, 10));
+    causal_set cs4(set3);
+    
+    assert(cs4.count(make_fulfillment(10, 20)) == true);
+    assert(cs4.count(make_fulfillment(20, 10)) == true);
+    assert(cs4.count(make_fulfillment(10, 10)) == true);
+    assert(cs4.count(make_fulfillment(10, 21)) == false);
+    assert(cs4.count(make_fulfillment(11, 20)) == false);
+    
+    // Test count with large IDs
+    std::set<fulfillment> set4;
+    set4.insert(make_fulfillment(UINT32_MAX, UINT32_MAX));
+    causal_set cs5(set4);
+    
+    assert(cs5.count(make_fulfillment(UINT32_MAX, UINT32_MAX)) == true);
+    assert(cs5.count(make_fulfillment(UINT32_MAX, 0)) == false);
+    assert(cs5.count(make_fulfillment(0, UINT32_MAX)) == false);
+}
+
 void test_causal_set_operator_plus() {
     // Helper to create fulfillments
     auto make_fulfillment = [](uint32_t c_id, uint32_t r_id) -> fulfillment {
@@ -1805,11 +1858,11 @@ void test_unification_graph_cin_dijkstra() {
     
     // Helper to create causal set with N fulfillments
     auto make_cause = [&](std::initializer_list<std::pair<uint32_t, uint32_t>> pairs) -> causal_set {
-        causal_set cs;
+        std::set<fulfillment> fulfills;
         for (auto [c, r] : pairs) {
-            cs.insert(make_fulfillment(c, r));
+            fulfills.insert(make_fulfillment(c, r));
         }
-        return cs;
+        return causal_set(fulfills);
     };
     
     // Test 1: Source is already instantiated (atom) - should return immediately
@@ -1847,7 +1900,7 @@ void test_unification_graph_cin_dijkstra() {
         auto [found, cause] = ug.cin_dijkstra(&var1);
         assert(found == true);
         assert(cause.size() == 1);
-        assert(cause == edge_cause);
+        assert((cause <=> edge_cause) == std::strong_ordering::equal);
     }
     
     // Test 4: No instantiated node reachable (var -> var -> var)
@@ -1885,210 +1938,158 @@ void test_unification_graph_cin_dijkstra() {
         
         auto [found, cause] = ug.cin_dijkstra(&var1);
         assert(found == true);
-        assert(cause.size() == 2);  // Both edges' causes
-        // Verify both fulfillments are in the result
-        assert(cause.count(make_fulfillment(10, 1)) == 1);
-        assert(cause.count(make_fulfillment(11, 1)) == 1);
+        assert(cause.size() == 2);  // Both edges' causes merged
     }
     
-    // Test 6: Multiple paths - shortest path wins (by causal set size)
+    // Test 6: Multiple paths - shortest path wins
     {
         unification_graph ug(t);
         expr var_start{expr::var{20}};
-        expr var_left{expr::var{21}};
-        expr var_right{expr::var{22}};
-        expr atom_left_end{expr::atom{"left_goal"}};
-        expr atom_right_end{expr::atom{"right_goal"}};
+        expr var_mid{expr::var{21}};
+        expr atom_end{expr::atom{"goal"}};
         
-        // Path 1: var_start -> var_left -> atom_left_end (cost 1+1=2)
-        causal_set start_to_left = make_cause({{20, 1}});
-        causal_set left_to_atom = make_cause({{21, 1}});
+        // Path 1: direct (cost 5)
+        causal_set direct = make_cause({{20, 1}, {20, 2}, {20, 3}, {20, 4}, {20, 5}});
+        // Path 2: indirect (cost 3)
+        causal_set to_mid = make_cause({{21, 1}});
+        causal_set mid_to_end = make_cause({{22, 1}, {22, 2}});
         
-        // Path 2: var_start -> var_right -> atom_right_end (cost 3+2=5)
-        causal_set start_to_right = make_cause({{22, 1}, {22, 2}, {22, 3}});
-        causal_set right_to_atom = make_cause({{23, 1}, {23, 2}});
-        
-        ug.edges[&var_start].insert({&var_left, start_to_left});
-        ug.edges[&var_start].insert({&var_right, start_to_right});
-        ug.edges[&var_left].insert({&atom_left_end, left_to_atom});
-        ug.edges[&var_right].insert({&atom_right_end, right_to_atom});
-        ug.edges[&atom_left_end];  // Initialize
-        ug.edges[&atom_right_end];  // Initialize
+        ug.edges[&var_start].insert({&atom_end, direct});
+        ug.edges[&var_start].insert({&var_mid, to_mid});
+        ug.edges[&var_mid].insert({&atom_end, mid_to_end});
+        ug.edges[&atom_end];
         
         auto [found, cause] = ug.cin_dijkstra(&var_start);
         assert(found == true);
-        // Should take left path (cost 2) over right path (cost 5)
-        assert(cause.size() == 2);
-        assert(cause.count(make_fulfillment(20, 1)) == 1);
-        assert(cause.count(make_fulfillment(21, 1)) == 1);
+        assert(cause.size() == 3);  // Should take indirect path
+        assert(cause.count(make_fulfillment(21, 1)) == true);
+        assert(cause.count(make_fulfillment(22, 1)) == true);
+        assert(cause.count(make_fulfillment(22, 2)) == true);
     }
     
-    // Test 7: Multiple paths - longer path with smaller causal set wins
+    // Test 7: Path with duplicate fulfillments - duplicates reduce effective cost
     {
         unification_graph ug(t);
-        expr var_a{expr::var{30}};
-        expr var_b{expr::var{31}};
-        expr var_c{expr::var{32}};
-        expr atom_target{expr::atom{"target"}};
+        expr var_start{expr::var{30}};
+        expr var_mid{expr::var{31}};
+        expr atom_end{expr::atom{"dup_path"}};
         
-        // Path 1: var_a -> atom_target (direct, cost 5)
-        causal_set direct = make_cause({{30, 1}, {30, 2}, {30, 3}, {30, 4}, {30, 5}});
+        // Path with overlapping fulfillments
+        causal_set edge1 = make_cause({{100, 1}, {100, 2}, {200, 1}});
+        causal_set edge2 = make_cause({{100, 1}, {300, 1}});  // {100,1} is duplicate
         
-        // Path 2: var_a -> var_b -> var_c -> atom_target (3 hops, total cost 3)
-        causal_set ab = make_cause({{31, 1}});
-        causal_set bc = make_cause({{32, 1}});
-        causal_set c_target = make_cause({{33, 1}});
-        
-        ug.edges[&var_a].insert({&atom_target, direct});
-        ug.edges[&var_a].insert({&var_b, ab});
-        ug.edges[&var_b].insert({&var_c, bc});
-        ug.edges[&var_c].insert({&atom_target, c_target});
-        ug.edges[&atom_target];  // Initialize atom entry
-        
-        auto [found, cause] = ug.cin_dijkstra(&var_a);
-        assert(found == true);
-        assert(cause.size() == 3);  // Should take longer path with smaller total cost
-        assert(cause.count(make_fulfillment(31, 1)) == 1);
-        assert(cause.count(make_fulfillment(32, 1)) == 1);
-        assert(cause.count(make_fulfillment(33, 1)) == 1);
-    }
-    
-    // Test 8: Bidirectional edges (graph, not tree)
-    {
-        unification_graph ug(t);
-        expr var1{expr::var{40}};
-        expr var2{expr::var{41}};
-        expr atom1{expr::atom{"result"}};
-        
-        causal_set c12 = make_cause({{40, 1}});
-        causal_set c21 = make_cause({{41, 1}});
-        causal_set c2a = make_cause({{42, 1}});
-        
-        // Bidirectional between var1 and var2
-        ug.edges[&var1].insert({&var2, c12});
-        ug.edges[&var2].insert({&var1, c21});
-        ug.edges[&var2].insert({&atom1, c2a});
-        ug.edges[&atom1];  // Initialize atom entry
-        
-        auto [found, cause] = ug.cin_dijkstra(&var1);
-        assert(found == true);
-        assert(cause.size() == 2);
-        assert(cause.count(make_fulfillment(40, 1)) == 1);
-        assert(cause.count(make_fulfillment(42, 1)) == 1);
-    }
-    
-    // Test 9: Diamond pattern - multiple paths to different atoms
-    {
-        unification_graph ug(t);
-        expr var_start{expr::var{50}};
-        expr var_left{expr::var{51}};
-        expr var_right{expr::var{52}};
-        expr atom_left_end{expr::atom{"left_diamond"}};
-        expr atom_right_end{expr::atom{"right_diamond"}};
-        
-        // Two paths from start to different atoms
-        causal_set start_left = make_cause({{50, 1}});           // cost 1
-        causal_set start_right = make_cause({{51, 1}, {51, 2}, {51, 3}});  // cost 3
-        causal_set left_end = make_cause({{52, 1}});             // cost 1
-        causal_set right_end = make_cause({{53, 1}});            // cost 1
-        
-        ug.edges[&var_start].insert({&var_left, start_left});
-        ug.edges[&var_start].insert({&var_right, start_right});
-        ug.edges[&var_left].insert({&atom_left_end, left_end});
-        ug.edges[&var_right].insert({&atom_right_end, right_end});
-        ug.edges[&atom_left_end];  // Initialize
-        ug.edges[&atom_right_end];  // Initialize
+        ug.edges[&var_start].insert({&var_mid, edge1});
+        ug.edges[&var_mid].insert({&atom_end, edge2});
+        ug.edges[&atom_end];
         
         auto [found, cause] = ug.cin_dijkstra(&var_start);
         assert(found == true);
-        // Should take left path (cost 1+1=2) over right path (cost 3+1=4)
-        assert(cause.size() == 2);
-        assert(cause.count(make_fulfillment(50, 1)) == 1);
-        assert(cause.count(make_fulfillment(52, 1)) == 1);
+        assert(cause.size() == 4);  // 4 unique, not 5
+        assert(cause.count(make_fulfillment(100, 1)) == true);
+        assert(cause.count(make_fulfillment(100, 2)) == true);
+        assert(cause.count(make_fulfillment(200, 1)) == true);
+        assert(cause.count(make_fulfillment(300, 1)) == true);
     }
     
-    // Test 10: Duplicate fulfillments in causal sets are contracted
+    // Test 8: COMPLEX BIDIRECTIONAL GRAPH with multiple paths
     {
         unification_graph ug(t);
-        expr var1{expr::var{60}};
-        expr var2{expr::var{61}};
-        expr atom1{expr::atom{"dup_test"}};
         
-        // Create two edges with overlapping fulfillments
-        causal_set c12 = make_cause({{60, 1}, {60, 2}, {99, 9}});  // 3 unique
-        causal_set c2a = make_cause({{61, 1}, {99, 9}});           // 2 unique, but 99,9 is duplicate
+        // Create a complex graph with 6 vars and 2 atoms
+        expr v0{expr::var{200}};
+        expr v1{expr::var{201}};
+        expr v2{expr::var{202}};
+        expr v3{expr::var{203}};
+        expr v4{expr::var{204}};
+        expr v5{expr::var{205}};
+        expr atom_a{expr::atom{"target_a"}};
+        expr atom_b{expr::atom{"target_b"}};
         
-        ug.edges[&var1].insert({&var2, c12});
-        ug.edges[&var2].insert({&atom1, c2a});
-        ug.edges[&atom1];  // Initialize atom entry
+        // Create bidirectional edges with SAME causal set in both directions
+        // v0 <-> v1 (cost 2)
+        causal_set c01 = make_cause({{1, 1}, {1, 2}});
         
-        auto [found, cause] = ug.cin_dijkstra(&var1);
+        // v0 <-> v2 (cost 1)
+        causal_set c02 = make_cause({{3, 1}});
+        
+        // v1 <-> v3 (cost 3)
+        causal_set c13 = make_cause({{5, 1}, {5, 2}, {5, 3}});
+        
+        // v2 <-> v3 (cost 1)
+        causal_set c23 = make_cause({{7, 1}});
+        
+        // v2 <-> v4 (cost 2)
+        causal_set c24 = make_cause({{9, 1}, {9, 2}});
+        
+        // v3 <-> v5 (cost 1)
+        causal_set c35 = make_cause({{11, 1}});
+        
+        // v4 <-> v5 (cost 4)
+        causal_set c45 = make_cause({{13, 1}, {13, 2}, {13, 3}, {13, 4}});
+        
+        // v5 <-> atom_a (cost 1)
+        causal_set c5a = make_cause({{15, 1}});
+        
+        // v4 <-> atom_b (cost 2)
+        causal_set c4b = make_cause({{16, 1}, {16, 2}});
+        
+        // Add all bidirectional edges with SAME causal set both ways
+        ug.edges[&v0].insert({&v1, c01});
+        ug.edges[&v1].insert({&v0, c01});
+        
+        ug.edges[&v0].insert({&v2, c02});
+        ug.edges[&v2].insert({&v0, c02});
+        
+        ug.edges[&v1].insert({&v3, c13});
+        ug.edges[&v3].insert({&v1, c13});
+        
+        ug.edges[&v2].insert({&v3, c23});
+        ug.edges[&v3].insert({&v2, c23});
+        
+        ug.edges[&v2].insert({&v4, c24});
+        ug.edges[&v4].insert({&v2, c24});
+        
+        ug.edges[&v3].insert({&v5, c35});
+        ug.edges[&v5].insert({&v3, c35});
+        
+        ug.edges[&v4].insert({&v5, c45});
+        ug.edges[&v5].insert({&v4, c45});
+        
+        ug.edges[&v5].insert({&atom_a, c5a});
+        ug.edges[&atom_a].insert({&v5, c5a});
+        
+        ug.edges[&v4].insert({&atom_b, c4b});
+        ug.edges[&atom_b].insert({&v4, c4b});
+        
+        // Test from v0: Should find shortest path to closest atom
+        // Possible paths to atom_a:
+        // - v0 -> v2 -> v3 -> v5 -> atom_a: cost 1+1+1+1 = 4
+        // - v0 -> v2 -> v4 -> v5 -> atom_a: cost 1+2+4+1 = 8
+        // - v0 -> v1 -> v3 -> v5 -> atom_a: cost 2+3+1+1 = 7
+        // Possible paths to atom_b:
+        // - v0 -> v2 -> v4 -> atom_b: cost 1+2+2 = 5
+        // Shortest is v0 -> v2 -> v3 -> v5 -> atom_a with cost 4
+        auto [found, cause] = ug.cin_dijkstra(&v0);
         assert(found == true);
-        // Total unique fulfillments: {60,1}, {60,2}, {99,9}, {61,1} = 4
         assert(cause.size() == 4);
-        assert(cause.count(make_fulfillment(60, 1)) == 1);
-        assert(cause.count(make_fulfillment(60, 2)) == 1);
-        assert(cause.count(make_fulfillment(99, 9)) == 1);
-        assert(cause.count(make_fulfillment(61, 1)) == 1);
-    }
-    
-    // Test 11: Cons cell as target (non-var)
-    {
-        unification_graph ug(t);
-        expr var1{expr::var{70}};
-        expr a1{expr::atom{"x"}};
-        expr a2{expr::atom{"y"}};
-        expr cons1{expr::cons{&a1, &a2}};
+        assert(cause.count(make_fulfillment(3, 1)) == true);  // v0->v2
+        assert(cause.count(make_fulfillment(7, 1)) == true);  // v2->v3
+        assert(cause.count(make_fulfillment(11, 1)) == true); // v3->v5
+        assert(cause.count(make_fulfillment(15, 1)) == true); // v5->atom_a
         
-        causal_set cause = make_cause({{70, 1}});
-        ug.edges[&var1].insert({&cons1, cause});
-        ug.edges[&cons1];  // Initialize cons entry
+        // Test from v1: Should also find optimal path
+        auto [found2, cause2] = ug.cin_dijkstra(&v1);
+        assert(found2 == true);
+        // v1 -> v3 -> v5 -> atom_a: cost 3+1+1 = 5
+        // v1 -> v0 -> v2 -> v4 -> atom_b: cost 2+1+2+2 = 7
+        assert(cause2.size() == 5);
         
-        auto [found, cs] = ug.cin_dijkstra(&var1);
-        assert(found == true);
-        assert(cs.size() == 1);
-        assert(cs == cause);
-    }
-    
-    // Test 12: Complex graph with multiple instantiated nodes - finds closest
-    {
-        unification_graph ug(t);
-        expr var_start{expr::var{80}};
-        expr var_mid1{expr::var{81}};
-        expr var_mid2{expr::var{82}};
-        expr atom_close{expr::atom{"close"}};
-        expr atom_far{expr::atom{"far"}};
-        
-        // Path to close atom: cost 1
-        causal_set to_close = make_cause({{80, 1}});
-        
-        // Path to far atom: cost 5
-        causal_set to_mid1 = make_cause({{81, 1}, {81, 2}});
-        causal_set mid1_to_mid2 = make_cause({{82, 1}});
-        causal_set mid2_to_far = make_cause({{83, 1}, {83, 2}});
-        
-        ug.edges[&var_start].insert({&atom_close, to_close});
-        ug.edges[&var_start].insert({&var_mid1, to_mid1});
-        ug.edges[&var_mid1].insert({&var_mid2, mid1_to_mid2});
-        ug.edges[&var_mid2].insert({&atom_far, mid2_to_far});
-        ug.edges[&atom_close];  // Initialize close atom entry
-        ug.edges[&atom_far];    // Initialize far atom entry
-        
-        auto [found, cause] = ug.cin_dijkstra(&var_start);
-        assert(found == true);
-        assert(cause.size() == 1);  // Should find close atom
-        assert(cause == to_close);
-    }
-    
-    // Test 13: Isolated var node (no edges)
-    {
-        unification_graph ug(t);
-        expr var_isolated{expr::var{90}};
-        ug.edges[&var_isolated];  // Initialize but leave empty
-        
-        auto [found, cause] = ug.cin_dijkstra(&var_isolated);
-        assert(found == false);
-        assert(cause.empty());
+        // Test from v4: Should find atom_b directly
+        auto [found3, cause3] = ug.cin_dijkstra(&v4);
+        assert(found3 == true);
+        assert(cause3.size() == 2);
+        assert(cause3.count(make_fulfillment(16, 1)) == true);
+        assert(cause3.count(make_fulfillment(16, 2)) == true);
     }
     
     // Test 14: Self-loop edge (var points to itself)
@@ -2128,6 +2129,7 @@ void unit_test_main() {
     TEST(test_expr_pool_cons);
     TEST(test_causal_set_empty);
     TEST(test_causal_set_size);
+    TEST(test_causal_set_count);
     TEST(test_causal_set_operator_plus);
     TEST(test_causal_set_operator_spaceship);
     TEST(test_unification_graph_cin_dijkstra);

@@ -24,3 +24,7 @@ bool causal_set::empty() const {
 size_t causal_set::size() const {
     return fulfillments.size();
 }
+
+bool causal_set::count(const fulfillment& f) const {
+    return fulfillments.count(f);
+}
