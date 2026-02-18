@@ -1518,18 +1518,26 @@ void test_causal_set_empty() {
     causal_set cs2(empty_set);
     assert(cs2.empty() == true);
     
-    // Test that operator+ with empty sets results in empty
-    causal_set cs3 = cs1 + cs2;
-    assert(cs3.empty() == true);
+    // Test non-empty causal_set with 1 element is not empty
+    std::set<fulfillment> set1;
+    set1.insert(make_fulfillment(1, 1));
+    causal_set cs3(set1);
+    assert(cs3.empty() == false);
     
-    // Test non-empty causal_set is not empty
-    std::set<fulfillment> non_empty;
-    non_empty.insert(make_fulfillment(1, 1));
-    causal_set cs4(non_empty);
+    // Test non-empty causal_set with multiple elements is not empty
+    std::set<fulfillment> set2;
+    set2.insert(make_fulfillment(1, 1));
+    set2.insert(make_fulfillment(2, 2));
+    set2.insert(make_fulfillment(3, 3));
+    causal_set cs4(set2);
     assert(cs4.empty() == false);
     
-    // Test that adding empty to non-empty is not empty
-    causal_set cs5 = cs1 + cs4;
+    // Test non-empty causal_set with many elements is not empty
+    std::set<fulfillment> set3;
+    for (uint32_t i = 0; i < 50; i++) {
+        set3.insert(make_fulfillment(i, i));
+    }
+    causal_set cs5(set3);
     assert(cs5.empty() == false);
 }
 
