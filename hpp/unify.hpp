@@ -3,23 +3,20 @@
 
 #include <map>
 #include <set>
-#include <memory>
 #include "expr.hpp"
-#include "fulfill.hpp"
-
-struct unification_edge {
-    const expr* dest;
-    fulfillment cause;
-};
+#include "cause.hpp"
 
 struct unification_graph {
+    struct edge {
+        const expr* dst;
+        causal_set cause;
+    };
     unification_graph(trail&);
-    std::set<fulfillment> unify(const expr*, const expr*, const fulfillment&);
-    std::set<fulfillment> conflict_bfs(const expr*) const;
+    causal_set unify(const expr*, const expr*, const causal_set&);
+    std::pair<bool, causal_set> cin_dijkstra(const expr*) const;
 private:
     trail& trail_ref;
-    std::map<const expr*, const std::set<unification_edge>> edges;
-    std::map<const expr*, std::shared_ptr<const expr*>> reps;
+    std::map<const expr*, std::set<edge>> edges;
 };
 
 #endif
