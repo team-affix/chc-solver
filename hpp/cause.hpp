@@ -4,6 +4,13 @@
 #include <set>
 #include "fulfill.hpp"
 
-using causal_set = std::set<fulfillment>;
+struct causal_set {
+    std::strong_ordering operator<=>(const causal_set& other) const;
+    causal_set operator+(const causal_set& other) const;
+    bool empty() const;
+    size_t size() const;
+private:
+    std::set<fulfillment> fulfillments;
+};
 
 #endif

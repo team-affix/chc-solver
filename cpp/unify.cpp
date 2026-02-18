@@ -21,9 +21,7 @@ causal_set unification_graph::unify(const expr* lhs, const expr* rhs, const caus
         return {};
 
     // 5. Construct the full causal set for why the CINs were unified
-    causal_set cinUnifyCause = cause;
-    cinUnifyCause.insert(lPath.begin(), lPath.end());
-    cinUnifyCause.insert(rPath.begin(), rPath.end());
+    causal_set cinUnifyCause = cause + lPath + rPath;
 
     // 6. If the CINs heads differ, unification fails.
     
@@ -37,6 +35,7 @@ causal_set unification_graph::unify(const expr* lhs, const expr* rhs, const caus
         const expr::atom& rAtom = std::get<expr::atom>(rhs->content);
         if (lAtom.value != rAtom.value)
             return cinUnifyCause;
+        return {};
     }
 
     // 6.3 Both are cons cells
@@ -61,30 +60,25 @@ causal_set unification_graph::unify(const expr* lhs, const expr* rhs, const caus
 std::pair<bool, causal_set> unification_graph::cin_dijkstra(const expr* src) const {
     // 1. Create the priority queue for Dijkstra's algorithm
     std::priority_queue<
-        std::pair<size_t, const expr*>,
-        std::vector<std::pair<size_t, const expr*>>,
-        std::greater<std::pair<size_t, const expr*>> // min-heap
+        std::pair<causal_set, const expr*>,
+        std::vector<std::pair<causal_set, const expr*>>,
+        std::greater<std::pair<causal_set, const expr*>> // min-heap
     > pq;
 
     // 2. Create the visited set to track nodes we have already visited
     std::set<const expr*> visited;
 
-    // 3. Create the memory-efficient backedge type (src, cause)
-    using backedge = std::pair<const expr*, const causal_set*>;
+    // 3. Initialize the priority queue with the source
+    pq.push({{}, src});
 
-    // 3. Create the trace map to track current path
-    std::map<const expr*, backedge> backTrace;
-
-    // 4. Initialize the priority queue with the source
-    pq.push({0, src});
-
-    // 5. Create cin node
+    // 4. Create cin node
     const expr* cinNode = nullptr;
+    causal_set  cinCause;
 
     // 5. Run Dijkstra's algorithm
     while (!pq.empty()) {
         // Get the node with the smallest distance from the source
-        auto [dist, node] = pq.top();
+        auto [causalSet, node] = pq.top();
         pq.pop();
 
         // If we have already visited this node, skip it
@@ -97,30 +91,18 @@ std::pair<bool, causal_set> unification_graph::cin_dijkstra(const expr* src) con
         // If the node is a nonvar, we are done.
         if (!std::holds_alternative<expr::var>(node->content)) {
             cinNode = node;
+            cinCause = causalSet;
             break;
         }
 
         // Add the children of the node to the priority queue
-        for (const auto& e : edges.at(node)) {
-            pq.push({dist + e.cause.size(), e.dst});
-            backTrace[e.dst] = {node, &e.cause};
-        }
+        for (const auto& e : edges.at(node))
+            pq.push({causalSet + e.cause, e.dst});
     }
 
     // 6. If we did not find a CIN, return false
     if (cinNode == nullptr)
         return {false, {}};
-
-    // 7. Construct the causal set for the path to the CIN
-    causal_set cinCause;
-
-    const expr* currentNode = cinNode;
-    
-    while (currentNode != src) {
-        const backedge& e = backTrace[currentNode];
-        cinCause.insert(e.second->begin(), e.second->end());
-        currentNode = e.first;
-    }
     
     return {true, cinCause};
 
