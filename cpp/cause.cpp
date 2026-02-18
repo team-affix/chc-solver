@@ -1,5 +1,9 @@
 #include "../hpp/cause.hpp"
 
+causal_set::causal_set(const std::set<fulfillment>& fulfillments)
+    : fulfillments(fulfillments)
+{}
+
 std::strong_ordering causal_set::operator<=>(const causal_set& other) const {
     if (auto cmp = fulfillments.size() <=> other.fulfillments.size(); cmp != 0)
         return cmp;

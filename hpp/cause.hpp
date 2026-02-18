@@ -5,8 +5,10 @@
 #include "fulfill.hpp"
 
 struct causal_set {
-    std::strong_ordering operator<=>(const causal_set& other) const;
-    causal_set operator+(const causal_set& other) const;
+    causal_set() = default;
+    causal_set(const std::set<fulfillment>&);
+    std::strong_ordering operator<=>(const causal_set&) const;
+    causal_set operator+(const causal_set&) const;
     bool empty() const;
     size_t size() const;
 private:
