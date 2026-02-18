@@ -1502,6 +1502,10 @@ void test_expr_pool_cons() {
     assert(pool.size() == 0);
 }
 
+void test_unification_graph_cin_dijkstra() {
+    
+}
+
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
 
@@ -1517,6 +1521,7 @@ void unit_test_main() {
     TEST(test_expr_pool_atom);
     TEST(test_expr_pool_var);
     TEST(test_expr_pool_cons);
+    TEST(test_unification_graph_cin_dijkstra)
 }
 
 int main() {
