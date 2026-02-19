@@ -2322,6 +2322,8 @@ void test_bind_map_whnf() {
     {
         trail t;
         bind_map bm(t);
+        t.push();  // Need frame for path compression
+        
         expr v1{expr::var{10}};
         expr v2{expr::var{11}};
         expr v3{expr::var{12}};
@@ -2341,12 +2343,16 @@ void test_bind_map_whnf() {
         // v2 should also be compressed to a1
         assert(bm.bindings.at(11) == &a1);
         assert(bm.bindings.size() == 3);
+        
+        t.pop();
     }
     
     // Test 6: whnf with long chain
     {
         trail t;
         bind_map bm(t);
+        t.push();  // Need frame for path compression
+        
         expr v1{expr::var{20}};
         expr v2{expr::var{21}};
         expr v3{expr::var{22}};
@@ -2371,6 +2377,8 @@ void test_bind_map_whnf() {
         assert(bm.bindings.at(22) == &a1);
         assert(bm.bindings.at(23) == &a1);
         assert(bm.bindings.size() == 5);
+        
+        t.pop();
     }
     
     // Test 7: whnf with var bound to cons
@@ -2395,6 +2403,8 @@ void test_bind_map_whnf() {
     {
         trail t;
         bind_map bm(t);
+        t.push();  // Need frame for path compression
+        
         expr v1{expr::var{40}};
         expr v2{expr::var{41}};
         expr a1{expr::atom{"a"}};
@@ -2410,6 +2420,8 @@ void test_bind_map_whnf() {
         // Verify path compression
         assert(bm.bindings.at(40) == &c1);
         assert(bm.bindings.size() == 2);
+        
+        t.pop();
     }
     
     // Test 9: Multiple unbound vars remain unbound (no entries created)
@@ -2453,6 +2465,8 @@ void test_bind_map_whnf() {
     {
         trail t;
         bind_map bm(t);
+        t.push();  // Need frame for path compression
+        
         expr v1{expr::var{70}};
         expr v2{expr::var{71}};
         expr v3{expr::var{72}};
@@ -2469,6 +2483,8 @@ void test_bind_map_whnf() {
         assert(bm.bindings.at(70) == &v3);
         assert(bm.bindings.at(71) == &v3);
         assert(bm.bindings.size() == 2);
+        
+        t.pop();
     }
     
     // Test 12: whnf with nested cons structures
@@ -2527,6 +2543,8 @@ void test_bind_map_whnf() {
     {
         trail t;
         bind_map bm(t);
+        t.push();  // Need frame for path compression
+        
         expr v1{expr::var{90}};
         expr v2{expr::var{91}};
         expr v3{expr::var{92}};
@@ -2547,6 +2565,8 @@ void test_bind_map_whnf() {
         assert(bm.bindings.at(90) == &c1);
         assert(bm.bindings.at(91) == &c1);
         assert(bm.bindings.size() == 3);
+        
+        t.pop();
     }
     
     // Test 16: WHNF does NOT reduce vars inside cons (WEAK head, not strong)
@@ -2608,6 +2628,8 @@ void test_bind_map_whnf() {
     {
         trail t;
         bind_map bm(t);
+        t.push();  // Need frame for path compression
+        
         expr v_chain1{expr::var{120}};
         expr v_chain2{expr::var{121}};
         expr v_inner1{expr::var{122}};
@@ -2632,6 +2654,8 @@ void test_bind_map_whnf() {
         // Path compression on outer chain
         assert(bm.bindings.at(120) == &c1);
         assert(bm.bindings.size() == 3);
+        
+        t.pop();
     }
     
     // Test 19: Deeply nested cons with vars at all levels
@@ -2833,6 +2857,8 @@ void test_bind_map_whnf() {
     {
         trail t;
         bind_map bm(t);
+        t.push();  // Need frame for path compression
+        
         expr v_outer{expr::var{210}};
         expr v_mid{expr::var{211}};
         expr v_left{expr::var{212}};
@@ -2861,6 +2887,8 @@ void test_bind_map_whnf() {
         // Outer chain should be compressed
         assert(bm.bindings.at(210) == &c1);
         assert(bm.bindings.size() == 4);
+        
+        t.pop();
     }
     
     // Test 28: Deeply nested cons with vars everywhere
@@ -2904,6 +2932,8 @@ void test_bind_map_whnf() {
     {
         trail t;
         bind_map bm(t);
+        t.push();  // Need frame for path compression
+        
         expr v_outer{expr::var{230}};
         expr v_outer_chain{expr::var{231}};
         expr v_left{expr::var{232}};
@@ -2933,6 +2963,8 @@ void test_bind_map_whnf() {
         // Outer chain compressed
         assert(bm.bindings.at(230) == &c1);
         assert(bm.bindings.size() == 5);
+        
+        t.pop();
     }
     
     // Test 30: Empty bindings map remains empty for unbound vars
