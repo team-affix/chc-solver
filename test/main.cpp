@@ -7000,8 +7000,6 @@ void test_bind_map_unify() {
     }
 }
 
-
-
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
 
