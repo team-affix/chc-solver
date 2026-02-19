@@ -1503,8 +1503,6 @@ void test_expr_pool_cons() {
 }
 
 void test_bind_map_bind() {
-    trail t;
-    
     // bind() is the fundamental function for managing bindings with trail support
     // It tracks all changes to the bindings map and logs rollback operations
     // Tests verify: new bindings, updates, no-op optimization, trail integration
@@ -1513,6 +1511,7 @@ void test_bind_map_bind() {
     
     // Test 1: Bind new entry - should insert and log erase
     {
+        trail t;
         bind_map bm(t);
         t.push();
         
@@ -1531,6 +1530,7 @@ void test_bind_map_bind() {
     
     // Test 2: Bind multiple new entries
     {
+        trail t;
         bind_map bm(t);
         t.push();
         
@@ -1554,6 +1554,7 @@ void test_bind_map_bind() {
     
     // Test 3: Update existing entry - should log old value
     {
+        trail t;
         bind_map bm(t);
         t.push();
         
@@ -1575,6 +1576,7 @@ void test_bind_map_bind() {
     
     // Test 4: No-op optimization - binding same value twice
     {
+        trail t;
         bind_map bm(t);
         t.push();
         
@@ -1594,6 +1596,7 @@ void test_bind_map_bind() {
     
     // Test 5: Binding different values sequentially
     {
+        trail t;
         bind_map bm(t);
         t.push();
         
@@ -1618,6 +1621,7 @@ void test_bind_map_bind() {
     
     // Test 6: Multiple frames with bindings at different levels
     {
+        trail t;
         bind_map bm(t);
         
         // Frame 1
@@ -1657,6 +1661,7 @@ void test_bind_map_bind() {
     
     // Test 7: Nested frames with updates to same index
     {
+        trail t;
         bind_map bm(t);
         
         // Frame 1: bind index 30 to a1
@@ -1696,6 +1701,7 @@ void test_bind_map_bind() {
     
     // Test 8: Multiple indices across multiple frames
     {
+        trail t;
         bind_map bm(t);
         
         t.push();
@@ -1733,6 +1739,7 @@ void test_bind_map_bind() {
     
     // Test 9: Binding vars to atoms, cons, and other vars
     {
+        trail t;
         bind_map bm(t);
         t.push();
         
@@ -1757,6 +1764,7 @@ void test_bind_map_bind() {
     
     // Test 10: Chain of bindings (manual construction)
     {
+        trail t;
         bind_map bm(t);
         t.push();
         
@@ -1779,6 +1787,7 @@ void test_bind_map_bind() {
     
     // Test 11: Deeply nested cons with multiple var bindings
     {
+        trail t;
         bind_map bm(t);
         t.push();
         
@@ -1808,6 +1817,7 @@ void test_bind_map_bind() {
     
     // Test 12: Complex scenario - multiple frames with mixed operations
     {
+        trail t;
         bind_map bm(t);
         
         expr a1{expr::atom{"a"}};
@@ -1855,6 +1865,7 @@ void test_bind_map_bind() {
     
     // Test 13: Binding same value multiple times (no-op optimization)
     {
+        trail t;
         bind_map bm(t);
         t.push();
         
@@ -1877,6 +1888,7 @@ void test_bind_map_bind() {
     
     // Test 14: Alternating between two values
     {
+        trail t;
         bind_map bm(t);
         
         expr a1{expr::atom{"val1"}};
@@ -1918,6 +1930,7 @@ void test_bind_map_bind() {
     
     // Test 15: Building chains across multiple frames
     {
+        trail t;
         bind_map bm(t);
         
         expr v1{expr::var{100}};
@@ -1964,6 +1977,7 @@ void test_bind_map_bind() {
     
     // Test 16: Binding to cons structures across frames
     {
+        trail t;
         bind_map bm(t);
         
         expr a1{expr::atom{"x"}};
@@ -1991,6 +2005,7 @@ void test_bind_map_bind() {
     
     // Test 17: Very complex - multiple indices, multiple frames, updates
     {
+        trail t;
         bind_map bm(t);
         
         expr a1{expr::atom{"1"}};
@@ -2033,6 +2048,7 @@ void test_bind_map_bind() {
     
     // Test 18: Deeply nested cons with vars bound across frames
     {
+        trail t;
         bind_map bm(t);
         
         expr v1{expr::var{130}};
@@ -2076,6 +2092,7 @@ void test_bind_map_bind() {
     
     // Test 19: Stress test - many bindings, many frames, many updates
     {
+        trail t;
         bind_map bm(t);
         
         expr a1{expr::atom{"a"}};
@@ -2120,6 +2137,7 @@ void test_bind_map_bind() {
     
     // Test 20: No-op in nested frames
     {
+        trail t;
         bind_map bm(t);
         
         expr a1{expr::atom{"same"}};
@@ -2148,8 +2166,6 @@ void test_bind_map_bind() {
 }
 
 void test_bind_map_occurs_check() {
-    trail t;
-    
     // occurs_check determines if a variable (by index) occurs anywhere in an expression,
     // even through indirection via bindings. It uses whnf to follow chains.
     // Tests cover: atoms, unbound vars, bound vars, chains, cons structures, nested cons,
@@ -2157,6 +2173,7 @@ void test_bind_map_occurs_check() {
     
     // Test 1: occurs_check on atom - should return false
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"test"}};
         assert(!bm.occurs_check(0, &a1));
@@ -2166,6 +2183,7 @@ void test_bind_map_occurs_check() {
     
     // Test 2: occurs_check on unbound var with same index - should return true
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{5}};
         assert(bm.occurs_check(5, &v1));
@@ -2174,6 +2192,7 @@ void test_bind_map_occurs_check() {
     
     // Test 3: occurs_check on unbound var with different index - should return false
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{10}};
         assert(!bm.occurs_check(5, &v1));
@@ -2183,6 +2202,7 @@ void test_bind_map_occurs_check() {
     
     // Test 4: occurs_check on var bound to atom - should return false
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{15}};
         expr a1{expr::atom{"bound"}};
@@ -2198,6 +2218,7 @@ void test_bind_map_occurs_check() {
     
     // Test 6: occurs_check through chain ending in unbound var
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{30}};
         expr v2{expr::var{31}};
@@ -2215,6 +2236,7 @@ void test_bind_map_occurs_check() {
     
     // Test 7: occurs_check through chain ending in atom
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{40}};
         expr v2{expr::var{41}};
@@ -2232,6 +2254,7 @@ void test_bind_map_occurs_check() {
     
     // Test 8: occurs_check on cons with no vars
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"left"}};
         expr a2{expr::atom{"right"}};
@@ -2244,6 +2267,7 @@ void test_bind_map_occurs_check() {
     
     // Test 9: occurs_check on cons with matching var in lhs
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{55}};
         expr a1{expr::atom{"right"}};
@@ -2256,6 +2280,7 @@ void test_bind_map_occurs_check() {
     
     // Test 10: occurs_check on cons with matching var in rhs
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"left"}};
         expr v1{expr::var{60}};
@@ -2268,6 +2293,7 @@ void test_bind_map_occurs_check() {
     
     // Test 11: occurs_check on cons with matching var in both children
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{65}};
         expr v2{expr::var{65}};  // Same index
@@ -2279,6 +2305,7 @@ void test_bind_map_occurs_check() {
     
     // Test 12: occurs_check on cons with different vars
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{70}};
         expr v2{expr::var{71}};
@@ -2292,6 +2319,7 @@ void test_bind_map_occurs_check() {
     
     // Test 13: occurs_check on nested cons
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{75}};
         expr a1{expr::atom{"inner"}};
@@ -2306,6 +2334,7 @@ void test_bind_map_occurs_check() {
     
     // Test 14: occurs_check on deeply nested cons
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{80}};
         expr a1{expr::atom{"a"}};
@@ -2340,6 +2369,7 @@ void test_bind_map_occurs_check() {
     
     // Test 16: occurs_check with var bound to cons not containing that var
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{90}};
         expr v2{expr::var{91}};
@@ -2355,6 +2385,7 @@ void test_bind_map_occurs_check() {
     
     // Test 17: occurs_check through chain to cons
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{95}};
         expr v2{expr::var{96}};
@@ -2374,6 +2405,7 @@ void test_bind_map_occurs_check() {
     
     // Test 18: occurs_check on cons with bound vars
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{100}};
         expr v2{expr::var{101}};
@@ -2391,6 +2423,7 @@ void test_bind_map_occurs_check() {
     
     // Test 19: occurs_check with multiple levels of indirection
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{105}};
         expr v2{expr::var{106}};
@@ -2409,6 +2442,7 @@ void test_bind_map_occurs_check() {
     
     // Test 20: occurs_check on cons where both children are bound vars
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{110}};
         expr v2{expr::var{111}};
@@ -2428,6 +2462,7 @@ void test_bind_map_occurs_check() {
     
     // Test 21: occurs_check on cons with chain in lhs
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{115}};
         expr v2{expr::var{116}};
@@ -2448,6 +2483,7 @@ void test_bind_map_occurs_check() {
     
     // Test 22: occurs_check with cons of cons, target var in nested structure
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{120}};
         expr v2{expr::var{121}};
@@ -2464,6 +2500,7 @@ void test_bind_map_occurs_check() {
     
     // Test 23: occurs_check on var bound to deeply nested structure
     {
+        trail t;
         bind_map bm(t);
         expr v_outer{expr::var{125}};
         expr v_inner{expr::var{126}};
@@ -2483,6 +2520,7 @@ void test_bind_map_occurs_check() {
     
     // Test 24: occurs_check with symmetric cons (same var on both sides)
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{130}};
         expr v2{expr::var{130}};  // Same var
@@ -2494,6 +2532,7 @@ void test_bind_map_occurs_check() {
     
     // Test 25: occurs_check on empty bindings map
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{135}};
         
@@ -2504,6 +2543,7 @@ void test_bind_map_occurs_check() {
     
     // Test 26: occurs_check with var bound through multiple cons layers
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{140}};
         expr v2{expr::var{141}};
@@ -2522,6 +2562,7 @@ void test_bind_map_occurs_check() {
     
     // Test 27: occurs_check with all atoms (no vars anywhere)
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"a"}};
         expr a2{expr::atom{"b"}};
@@ -2537,6 +2578,7 @@ void test_bind_map_occurs_check() {
     
     // Test 28: occurs_check with var bound to var bound to cons containing target
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{145}};
         expr v2{expr::var{146}};
@@ -2555,6 +2597,7 @@ void test_bind_map_occurs_check() {
     
     // Test 29: Very long chain (10 levels) ending in unbound var
     {
+        trail t;
         bind_map bm(t);
         expr v0{expr::var{200}};
         expr v1{expr::var{201}};
@@ -2586,6 +2629,7 @@ void test_bind_map_occurs_check() {
     
     // Test 30: Very long chain ending in atom
     {
+        trail t;
         bind_map bm(t);
         expr v0{expr::var{210}};
         expr v1{expr::var{211}};
@@ -2614,6 +2658,7 @@ void test_bind_map_occurs_check() {
     
     // Test 31: Deeply nested cons (5 levels) with var at bottom
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{220}};
         expr a1{expr::atom{"a"}};
@@ -2635,6 +2680,7 @@ void test_bind_map_occurs_check() {
     
     // Test 32: Deeply nested cons with var at different positions
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{225}};
         expr v2{expr::var{226}};
@@ -2655,6 +2701,7 @@ void test_bind_map_occurs_check() {
     
     // Test 33: Var bound to deeply nested cons containing bound vars
     {
+        trail t;
         bind_map bm(t);
         expr v_outer{expr::var{230}};
         expr v1{expr::var{231}};
@@ -2684,6 +2731,7 @@ void test_bind_map_occurs_check() {
     
     // Test 34: Long chain to deeply nested cons with target var deep inside
     {
+        trail t;
         bind_map bm(t);
         expr v_chain1{expr::var{240}};
         expr v_chain2{expr::var{241}};
@@ -2711,6 +2759,7 @@ void test_bind_map_occurs_check() {
     
     // Test 35: Cons with chains in both children
     {
+        trail t;
         bind_map bm(t);
         expr v_left1{expr::var{250}};
         expr v_left2{expr::var{251}};
@@ -2738,6 +2787,7 @@ void test_bind_map_occurs_check() {
     
     // Test 36: Very complex nested structure with multiple vars at different depths
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{260}};
         expr v2{expr::var{261}};
@@ -2764,6 +2814,7 @@ void test_bind_map_occurs_check() {
     
     // Test 37: Chain to cons, where cons children are also chains
     {
+        trail t;
         bind_map bm(t);
         expr v_outer{expr::var{270}};
         expr v_mid{expr::var{271}};
@@ -2803,6 +2854,7 @@ void test_bind_map_occurs_check() {
     
     // Test 38: Cons with one child being a long chain ending in target var
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{280}};
         expr v2{expr::var{281}};
@@ -2826,6 +2878,7 @@ void test_bind_map_occurs_check() {
     
     // Test 39: Multiple nested cons with same var appearing in different positions
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{290}};
         expr v2{expr::var{290}};  // Same index as v1
@@ -2843,6 +2896,7 @@ void test_bind_map_occurs_check() {
     
     // Test 40: Stress test - very deep nesting (10 levels) with var at bottom
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{300}};
         expr a1{expr::atom{"a"}};
@@ -2867,6 +2921,7 @@ void test_bind_map_occurs_check() {
     
     // Test 41: ULTIMATE STRESS TEST - Long chain to deeply nested cons with chains inside
     {
+        trail t;
         bind_map bm(t);
         
         // Outer chain (5 levels): v0 -> v1 -> v2 -> v3 -> v4 -> nested_cons
@@ -2917,6 +2972,7 @@ void test_bind_map_occurs_check() {
     
     // Test 42: Nested cons where EVERY node has a chain
     {
+        trail t;
         bind_map bm(t);
         
         // Build: cons(cons(chain_a, chain_b), cons(chain_c, chain_d))
@@ -2964,6 +3020,7 @@ void test_bind_map_occurs_check() {
     
     // Test 43: Chain to nested cons, where nested cons contains chains to more nested cons
     {
+        trail t;
         bind_map bm(t);
         
         // Outer chain: v0 -> v1 -> outer_cons
@@ -3010,6 +3067,7 @@ void test_bind_map_whnf() {
     
     // Test 1: whnf of atom returns itself
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"test"}};
         const expr* result = bm.whnf(&a1);
@@ -3019,6 +3077,7 @@ void test_bind_map_whnf() {
     
     // Test 2: whnf of cons returns itself
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"left"}};
         expr a2{expr::atom{"right"}};
@@ -3030,6 +3089,7 @@ void test_bind_map_whnf() {
     
     // Test 3: whnf of unbound var returns itself (no entry created)
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{0}};
         const expr* result = bm.whnf(&v1);
@@ -3039,6 +3099,7 @@ void test_bind_map_whnf() {
     
     // Test 4: whnf of bound var returns the binding
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{1}};
         expr a1{expr::atom{"bound"}};
@@ -3051,6 +3112,7 @@ void test_bind_map_whnf() {
     
     // Test 5: whnf with chain of var bindings (path compression)
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{10}};
         expr v2{expr::var{11}};
@@ -3075,6 +3137,7 @@ void test_bind_map_whnf() {
     
     // Test 6: whnf with long chain
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{20}};
         expr v2{expr::var{21}};
@@ -3104,6 +3167,7 @@ void test_bind_map_whnf() {
     
     // Test 7: whnf with var bound to cons
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{30}};
         expr a1{expr::atom{"x"}};
@@ -3121,6 +3185,7 @@ void test_bind_map_whnf() {
     
     // Test 8: whnf with var bound to another var bound to cons
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{40}};
         expr v2{expr::var{41}};
@@ -3141,6 +3206,7 @@ void test_bind_map_whnf() {
     
     // Test 9: Multiple unbound vars remain unbound (no entries created)
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{50}};
         expr v2{expr::var{51}};
@@ -3158,6 +3224,7 @@ void test_bind_map_whnf() {
     
     // Test 10: whnf called multiple times on same var with binding
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{60}};
         expr a1{expr::atom{"repeated"}};
@@ -3176,6 +3243,7 @@ void test_bind_map_whnf() {
     
     // Test 11: whnf with var bound to var bound to var (partial chain)
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{70}};
         expr v2{expr::var{71}};
@@ -3197,6 +3265,7 @@ void test_bind_map_whnf() {
     
     // Test 12: whnf with nested cons structures
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{80}};
         expr a1{expr::atom{"inner"}};
@@ -3216,6 +3285,7 @@ void test_bind_map_whnf() {
     
     // Test 13: whnf with different var indices
     {
+        trail t;
         bind_map bm(t);
         expr v_small{expr::var{0}};
         expr v_large{expr::var{UINT32_MAX}};
@@ -3233,6 +3303,7 @@ void test_bind_map_whnf() {
     
     // Test 14: whnf preserves atom values
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{""}};
         expr a2{expr::atom{"test123"}};
@@ -3246,6 +3317,7 @@ void test_bind_map_whnf() {
     
     // Test 15: whnf with complex chain ending in cons
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{90}};
         expr v2{expr::var{91}};
@@ -3271,6 +3343,7 @@ void test_bind_map_whnf() {
     
     // Test 16: WHNF does NOT reduce vars inside cons (WEAK head, not strong)
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{100}};
         expr v2{expr::var{101}};
@@ -3296,6 +3369,7 @@ void test_bind_map_whnf() {
     
     // Test 17: Var bound to cons containing bound vars - children not reduced
     {
+        trail t;
         bind_map bm(t);
         expr v_outer{expr::var{110}};
         expr v_left{expr::var{111}};
@@ -3324,6 +3398,7 @@ void test_bind_map_whnf() {
     
     // Test 18: Chain ending in cons with bound vars inside
     {
+        trail t;
         bind_map bm(t);
         expr v_chain1{expr::var{120}};
         expr v_chain2{expr::var{121}};
@@ -3353,6 +3428,7 @@ void test_bind_map_whnf() {
     
     // Test 19: Deeply nested cons with vars at all levels
     {
+        trail t;
         bind_map bm(t);
         expr v_outer{expr::var{130}};
         expr v1{expr::var{131}};
@@ -3395,6 +3471,7 @@ void test_bind_map_whnf() {
     
     // Test 20: Var bound to cons of vars, one of which chains to atom
     {
+        trail t;
         bind_map bm(t);
         expr v_outer{expr::var{140}};
         expr v_left{expr::var{141}};
@@ -3422,6 +3499,7 @@ void test_bind_map_whnf() {
     
     // Test 21: Multiple vars bound to same atom
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{150}};
         expr v2{expr::var{151}};
@@ -3441,6 +3519,7 @@ void test_bind_map_whnf() {
     
     // Test 22: Multiple vars bound to same cons
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{160}};
         expr v2{expr::var{161}};
@@ -3459,6 +3538,7 @@ void test_bind_map_whnf() {
     
     // Test 23: Cons of unbound vars
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{170}};
         expr v2{expr::var{171}};
@@ -3476,6 +3556,7 @@ void test_bind_map_whnf() {
     
     // Test 24: Cons of mix (atom and var)
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"atom"}};
         expr v1{expr::var{180}};
@@ -3492,6 +3573,7 @@ void test_bind_map_whnf() {
     
     // Test 25: Cons of mix (var and cons)
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{190}};
         expr a1{expr::atom{"inner"}};
@@ -3510,6 +3592,7 @@ void test_bind_map_whnf() {
     
     // Test 26: Var bound to cons of bound vars - only outer reduced
     {
+        trail t;
         bind_map bm(t);
         expr v_outer{expr::var{200}};
         expr v_inner1{expr::var{201}};
@@ -3540,6 +3623,7 @@ void test_bind_map_whnf() {
     
     // Test 27: Chain to cons of chained vars
     {
+        trail t;
         bind_map bm(t);
         expr v_outer{expr::var{210}};
         expr v_mid{expr::var{211}};
@@ -3573,6 +3657,7 @@ void test_bind_map_whnf() {
     
     // Test 28: Deeply nested cons with vars everywhere
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{220}};
         expr v2{expr::var{221}};
@@ -3609,6 +3694,7 @@ void test_bind_map_whnf() {
     
     // Test 29: Var chain to cons of var chains
     {
+        trail t;
         bind_map bm(t);
         expr v_outer{expr::var{230}};
         expr v_outer_chain{expr::var{231}};
@@ -3643,6 +3729,7 @@ void test_bind_map_whnf() {
     
     // Test 30: Empty bindings map remains empty for unbound vars
     {
+        trail t;
         bind_map bm(t);
         assert(bm.bindings.size() == 0);
         
@@ -3657,6 +3744,7 @@ void test_bind_map_whnf() {
     
     // Test 31: Same unbound var called multiple times creates no entries
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{250}};
         
@@ -3672,8 +3760,6 @@ void test_bind_map_whnf() {
 }
 
 void test_bind_map_unify() {
-    trail t;
-    
     // unify() performs Prolog-like unification with occurs check
     // It's a symmetric operation: unify(a, b) should behave like unify(b, a)
     // Tests verify symmetry by commuting arguments between consecutive test cases
@@ -3682,6 +3768,7 @@ void test_bind_map_unify() {
     
     // Test 1: Identical expressions (same pointer) - should succeed
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"test"}};
         assert(bm.unify(&a1, &a1));
@@ -3690,6 +3777,7 @@ void test_bind_map_unify() {
     
     // Test 2: Two different atoms - should fail
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"foo"}};
         expr a2{expr::atom{"bar"}};
@@ -3699,6 +3787,7 @@ void test_bind_map_unify() {
     
     // Test 3: Two different atoms (commuted) - should fail
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"foo"}};
         expr a2{expr::atom{"bar"}};
@@ -3708,6 +3797,7 @@ void test_bind_map_unify() {
     
     // Test 4: Two identical atoms (different objects) - should succeed
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"same"}};
         expr a2{expr::atom{"same"}};
@@ -3717,6 +3807,7 @@ void test_bind_map_unify() {
     
     // Test 5: Two identical atoms (commuted) - should succeed
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"same"}};
         expr a2{expr::atom{"same"}};
@@ -3726,6 +3817,7 @@ void test_bind_map_unify() {
     
     // Test 6: Unbound var with atom - should succeed and create binding
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{0}};
         expr a1{expr::atom{"bound"}};
@@ -3737,6 +3829,7 @@ void test_bind_map_unify() {
     
     // Test 7: Atom with unbound var (commuted) - should succeed and create binding
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{1}};
         expr a1{expr::atom{"bound"}};
@@ -3748,6 +3841,7 @@ void test_bind_map_unify() {
     
     // Test 8: Unbound var with cons - should succeed and create binding
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{2}};
         expr a1{expr::atom{"x"}};
@@ -3760,6 +3854,7 @@ void test_bind_map_unify() {
     
     // Test 9: Cons with unbound var (commuted) - should succeed and create binding
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{3}};
         expr a1{expr::atom{"x"}};
@@ -3772,6 +3867,7 @@ void test_bind_map_unify() {
     
     // Test 10: Two unbound vars - should succeed and create binding
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{4}};
         expr v2{expr::var{5}};
@@ -3785,6 +3881,7 @@ void test_bind_map_unify() {
     
     // Test 11: Two unbound vars (commuted) - should succeed and create binding
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{6}};
         expr v2{expr::var{7}};
@@ -3799,6 +3896,7 @@ void test_bind_map_unify() {
     
     // Test 12: Var with cons containing that var - should fail (occurs check)
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{10}};
         expr v2{expr::var{10}};  // Same index
@@ -3810,6 +3908,7 @@ void test_bind_map_unify() {
     
     // Test 13: Cons containing var with that var (commuted) - should fail
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{11}};
         expr v2{expr::var{11}};
@@ -3820,6 +3919,7 @@ void test_bind_map_unify() {
     
     // Test 14: Var with cons containing chain to that var - should fail
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{12}};
         expr v2{expr::var{13}};
@@ -3835,6 +3935,7 @@ void test_bind_map_unify() {
     
     // Test 15: Cons with chain to var, unified with that var (commuted) - should fail
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{14}};
         expr v2{expr::var{15}};
@@ -3849,6 +3950,7 @@ void test_bind_map_unify() {
     
     // Test 16: Var with deeply nested cons containing that var - should fail
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{16}};
         expr v2{expr::var{16}};
@@ -3864,6 +3966,7 @@ void test_bind_map_unify() {
     
     // Test 17: Deeply nested cons with var, unified with that var (commuted) - should fail
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{17}};
         expr v2{expr::var{17}};
@@ -3880,6 +3983,7 @@ void test_bind_map_unify() {
     
     // Test 18: Var bound to another var, unify with atom - should follow chain
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{20}};
         expr v2{expr::var{21}};
@@ -3895,6 +3999,7 @@ void test_bind_map_unify() {
     
     // Test 19: Atom with var bound to another var (commuted) - should follow chain
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{22}};
         expr v2{expr::var{23}};
@@ -3909,6 +4014,7 @@ void test_bind_map_unify() {
     
     // Test 20: Two vars in a chain, unify them - should succeed (already unified)
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{24}};
         expr v2{expr::var{25}};
@@ -3922,6 +4028,7 @@ void test_bind_map_unify() {
     
     // Test 21: Two vars in a chain, unify them (commuted) - should succeed
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{26}};
         expr v2{expr::var{27}};
@@ -3934,6 +4041,7 @@ void test_bind_map_unify() {
     
     // Test 22: Long chain of vars, unify head with atom
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{28}};
         expr v2{expr::var{29}};
@@ -3953,6 +4061,7 @@ void test_bind_map_unify() {
     
     // Test 23: Atom with long chain of vars (commuted)
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{32}};
         expr v2{expr::var{33}};
@@ -3973,6 +4082,7 @@ void test_bind_map_unify() {
     
     // Test 24: Two cons with same atoms - should succeed
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"x"}};
         expr a2{expr::atom{"y"}};
@@ -3988,6 +4098,7 @@ void test_bind_map_unify() {
     
     // Test 25: Two cons with same atoms (commuted) - should succeed
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"x"}};
         expr a2{expr::atom{"y"}};
@@ -4003,6 +4114,7 @@ void test_bind_map_unify() {
     
     // Test 26: Two cons with different atoms in lhs - should fail
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"x"}};
         expr a2{expr::atom{"y"}};
@@ -4017,6 +4129,7 @@ void test_bind_map_unify() {
     
     // Test 27: Two cons with different atoms in rhs - should fail
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"x"}};
         expr a2{expr::atom{"y"}};
@@ -4031,6 +4144,7 @@ void test_bind_map_unify() {
     
     // Test 28: Cons with vars that can be unified - should succeed
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{40}};
         expr a1{expr::atom{"y"}};
@@ -4046,6 +4160,7 @@ void test_bind_map_unify() {
     
     // Test 29: Cons with vars that can be unified (commuted) - should succeed
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{41}};
         expr a1{expr::atom{"y"}};
@@ -4061,6 +4176,7 @@ void test_bind_map_unify() {
     
     // Test 30: Cons with vars that cannot be unified (conflicting) - should fail
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{42}};
         expr a1{expr::atom{"y"}};
@@ -4075,6 +4191,7 @@ void test_bind_map_unify() {
     
     // Test 31: Cons with vars that cannot be unified (commuted) - should fail
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{43}};
         expr a1{expr::atom{"y"}};
@@ -4089,6 +4206,7 @@ void test_bind_map_unify() {
     
     // Test 32: Nested cons structures - should recursively unify
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"a"}};
         expr a2{expr::atom{"b"}};
@@ -4108,6 +4226,7 @@ void test_bind_map_unify() {
     
     // Test 33: Nested cons structures (commuted) - should recursively unify
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"a"}};
         expr a2{expr::atom{"b"}};
@@ -4129,6 +4248,7 @@ void test_bind_map_unify() {
     
     // Test 34: Atom with cons - should fail
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"test"}};
         expr a2{expr::atom{"x"}};
@@ -4141,6 +4261,7 @@ void test_bind_map_unify() {
     
     // Test 35: Cons with atom (commuted) - should fail
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"test"}};
         expr a2{expr::atom{"x"}};
@@ -4155,6 +4276,7 @@ void test_bind_map_unify() {
     
     // Test 36: Unify two cons where children need transitive unification
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{50}};
         expr a1{expr::atom{"a"}};
@@ -4170,6 +4292,7 @@ void test_bind_map_unify() {
     
     // Test 37: Transitive unification (commuted)
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{52}};
         expr a1{expr::atom{"a"}};
@@ -4185,6 +4308,7 @@ void test_bind_map_unify() {
     
     // Test 38: Unify cons with nested vars - cons(v1, cons(v2, a)) with cons(a, cons(b, a))
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{54}};
         expr v2{expr::var{55}};
@@ -4205,6 +4329,7 @@ void test_bind_map_unify() {
     
     // Test 39: Nested vars (commuted)
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{56}};
         expr v2{expr::var{57}};
@@ -4225,6 +4350,7 @@ void test_bind_map_unify() {
     
     // Test 40: Multiple unifications building up bindings
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{60}};
         expr v2{expr::var{61}};
@@ -4253,6 +4379,7 @@ void test_bind_map_unify() {
     
     // Test 41: Unify after previous unification - bindings persist
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{63}};
         expr v2{expr::var{64}};
@@ -4271,6 +4398,7 @@ void test_bind_map_unify() {
     
     // Test 42: Self-unification of var - should succeed
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{65}};
         assert(bm.unify(&v1, &v1));  // Same pointer
@@ -4278,6 +4406,7 @@ void test_bind_map_unify() {
     
     // Test 43: Unify bound var with its binding - should succeed
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{66}};
         expr a1{expr::atom{"bound"}};
@@ -4289,6 +4418,7 @@ void test_bind_map_unify() {
     
     // Test 44: Unify two bound vars bound to same thing - should succeed
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{67}};
         expr v2{expr::var{68}};
@@ -4302,6 +4432,7 @@ void test_bind_map_unify() {
     
     // Test 45: Unify two bound vars bound to different atoms - should fail
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{69}};
         expr v2{expr::var{70}};
@@ -4316,6 +4447,7 @@ void test_bind_map_unify() {
     
     // Test 46: Deeply nested cons unification with vars at various levels
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{71}};
         expr v2{expr::var{72}};
@@ -4345,6 +4477,7 @@ void test_bind_map_unify() {
     
     // Test 47: Unify with chains on both sides
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{74}};
         expr v2{expr::var{75}};
@@ -4364,6 +4497,7 @@ void test_bind_map_unify() {
     
     // Test 48: Cons unification where lhs succeeds but rhs fails
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"x"}};
         expr a2{expr::atom{"y"}};
@@ -4378,6 +4512,7 @@ void test_bind_map_unify() {
     
     // Test 49: Cons unification where first child fails (short circuit)
     {
+        trail t;
         bind_map bm(t);
         expr a1{expr::atom{"x"}};
         expr a2{expr::atom{"y"}};
@@ -4392,6 +4527,7 @@ void test_bind_map_unify() {
     
     // Test 50: Very complex nested unification
     {
+        trail t;
         bind_map bm(t);
         expr v1{expr::var{80}};
         expr v2{expr::var{81}};
