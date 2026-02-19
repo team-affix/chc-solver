@@ -1556,22 +1556,29 @@ void test_bind_map_bind() {
     {
         trail t;
         bind_map bm(t);
+        
+        // Frame 1: Create initial binding
         t.push();
-        
         expr a1{expr::atom{"old"}};
-        expr a2{expr::atom{"new"}};
-        
         bm.bind(5, &a1);
         assert(bm.bindings.at(5) == &a1);
+        assert(bm.bindings.size() == 1);
         
-        // Update to new value
+        // Frame 2: Update to new value
+        t.push();
+        expr a2{expr::atom{"new"}};
         bm.bind(5, &a2);
         assert(bm.bindings.size() == 1);
         assert(bm.bindings.at(5) == &a2);
         
-        // Pop should restore old value
+        // Pop Frame 2: should restore old value
         t.pop();
-        assert(bm.bindings.size() == 0);  // Original was empty
+        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.at(5) == &a1);  // Restored to old value
+        
+        // Pop Frame 1: should remove entry
+        t.pop();
+        assert(bm.bindings.size() == 0);
     }
     
     // Test 4: No-op optimization - binding same value twice
@@ -1584,11 +1591,19 @@ void test_bind_map_bind() {
         
         bm.bind(10, &a1);
         assert(bm.bindings.at(10) == &a1);
+        assert(bm.bindings.size() == 1);
+        
+        // Check undo stack size after first bind
+        size_t undo_stack_size = t.undo_stack.size();
+        assert(undo_stack_size == 1);  // One undo for the insert
         
         // Bind same value again - should be no-op
         bm.bind(10, &a1);
         assert(bm.bindings.size() == 1);
         assert(bm.bindings.at(10) == &a1);
+        
+        // Verify undo stack did NOT grow (no-op optimization)
+        assert(t.undo_stack.size() == undo_stack_size);
         
         t.pop();
         assert(bm.bindings.size() == 0);
