@@ -6018,63 +6018,56 @@ void test_bind_map_unify() {
         t.pop();
     }
     
-    // Test 55: Structural occurs check - cons(V1, V1) with cons(a, cons(V1, b))
+    // Test 55: Structural occurs check - cons(V1, V2) with cons(cons(V1, a), V2)
     {
         trail t;
         bind_map bm(t);
         t.push();
         expr v1{expr::var{90}};
-        expr v2{expr::var{90}};  // Same index
+        expr v2{expr::var{91}};
+        expr v3{expr::var{90}};  // Same as V1
+        expr v4{expr::var{91}};  // Same as V2
         expr a1{expr::atom{"a"}};
-        expr a2{expr::atom{"b"}};
         
-        expr c1{expr::cons{&v1, &v1}};
+        // Build cons(V1, V2)
+        expr c1{expr::cons{&v1, &v2}};
         
-        // Build cons(a, cons(V1, b))
-        expr inner{expr::cons{&v2, &a2}};
-        expr c2{expr::cons{&a1, &inner}};
+        // Build cons(cons(V1, a), V2)
+        expr inner{expr::cons{&v3, &a1}};
+        expr c2{expr::cons{&inner, &v4}};
         
-        // Unifying cons(V1, V1) with cons(a, cons(V1, b))
-        // lhs: V1 with a - succeeds, binds V1 to a
-        // rhs: V1 with cons(V1, b) - should fail occurs check (V1 in structure)
+        // Unifying cons(V1, V2) with cons(cons(V1, a), V2)
+        // lhs: V1 with cons(V1, a) - should fail occurs check (V1 in structure)
         assert(!bm.unify(&c1, &c2));
-        // Partial binding: V1 was bound to 'a' before rhs occurs check failed
-        assert(bm.bindings.size() == 1);
-        assert(bm.whnf(&v1) == &a1);
+        assert(bm.bindings.size() == 0);  // Occurs check prevents binding
         
         t.pop();
     }
     
-    // Test 56: Structural occurs check - cons(cons(V1, V2), V1) with cons(cons(a, b), cons(c, V1))
+    // Test 56: Structural occurs check - cons(V1, cons(V2, V1)) with cons(cons(V1, a), b)
     {
         trail t;
         bind_map bm(t);
         t.push();
-        expr v1{expr::var{91}};
-        expr v2{expr::var{92}};
-        expr v3{expr::var{91}};  // Same as V1
-        expr v4{expr::var{91}};  // Same as V1
+        expr v1{expr::var{92}};
+        expr v2{expr::var{93}};
+        expr v3{expr::var{92}};  // Same as V1
+        expr v4{expr::var{92}};  // Same as V1
         expr a1{expr::atom{"a"}};
         expr a2{expr::atom{"b"}};
-        expr a3{expr::atom{"c"}};
         
-        // Build cons(cons(V1, V2), V1)
-        expr inner1{expr::cons{&v1, &v2}};
-        expr c1{expr::cons{&inner1, &v1}};
+        // Build cons(V1, cons(V2, V1))
+        expr inner1{expr::cons{&v2, &v3}};
+        expr c1{expr::cons{&v1, &inner1}};
         
-        // Build cons(cons(a, b), cons(c, V1))
-        expr inner2{expr::cons{&a1, &a2}};
-        expr inner3{expr::cons{&a3, &v3}};
-        expr c2{expr::cons{&inner2, &inner3}};
+        // Build cons(cons(V1, a), b)
+        expr inner2{expr::cons{&v4, &a1}};
+        expr c2{expr::cons{&inner2, &a2}};
         
-        // Unifying cons(cons(V1, V2), V1) with cons(cons(a, b), cons(c, V1))
-        // lhs: cons(V1, V2) with cons(a, b) - binds V1 to a, V2 to b
-        // rhs: V1 with cons(c, V1) - should fail occurs check (V1 in structure)
+        // Unifying cons(V1, cons(V2, V1)) with cons(cons(V1, a), b)
+        // lhs: V1 with cons(V1, a) - should fail occurs check (V1 in structure)
         assert(!bm.unify(&c1, &c2));
-        // Partial bindings: V1->a and V2->b from lhs before rhs occurs check failed
-        assert(bm.bindings.size() == 2);
-        assert(bm.whnf(&v1) == &a1);
-        assert(bm.whnf(&v2) == &a2);
+        assert(bm.bindings.size() == 0);  // Occurs check prevents binding
         
         t.pop();
     }
@@ -6781,7 +6774,232 @@ void test_bind_map_unify() {
         
         t.pop();
     }
+    
+    // ========== ADDITIONAL PURE OCCURS CHECK TESTS ==========
+    
+    // Test 79: Occurs check at rhs child level - cons(a, V1) with cons(a, cons(b, V1))
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{145}};
+        expr v2{expr::var{145}};  // Same as V1
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        
+        expr c1{expr::cons{&a1, &v1}};
+        
+        // Build cons(a, cons(b, V1))
+        expr inner{expr::cons{&a2, &v2}};
+        expr c2{expr::cons{&a1, &inner}};
+        
+        // Unifying cons(a, V1) with cons(a, cons(b, V1))
+        // lhs: a with a - succeeds
+        // rhs: V1 with cons(b, V1) - should fail occurs check (V1 in structure)
+        assert(!bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 0);  // Occurs check prevents binding
+        
+        t.pop();
+    }
+    
+    // Test 80: Occurs check in nested cons child - cons(cons(V1, a), b) with cons(cons(cons(V1, c), a), b)
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{146}};
+        expr v2{expr::var{146}};  // Same as V1
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        expr a3{expr::atom{"c"}};
+        
+        // Build cons(cons(V1, a), b)
+        expr inner1{expr::cons{&v1, &a1}};
+        expr c1{expr::cons{&inner1, &a2}};
+        
+        // Build cons(cons(cons(V1, c), a), b)
+        expr inner2{expr::cons{&v2, &a3}};
+        expr inner3{expr::cons{&inner2, &a1}};
+        expr c2{expr::cons{&inner3, &a2}};
+        
+        // Unifying cons(cons(V1, a), b) with cons(cons(cons(V1, c), a), b)
+        // lhs: cons(V1, a) with cons(cons(V1, c), a)
+        //   - lhs of lhs: V1 with cons(V1, c) - should fail occurs check
+        assert(!bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 0);  // Occurs check prevents binding
+        
+        t.pop();
+    }
+    
+    // Test 81: Occurs check with var in both children - cons(V1, V2) with cons(cons(V1, a), cons(b, V1))
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{147}};
+        expr v2{expr::var{148}};
+        expr v3{expr::var{147}};  // Same as V1
+        expr v4{expr::var{147}};  // Same as V1
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        
+        expr c1{expr::cons{&v1, &v2}};
+        
+        // Build cons(cons(V1, a), cons(b, V1))
+        expr inner1{expr::cons{&v3, &a1}};
+        expr inner2{expr::cons{&a2, &v4}};
+        expr c2{expr::cons{&inner1, &inner2}};
+        
+        // Unifying cons(V1, V2) with cons(cons(V1, a), cons(b, V1))
+        // lhs: V1 with cons(V1, a) - should fail occurs check immediately
+        assert(!bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 0);  // Occurs check prevents binding
+        
+        t.pop();
+    }
+    
+    // Test 82: Occurs check through multiple levels - cons(V1, a) with cons(cons(cons(V1, b), c), a)
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{149}};
+        expr v2{expr::var{149}};  // Same as V1
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        expr a3{expr::atom{"c"}};
+        
+        expr c1{expr::cons{&v1, &a1}};
+        
+        // Build cons(cons(cons(V1, b), c), a) - V1 deeply nested in lhs
+        expr inner1{expr::cons{&v2, &a2}};
+        expr inner2{expr::cons{&inner1, &a3}};
+        expr c2{expr::cons{&inner2, &a1}};
+        
+        // Unifying cons(V1, a) with cons(cons(cons(V1, b), c), a)
+        // lhs: V1 with cons(cons(V1, b), c) - should fail occurs check (V1 deeply nested)
+        assert(!bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 0);  // Occurs check prevents binding
+        
+        t.pop();
+    }
+    
+    // Test 83: Occurs check with pre-existing chain - V2->V1, then cons(V1, a) with cons(cons(V2, b), a)
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{150}};
+        expr v2{expr::var{151}};
+        expr v3{expr::var{151}};  // Same as V2
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        
+        // Pre-existing chain: V2 -> V1
+        bm.bindings[151] = &v1;
+        
+        expr c1{expr::cons{&v1, &a1}};
+        
+        // Build cons(cons(V2, b), a) - V2 chains to V1
+        expr inner{expr::cons{&v3, &a2}};
+        expr c2{expr::cons{&inner, &a1}};
+        
+        // Unifying cons(V1, a) with cons(cons(V2, b), a)
+        // lhs: V1 with cons(V2, b)
+        //   V2 reduces to V1 via chain, so cons(V2, b) contains V1 indirectly
+        //   Should fail occurs check through chain
+        assert(!bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 1);  // Only original chain, occurs check prevents new binding
+        
+        t.pop();
+    }
+    
+    // Test 84: Occurs check with var appearing in multiple nested positions
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{152}};
+        expr v2{expr::var{152}};  // Same as V1
+        expr v3{expr::var{152}};  // Same as V1
+        expr v4{expr::var{153}};
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        
+        // Build cons(cons(V1, cons(V1, a)), b) - V1 appears twice in nested structure
+        expr inner1{expr::cons{&v2, &a1}};
+        expr inner2{expr::cons{&v3, &inner1}};
+        expr c1{expr::cons{&inner2, &a2}};
+        
+        // Try to unify V1 with this structure
+        assert(!bm.unify(&v1, &c1));
+        assert(bm.bindings.size() == 0);  // Occurs check prevents binding
+        
+        t.pop();
+    }
+    
+    // Test 85: Occurs check - cons(cons(V1, V2), a) with cons(cons(cons(V1, b), V2), a)
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{154}};
+        expr v2{expr::var{155}};
+        expr v3{expr::var{154}};  // Same as V1
+        expr v4{expr::var{155}};  // Same as V2
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        
+        // Build cons(cons(V1, V2), a)
+        expr inner1{expr::cons{&v1, &v2}};
+        expr c1{expr::cons{&inner1, &a1}};
+        
+        // Build cons(cons(cons(V1, b), V2), a)
+        expr inner2{expr::cons{&v3, &a2}};
+        expr inner3{expr::cons{&inner2, &v4}};
+        expr c2{expr::cons{&inner3, &a1}};
+        
+        // Unifying cons(cons(V1, V2), a) with cons(cons(cons(V1, b), V2), a)
+        // lhs: cons(V1, V2) with cons(cons(V1, b), V2)
+        //   - lhs of lhs: V1 with cons(V1, b) - should fail occurs check
+        assert(!bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 0);  // Occurs check prevents binding
+        
+        t.pop();
+    }
+    
+    // Test 86: Occurs check through equivalence class - cons(V1, V2) with cons(V2, cons(V1, a))
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{156}};
+        expr v2{expr::var{157}};
+        expr v3{expr::var{157}};  // Same as V2
+        expr v4{expr::var{156}};  // Same as V1
+        expr a1{expr::atom{"a"}};
+        
+        expr c1{expr::cons{&v1, &v2}};
+        
+        // Build cons(V2, cons(V1, a))
+        expr inner{expr::cons{&v4, &a1}};
+        expr c2{expr::cons{&v3, &inner}};
+        
+        // Unifying cons(V1, V2) with cons(V2, cons(V1, a))
+        // lhs: V1 with V2 - creates binding (either 156->157 or 157->156)
+        // rhs: V2 with cons(V1, a)
+        //   After lhs binding, V1 and V2 are in same equivalence class
+        //   occurs_check(V2_index, cons(V1, a)) follows V1's binding via whnf()
+        //   and correctly detects that V1 reduces to V2, thus V2 occurs in structure
+        assert(!bm.unify(&c1, &c2));
+        // Partial binding: one binding from lhs before rhs occurs check
+        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.count(156) == 1 || bm.bindings.count(157) == 1);
+        
+        t.pop();
+    }
 }
+
 
 
 void unit_test_main() {
