@@ -23,7 +23,9 @@ struct expr_pool {
     const expr* var(uint32_t);
     const expr* cons(const expr*, const expr*);
     size_t size() const;
+#ifndef DEBUG
 private:
+#endif
     const expr* intern(expr&&);
     trail& trail_ref;
     std::set<expr> exprs;
