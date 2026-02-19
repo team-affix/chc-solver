@@ -64,7 +64,7 @@
 - **Benefits of this approach:**
   - Forces deep understanding of the system by vetting assumptions
   - Even "wrong" initial assertions lead to correct final assertions
-  - The corrected assertions serve as regression tests for the future
+  - The corrected assertions serve as regression tests for the future, and they are hard fought and won assertions
   - Comprehensive assertions catch bugs that might otherwise go unnoticed
 - **Example:** When testing `expr_pool` with nested frames, assert `pool.exprs.size()` after every operation, even if you're not 100% sure what the size should be. If it fails, investigate why, then fix the assertion to match the correct behavior.
 
