@@ -1502,6 +1502,651 @@ void test_expr_pool_cons() {
     assert(pool.size() == 0);
 }
 
+void test_bind_map_bind() {
+    trail t;
+    
+    // bind() is the fundamental function for managing bindings with trail support
+    // It tracks all changes to the bindings map and logs rollback operations
+    // Tests verify: new bindings, updates, no-op optimization, trail integration
+    
+    // ========== BASIC BIND OPERATIONS ==========
+    
+    // Test 1: Bind new entry - should insert and log erase
+    {
+        bind_map bm(t);
+        t.push();
+        
+        expr a1{expr::atom{"test"}};
+        bm.bind(0, &a1);
+        
+        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.count(0) == 1);
+        assert(bm.bindings.at(0) == &a1);
+        
+        // Pop should erase the entry
+        t.pop();
+        assert(bm.bindings.size() == 0);
+        assert(bm.bindings.count(0) == 0);
+    }
+    
+    // Test 2: Bind multiple new entries
+    {
+        bind_map bm(t);
+        t.push();
+        
+        expr a1{expr::atom{"first"}};
+        expr a2{expr::atom{"second"}};
+        expr a3{expr::atom{"third"}};
+        
+        bm.bind(0, &a1);
+        bm.bind(1, &a2);
+        bm.bind(2, &a3);
+        
+        assert(bm.bindings.size() == 3);
+        assert(bm.bindings.at(0) == &a1);
+        assert(bm.bindings.at(1) == &a2);
+        assert(bm.bindings.at(2) == &a3);
+        
+        // Pop should erase all entries
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 3: Update existing entry - should log old value
+    {
+        bind_map bm(t);
+        t.push();
+        
+        expr a1{expr::atom{"old"}};
+        expr a2{expr::atom{"new"}};
+        
+        bm.bind(5, &a1);
+        assert(bm.bindings.at(5) == &a1);
+        
+        // Update to new value
+        bm.bind(5, &a2);
+        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.at(5) == &a2);
+        
+        // Pop should restore old value
+        t.pop();
+        assert(bm.bindings.size() == 0);  // Original was empty
+    }
+    
+    // Test 4: No-op optimization - binding same value twice
+    {
+        bind_map bm(t);
+        t.push();
+        
+        expr a1{expr::atom{"same"}};
+        
+        bm.bind(10, &a1);
+        assert(bm.bindings.at(10) == &a1);
+        
+        // Bind same value again - should be no-op
+        bm.bind(10, &a1);
+        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.at(10) == &a1);
+        
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 5: Binding different values sequentially
+    {
+        bind_map bm(t);
+        t.push();
+        
+        expr a1{expr::atom{"first"}};
+        expr a2{expr::atom{"second"}};
+        expr a3{expr::atom{"third"}};
+        
+        bm.bind(15, &a1);
+        assert(bm.bindings.at(15) == &a1);
+        
+        bm.bind(15, &a2);
+        assert(bm.bindings.at(15) == &a2);
+        
+        bm.bind(15, &a3);
+        assert(bm.bindings.at(15) == &a3);
+        
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // ========== MULTIPLE TRAIL FRAMES ==========
+    
+    // Test 6: Multiple frames with bindings at different levels
+    {
+        bind_map bm(t);
+        
+        // Frame 1
+        t.push();
+        expr a1{expr::atom{"frame1"}};
+        bm.bind(20, &a1);
+        assert(bm.bindings.size() == 1);
+        std::map<uint32_t, const expr*> checkpoint1 = bm.bindings;
+        
+        // Frame 2
+        t.push();
+        expr a2{expr::atom{"frame2"}};
+        bm.bind(21, &a2);
+        assert(bm.bindings.size() == 2);
+        std::map<uint32_t, const expr*> checkpoint2 = bm.bindings;
+        
+        // Frame 3
+        t.push();
+        expr a3{expr::atom{"frame3"}};
+        bm.bind(22, &a3);
+        assert(bm.bindings.size() == 3);
+        
+        // Pop frame 3
+        t.pop();
+        assert(bm.bindings == checkpoint2);
+        assert(bm.bindings.size() == 2);
+        
+        // Pop frame 2
+        t.pop();
+        assert(bm.bindings == checkpoint1);
+        assert(bm.bindings.size() == 1);
+        
+        // Pop frame 1
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 7: Nested frames with updates to same index
+    {
+        bind_map bm(t);
+        
+        // Frame 1: bind index 30 to a1
+        t.push();
+        expr a1{expr::atom{"v1"}};
+        bm.bind(30, &a1);
+        assert(bm.bindings.at(30) == &a1);
+        std::map<uint32_t, const expr*> checkpoint1 = bm.bindings;
+        
+        // Frame 2: update index 30 to a2
+        t.push();
+        expr a2{expr::atom{"v2"}};
+        bm.bind(30, &a2);
+        assert(bm.bindings.at(30) == &a2);
+        std::map<uint32_t, const expr*> checkpoint2 = bm.bindings;
+        
+        // Frame 3: update index 30 to a3
+        t.push();
+        expr a3{expr::atom{"v3"}};
+        bm.bind(30, &a3);
+        assert(bm.bindings.at(30) == &a3);
+        
+        // Pop frame 3: should restore to a2
+        t.pop();
+        assert(bm.bindings == checkpoint2);
+        assert(bm.bindings.at(30) == &a2);
+        
+        // Pop frame 2: should restore to a1
+        t.pop();
+        assert(bm.bindings == checkpoint1);
+        assert(bm.bindings.at(30) == &a1);
+        
+        // Pop frame 1: should erase entry
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 8: Multiple indices across multiple frames
+    {
+        bind_map bm(t);
+        
+        t.push();
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        bm.bind(40, &a1);
+        bm.bind(41, &a2);
+        std::map<uint32_t, const expr*> checkpoint1 = bm.bindings;
+        
+        t.push();
+        expr a3{expr::atom{"c"}};
+        expr a4{expr::atom{"d"}};
+        bm.bind(42, &a3);
+        bm.bind(43, &a4);
+        std::map<uint32_t, const expr*> checkpoint2 = bm.bindings;
+        
+        t.push();
+        expr a5{expr::atom{"e"}};
+        bm.bind(40, &a5);  // Update existing from frame 1
+        assert(bm.bindings.size() == 4);
+        assert(bm.bindings.at(40) == &a5);
+        
+        t.pop();
+        assert(bm.bindings == checkpoint2);
+        assert(bm.bindings.at(40) == &a1);  // Restored
+        
+        t.pop();
+        assert(bm.bindings == checkpoint1);
+        
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // ========== COMPLEX SCENARIOS ==========
+    
+    // Test 9: Binding vars to atoms, cons, and other vars
+    {
+        bind_map bm(t);
+        t.push();
+        
+        expr a1{expr::atom{"atom"}};
+        expr v1{expr::var{50}};
+        expr a2{expr::atom{"x"}};
+        expr a3{expr::atom{"y"}};
+        expr c1{expr::cons{&a2, &a3}};
+        
+        bm.bind(50, &a1);  // var -> atom
+        bm.bind(51, &v1);  // var -> var
+        bm.bind(52, &c1);  // var -> cons
+        
+        assert(bm.bindings.size() == 3);
+        assert(bm.bindings.at(50) == &a1);
+        assert(bm.bindings.at(51) == &v1);
+        assert(bm.bindings.at(52) == &c1);
+        
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 10: Chain of bindings (manual construction)
+    {
+        bind_map bm(t);
+        t.push();
+        
+        expr v1{expr::var{60}};
+        expr v2{expr::var{61}};
+        expr v3{expr::var{62}};
+        expr a1{expr::atom{"end"}};
+        
+        // Create chain: 60 -> v1 -> v2 -> v3 -> a1
+        bm.bind(60, &v1);
+        bm.bind(61, &v2);
+        bm.bind(62, &v3);
+        bm.bind(63, &a1);
+        
+        assert(bm.bindings.size() == 4);
+        
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 11: Deeply nested cons with multiple var bindings
+    {
+        bind_map bm(t);
+        t.push();
+        
+        expr v1{expr::var{70}};
+        expr v2{expr::var{71}};
+        expr a1{expr::atom{"a"}};
+        
+        // Build nested: cons(cons(v1, a1), v2)
+        expr inner{expr::cons{&v1, &a1}};
+        expr outer{expr::cons{&inner, &v2}};
+        
+        expr a2{expr::atom{"bound1"}};
+        expr a3{expr::atom{"bound2"}};
+        
+        bm.bind(70, &a2);
+        bm.bind(71, &a3);
+        bm.bind(72, &outer);
+        
+        assert(bm.bindings.size() == 3);
+        assert(bm.bindings.at(70) == &a2);
+        assert(bm.bindings.at(71) == &a3);
+        assert(bm.bindings.at(72) == &outer);
+        
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 12: Complex scenario - multiple frames with mixed operations
+    {
+        bind_map bm(t);
+        
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        expr a3{expr::atom{"c"}};
+        expr a4{expr::atom{"d"}};
+        expr a5{expr::atom{"e"}};
+        
+        // Frame 1: Create initial bindings
+        t.push();
+        bm.bind(80, &a1);
+        bm.bind(81, &a2);
+        std::map<uint32_t, const expr*> checkpoint1 = bm.bindings;
+        
+        // Frame 2: Add new and update existing
+        t.push();
+        bm.bind(82, &a3);
+        bm.bind(80, &a4);  // Update 80
+        assert(bm.bindings.size() == 3);
+        assert(bm.bindings.at(80) == &a4);
+        std::map<uint32_t, const expr*> checkpoint2 = bm.bindings;
+        
+        // Frame 3: More updates
+        t.push();
+        bm.bind(81, &a5);  // Update 81
+        bm.bind(83, &a1);  // New
+        assert(bm.bindings.size() == 4);
+        
+        // Pop frame 3
+        t.pop();
+        assert(bm.bindings == checkpoint2);
+        assert(bm.bindings.at(81) == &a2);  // Restored
+        assert(bm.bindings.count(83) == 0);  // Erased
+        
+        // Pop frame 2
+        t.pop();
+        assert(bm.bindings == checkpoint1);
+        assert(bm.bindings.at(80) == &a1);  // Restored
+        assert(bm.bindings.count(82) == 0);  // Erased
+        
+        // Pop frame 1
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 13: Binding same value multiple times (no-op optimization)
+    {
+        bind_map bm(t);
+        t.push();
+        
+        expr a1{expr::atom{"same"}};
+        
+        bm.bind(90, &a1);
+        size_t initial_size = bm.bindings.size();
+        
+        // Bind same value again - should be no-op
+        bm.bind(90, &a1);
+        bm.bind(90, &a1);
+        bm.bind(90, &a1);
+        
+        assert(bm.bindings.size() == initial_size);
+        assert(bm.bindings.at(90) == &a1);
+        
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 14: Alternating between two values
+    {
+        bind_map bm(t);
+        
+        expr a1{expr::atom{"val1"}};
+        expr a2{expr::atom{"val2"}};
+        
+        t.push();
+        bm.bind(95, &a1);
+        std::map<uint32_t, const expr*> checkpoint1 = bm.bindings;
+        
+        t.push();
+        bm.bind(95, &a2);
+        std::map<uint32_t, const expr*> checkpoint2 = bm.bindings;
+        
+        t.push();
+        bm.bind(95, &a1);  // Back to a1
+        std::map<uint32_t, const expr*> checkpoint3 = bm.bindings;
+        
+        t.push();
+        bm.bind(95, &a2);  // Back to a2
+        assert(bm.bindings.at(95) == &a2);
+        
+        t.pop();
+        assert(bm.bindings == checkpoint3);
+        assert(bm.bindings.at(95) == &a1);
+        
+        t.pop();
+        assert(bm.bindings == checkpoint2);
+        assert(bm.bindings.at(95) == &a2);
+        
+        t.pop();
+        assert(bm.bindings == checkpoint1);
+        assert(bm.bindings.at(95) == &a1);
+        
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // ========== COMPLEX STRUCTURES ==========
+    
+    // Test 15: Building chains across multiple frames
+    {
+        bind_map bm(t);
+        
+        expr v1{expr::var{100}};
+        expr v2{expr::var{101}};
+        expr v3{expr::var{102}};
+        expr a1{expr::atom{"end"}};
+        
+        // Frame 1: Start of chain
+        t.push();
+        bm.bind(100, &v1);
+        std::map<uint32_t, const expr*> checkpoint1 = bm.bindings;
+        
+        // Frame 2: Extend chain
+        t.push();
+        bm.bind(101, &v2);
+        std::map<uint32_t, const expr*> checkpoint2 = bm.bindings;
+        
+        // Frame 3: Extend more
+        t.push();
+        bm.bind(102, &v3);
+        std::map<uint32_t, const expr*> checkpoint3 = bm.bindings;
+        
+        // Frame 4: Terminate chain
+        t.push();
+        bm.bind(103, &a1);
+        assert(bm.bindings.size() == 4);
+        
+        // Pop frames one by one
+        t.pop();
+        assert(bm.bindings == checkpoint3);
+        assert(bm.bindings.size() == 3);
+        
+        t.pop();
+        assert(bm.bindings == checkpoint2);
+        assert(bm.bindings.size() == 2);
+        
+        t.pop();
+        assert(bm.bindings == checkpoint1);
+        assert(bm.bindings.size() == 1);
+        
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 16: Binding to cons structures across frames
+    {
+        bind_map bm(t);
+        
+        expr a1{expr::atom{"x"}};
+        expr a2{expr::atom{"y"}};
+        expr c1{expr::cons{&a1, &a2}};
+        
+        expr a3{expr::atom{"z"}};
+        expr c2{expr::cons{&c1, &a3}};
+        
+        t.push();
+        bm.bind(110, &c1);
+        std::map<uint32_t, const expr*> checkpoint1 = bm.bindings;
+        
+        t.push();
+        bm.bind(111, &c2);
+        assert(bm.bindings.size() == 2);
+        
+        t.pop();
+        assert(bm.bindings == checkpoint1);
+        assert(bm.bindings.size() == 1);
+        
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 17: Very complex - multiple indices, multiple frames, updates
+    {
+        bind_map bm(t);
+        
+        expr a1{expr::atom{"1"}};
+        expr a2{expr::atom{"2"}};
+        expr a3{expr::atom{"3"}};
+        expr a4{expr::atom{"4"}};
+        expr a5{expr::atom{"5"}};
+        expr a6{expr::atom{"6"}};
+        
+        // Frame 1
+        t.push();
+        bm.bind(120, &a1);
+        bm.bind(121, &a2);
+        bm.bind(122, &a3);
+        std::map<uint32_t, const expr*> checkpoint1 = bm.bindings;
+        
+        // Frame 2
+        t.push();
+        bm.bind(120, &a4);  // Update
+        bm.bind(123, &a5);  // New
+        assert(bm.bindings.size() == 4);
+        std::map<uint32_t, const expr*> checkpoint2 = bm.bindings;
+        
+        // Frame 3
+        t.push();
+        bm.bind(121, &a6);  // Update
+        bm.bind(124, &a1);  // New
+        bm.bind(122, &a2);  // Update
+        assert(bm.bindings.size() == 5);
+        
+        t.pop();
+        assert(bm.bindings == checkpoint2);
+        
+        t.pop();
+        assert(bm.bindings == checkpoint1);
+        
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 18: Deeply nested cons with vars bound across frames
+    {
+        bind_map bm(t);
+        
+        expr v1{expr::var{130}};
+        expr v2{expr::var{131}};
+        expr v3{expr::var{132}};
+        expr a1{expr::atom{"a"}};
+        
+        // Build: cons(cons(v1, v2), cons(v3, a1))
+        expr left{expr::cons{&v1, &v2}};
+        expr right{expr::cons{&v3, &a1}};
+        expr outer{expr::cons{&left, &right}};
+        
+        expr a2{expr::atom{"x"}};
+        expr a3{expr::atom{"y"}};
+        expr a4{expr::atom{"z"}};
+        
+        t.push();
+        bm.bind(130, &a2);
+        std::map<uint32_t, const expr*> checkpoint1 = bm.bindings;
+        
+        t.push();
+        bm.bind(131, &a3);
+        std::map<uint32_t, const expr*> checkpoint2 = bm.bindings;
+        
+        t.push();
+        bm.bind(132, &a4);
+        bm.bind(133, &outer);
+        assert(bm.bindings.size() == 4);
+        
+        t.pop();
+        assert(bm.bindings == checkpoint2);
+        assert(bm.bindings.size() == 2);
+        
+        t.pop();
+        assert(bm.bindings == checkpoint1);
+        assert(bm.bindings.size() == 1);
+        
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 19: Stress test - many bindings, many frames, many updates
+    {
+        bind_map bm(t);
+        
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        expr a3{expr::atom{"c"}};
+        
+        // Frame 1: 10 bindings
+        t.push();
+        for (uint32_t i = 140; i < 150; i++) {
+            bm.bind(i, &a1);
+        }
+        assert(bm.bindings.size() == 10);
+        std::map<uint32_t, const expr*> checkpoint1 = bm.bindings;
+        
+        // Frame 2: Update half, add 5 new
+        t.push();
+        for (uint32_t i = 140; i < 145; i++) {
+            bm.bind(i, &a2);  // Update
+        }
+        for (uint32_t i = 150; i < 155; i++) {
+            bm.bind(i, &a3);  // New
+        }
+        assert(bm.bindings.size() == 15);
+        std::map<uint32_t, const expr*> checkpoint2 = bm.bindings;
+        
+        // Frame 3: More updates
+        t.push();
+        for (uint32_t i = 145; i < 150; i++) {
+            bm.bind(i, &a3);  // Update
+        }
+        assert(bm.bindings.size() == 15);
+        
+        t.pop();
+        assert(bm.bindings == checkpoint2);
+        
+        t.pop();
+        assert(bm.bindings == checkpoint1);
+        
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 20: No-op in nested frames
+    {
+        bind_map bm(t);
+        
+        expr a1{expr::atom{"same"}};
+        
+        t.push();
+        bm.bind(160, &a1);
+        
+        t.push();
+        bm.bind(160, &a1);  // No-op
+        
+        t.push();
+        bm.bind(160, &a1);  // No-op
+        
+        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.at(160) == &a1);
+        
+        t.pop();
+        assert(bm.bindings.at(160) == &a1);
+        
+        t.pop();
+        assert(bm.bindings.at(160) == &a1);
+        
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+}
+
 void test_bind_map_occurs_check() {
     trail t;
     
@@ -1524,7 +2169,7 @@ void test_bind_map_occurs_check() {
         bind_map bm(t);
         expr v1{expr::var{5}};
         assert(bm.occurs_check(5, &v1));
-        assert(bm.bindings.size() == 1);  // whnf creates entry
+        assert(bm.bindings.size() == 0);  // whnf no longer creates entries
     }
     
     // Test 3: occurs_check on unbound var with different index - should return false
@@ -1533,7 +2178,7 @@ void test_bind_map_occurs_check() {
         expr v1{expr::var{10}};
         assert(!bm.occurs_check(5, &v1));
         assert(!bm.occurs_check(11, &v1));
-        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.size() == 0);  // No entries created
     }
     
     // Test 4: occurs_check on var bound to atom - should return false
@@ -1565,7 +2210,7 @@ void test_bind_map_occurs_check() {
         
         // v1 eventually points to v3 (var 32)
         assert(bm.occurs_check(32, &v1));
-        assert(bm.bindings.size() == 3);  // whnf will create entry for 32
+        assert(bm.bindings.size() == 2);  // Only the 2 explicit bindings
     }
     
     // Test 7: occurs_check through chain ending in atom
@@ -1606,7 +2251,7 @@ void test_bind_map_occurs_check() {
         
         assert(bm.occurs_check(55, &c1));
         assert(!bm.occurs_check(56, &c1));
-        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.size() == 0);  // No entries created
     }
     
     // Test 10: occurs_check on cons with matching var in rhs
@@ -1618,7 +2263,7 @@ void test_bind_map_occurs_check() {
         
         assert(bm.occurs_check(60, &c1));
         assert(!bm.occurs_check(61, &c1));
-        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.size() == 0);
     }
     
     // Test 11: occurs_check on cons with matching var in both children
@@ -1629,7 +2274,7 @@ void test_bind_map_occurs_check() {
         expr c1{expr::cons{&v1, &v2}};
         
         assert(bm.occurs_check(65, &c1));
-        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.size() == 0);
     }
     
     // Test 12: occurs_check on cons with different vars
@@ -1642,7 +2287,7 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(70, &c1));
         assert(bm.occurs_check(71, &c1));
         assert(!bm.occurs_check(72, &c1));
-        assert(bm.bindings.size() == 2);
+        assert(bm.bindings.size() == 0);
     }
     
     // Test 13: occurs_check on nested cons
@@ -1656,7 +2301,7 @@ void test_bind_map_occurs_check() {
         
         assert(bm.occurs_check(75, &outer_cons));  // v1 is in nested cons
         assert(!bm.occurs_check(76, &outer_cons));
-        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.size() == 0);
     }
     
     // Test 14: occurs_check on deeply nested cons
@@ -1674,7 +2319,7 @@ void test_bind_map_occurs_check() {
         
         assert(bm.occurs_check(80, &outer));
         assert(!bm.occurs_check(81, &outer));
-        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.size() == 0);
     }
     
     // Test 15: occurs_check with var bound to cons containing same var (indirect cycle)
@@ -1705,7 +2350,7 @@ void test_bind_map_occurs_check() {
         
         assert(!bm.occurs_check(90, &v1));  // v1 -> c1, but c1 doesn't contain v1
         assert(bm.occurs_check(91, &v1));   // v1 -> c1 which contains v2
-        assert(bm.bindings.size() == 2);
+        assert(bm.bindings.size() == 1);  // Only the explicit binding
     }
     
     // Test 17: occurs_check through chain to cons
@@ -1724,7 +2369,7 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(95, &v1));  // After whnf, v1 -> c1, doesn't contain v1
         assert(!bm.occurs_check(96, &v1));
         assert(bm.occurs_check(97, &v1));   // c1 contains v3
-        assert(bm.bindings.size() == 3);
+        assert(bm.bindings.size() == 2);  // Only the 2 explicit bindings
     }
     
     // Test 18: occurs_check on cons with bound vars
@@ -1741,7 +2386,7 @@ void test_bind_map_occurs_check() {
         
         assert(bm.occurs_check(100, &c1));  // v1 is in cons
         assert(!bm.occurs_check(101, &c1)); // v2 reduces to atom
-        assert(bm.bindings.size() == 2);
+        assert(bm.bindings.size() == 1);  // Only v2's binding
     }
     
     // Test 19: occurs_check with multiple levels of indirection
@@ -1759,7 +2404,7 @@ void test_bind_map_occurs_check() {
         
         assert(bm.occurs_check(108, &v1));  // Eventually points to v4
         assert(!bm.occurs_check(105, &v1)); // After path compression
-        assert(bm.bindings.size() == 4);
+        assert(bm.bindings.size() == 3);  // Only the 3 explicit bindings
     }
     
     // Test 20: occurs_check on cons where both children are bound vars
@@ -1778,7 +2423,7 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(110, &c1));  // Both reduce to atoms
         assert(!bm.occurs_check(111, &c1));
         assert(!bm.occurs_check(112, &c1));
-        assert(bm.bindings.size() == 2);
+        assert(bm.bindings.size() == 2);  // The 2 explicit bindings
     }
     
     // Test 21: occurs_check on cons with chain in lhs
@@ -1798,7 +2443,7 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(117, &c1));  // v1 chains to v3
         assert(!bm.occurs_check(115, &c1)); // After compression
         assert(!bm.occurs_check(116, &c1));
-        assert(bm.bindings.size() == 3);
+        assert(bm.bindings.size() == 2);  // Only the 2 explicit bindings
     }
     
     // Test 22: occurs_check with cons of cons, target var in nested structure
@@ -1814,7 +2459,7 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(120, &outer));
         assert(bm.occurs_check(121, &outer));
         assert(!bm.occurs_check(122, &outer));
-        assert(bm.bindings.size() == 2);
+        assert(bm.bindings.size() == 0);  // No explicit bindings
     }
     
     // Test 23: occurs_check on var bound to deeply nested structure
@@ -1833,7 +2478,7 @@ void test_bind_map_occurs_check() {
         
         assert(!bm.occurs_check(125, &v_outer));  // v_outer -> outer, doesn't contain itself
         assert(bm.occurs_check(126, &v_outer));   // outer contains v_inner
-        assert(bm.bindings.size() == 2);
+        assert(bm.bindings.size() == 1);  // Only v_outer's binding
     }
     
     // Test 24: occurs_check with symmetric cons (same var on both sides)
@@ -1844,7 +2489,7 @@ void test_bind_map_occurs_check() {
         expr c1{expr::cons{&v1, &v2}};
         
         assert(bm.occurs_check(130, &c1));
-        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.size() == 0);  // No explicit bindings
     }
     
     // Test 25: occurs_check on empty bindings map
@@ -1854,7 +2499,7 @@ void test_bind_map_occurs_check() {
         
         assert(bm.bindings.size() == 0);
         assert(bm.occurs_check(135, &v1));
-        assert(bm.bindings.size() == 1);  // whnf creates entry
+        assert(bm.bindings.size() == 0);  // whnf no longer creates entries
     }
     
     // Test 26: occurs_check with var bound through multiple cons layers
@@ -1872,7 +2517,7 @@ void test_bind_map_occurs_check() {
         
         assert(!bm.occurs_check(140, &v1));  // v1 -> outer, doesn't contain itself
         assert(bm.occurs_check(141, &v1));   // outer contains v2
-        assert(bm.bindings.size() == 2);
+        assert(bm.bindings.size() == 1);  // Only v1's binding
     }
     
     // Test 27: occurs_check with all atoms (no vars anywhere)
@@ -1905,7 +2550,7 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(145, &v1));  // After whnf, v1 -> c1
         assert(!bm.occurs_check(146, &v1));
         assert(bm.occurs_check(147, &v1));   // c1 contains v3
-        assert(bm.bindings.size() == 3);
+        assert(bm.bindings.size() == 2);  // Only the 2 explicit bindings
     }
     
     // Test 29: Very long chain (10 levels) ending in unbound var
@@ -1936,7 +2581,7 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(209, &v0));  // v0 eventually points to v9
         assert(!bm.occurs_check(200, &v0)); // After path compression
         assert(!bm.occurs_check(205, &v0)); // Middle of chain
-        assert(bm.bindings.size() == 10);  // 9 bindings + 1 for v9 from whnf
+        assert(bm.bindings.size() == 9);  // Only the 9 explicit bindings
     }
     
     // Test 30: Very long chain ending in atom
@@ -1985,7 +2630,7 @@ void test_bind_map_occurs_check() {
         
         assert(bm.occurs_check(220, &level5));
         assert(!bm.occurs_check(221, &level5));
-        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.size() == 0);  // No explicit bindings
     }
     
     // Test 32: Deeply nested cons with var at different positions
@@ -2005,7 +2650,7 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(226, &outer));  // v2 in left subtree
         assert(bm.occurs_check(227, &outer));  // v3 in right subtree
         assert(!bm.occurs_check(228, &outer));
-        assert(bm.bindings.size() == 3);
+        assert(bm.bindings.size() == 0);  // No explicit bindings
     }
     
     // Test 33: Var bound to deeply nested cons containing bound vars
@@ -2034,7 +2679,7 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(231, &v_outer));  // v1 reduces to atom
         assert(!bm.occurs_check(232, &v_outer));  // v2 reduces to atom
         assert(bm.occurs_check(233, &v_outer));   // v3 is unbound in outer
-        assert(bm.bindings.size() == 4);
+        assert(bm.bindings.size() == 3);  // Only the 3 explicit bindings
     }
     
     // Test 34: Long chain to deeply nested cons with target var deep inside
@@ -2061,7 +2706,7 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(240, &v_chain1)); // After path compression
         assert(!bm.occurs_check(241, &v_chain1));
         assert(!bm.occurs_check(242, &v_chain1));
-        assert(bm.bindings.size() == 4);
+        assert(bm.bindings.size() == 3);  // Only the 3 explicit bindings
     }
     
     // Test 35: Cons with chains in both children
@@ -2088,7 +2733,7 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(255, &c1));  // v_right3 via right child
         assert(!bm.occurs_check(250, &c1)); // After path compression
         assert(!bm.occurs_check(253, &c1)); // After path compression
-        assert(bm.bindings.size() == 6);  // 4 initial + 2 from whnf on unbound vars
+        assert(bm.bindings.size() == 4);  // Only the 4 explicit bindings
     }
     
     // Test 36: Very complex nested structure with multiple vars at different depths
@@ -2114,7 +2759,7 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(263, &outer));  // v4 in right subtree, nested
         assert(bm.occurs_check(264, &outer));  // v5 in right subtree, nested
         assert(!bm.occurs_check(265, &outer));
-        assert(bm.bindings.size() == 5);
+        assert(bm.bindings.size() == 0);  // No explicit bindings
     }
     
     // Test 37: Chain to cons, where cons children are also chains
@@ -2153,7 +2798,7 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(273, &v_outer));  // v_left2 reduces to atom
         assert(!bm.occurs_check(274, &v_outer));  // v_right1 reduces to atom
         assert(!bm.occurs_check(275, &v_outer));  // v_right2 reduces to atom
-        assert(bm.bindings.size() == 6);
+        assert(bm.bindings.size() == 6);  // All 6 explicit bindings
     }
     
     // Test 38: Cons with one child being a long chain ending in target var
@@ -2176,7 +2821,7 @@ void test_bind_map_occurs_check() {
         
         assert(bm.occurs_check(284, &c1));  // v5 is at end of chain in lhs
         assert(!bm.occurs_check(280, &c1)); // After path compression
-        assert(bm.bindings.size() == 5);  // 4 initial + 1 from whnf on v5
+        assert(bm.bindings.size() == 4);  // Only the 4 explicit bindings
     }
     
     // Test 39: Multiple nested cons with same var appearing in different positions
@@ -2193,7 +2838,7 @@ void test_bind_map_occurs_check() {
         expr outer{expr::cons{&left, &right}};
         
         assert(bm.occurs_check(290, &outer));  // Var 290 appears 3 times
-        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.size() == 0);  // No explicit bindings
     }
     
     // Test 40: Stress test - very deep nesting (10 levels) with var at bottom
@@ -2217,7 +2862,7 @@ void test_bind_map_occurs_check() {
         
         assert(bm.occurs_check(300, &level10));  // Should find v1 at the bottom
         assert(!bm.occurs_check(301, &level10));
-        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.size() == 0);  // No explicit bindings
     }
     
     // Test 41: ULTIMATE STRESS TEST - Long chain to deeply nested cons with chains inside
@@ -2267,7 +2912,7 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(400, &v0)); // After path compression
         assert(!bm.occurs_check(405, &v0)); // v_left1 chains to v_left3
         assert(!bm.occurs_check(408, &v0)); // v_right1 chains to v_right3
-        assert(bm.bindings.size() == 11);  // 9 explicit + 2 from whnf on unbound vars
+        assert(bm.bindings.size() == 9);  // Only the 9 explicit bindings
     }
     
     // Test 42: Nested cons where EVERY node has a chain
@@ -2303,7 +2948,6 @@ void test_bind_map_occurs_check() {
         
         // All four target vars should be found
         assert(bm.occurs_check(501, &outer));  // va2
-        // After first check, all 4 unbound vars have been visited and have entries
         assert(bm.occurs_check(503, &outer));  // vb2
         assert(bm.occurs_check(505, &outer));  // vc2
         assert(bm.occurs_check(507, &outer));  // vd2
@@ -2314,9 +2958,8 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(504, &outer));
         assert(!bm.occurs_check(506, &outer));
         
-        // occurs_check traverses tree and calls whnf on nodes, creating entries as needed
-        // The exact count depends on traversal order and short-circuit evaluation
-        assert(bm.bindings.size() >= 8);  // At least the 8 explicit bindings
+        // Path compression updates values but doesn't change count
+        assert(bm.bindings.size() == 4);  // Still 4 entries
     }
     
     // Test 43: Chain to nested cons, where nested cons contains chains to more nested cons
@@ -2358,7 +3001,7 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(600, &v0)); // After path compression
         assert(!bm.occurs_check(602, &v0)); // v_left chains to cons (no var 602 in result)
         assert(!bm.occurs_check(603, &v0)); // v_right chains to cons (no var 603 in result)
-        assert(bm.bindings.size() == 5);
+        assert(bm.bindings.size() == 4);  // Path compression doesn't change count
     }
 }
 
@@ -2385,14 +3028,13 @@ void test_bind_map_whnf() {
         assert(bm.bindings.size() == 0);
     }
     
-    // Test 3: whnf of unbound var returns itself
+    // Test 3: whnf of unbound var returns itself (no entry created)
     {
         bind_map bm(t);
         expr v1{expr::var{0}};
         const expr* result = bm.whnf(&v1);
         assert(result == &v1);
-        assert(bm.bindings.size() == 1);
-        assert(bm.bindings.at(0) == nullptr);
+        assert(bm.bindings.size() == 0);  // No default initialization
     }
     
     // Test 4: whnf of bound var returns the binding
@@ -2497,7 +3139,7 @@ void test_bind_map_whnf() {
         assert(bm.bindings.size() == 2);
     }
     
-    // Test 9: Multiple unbound vars remain unbound
+    // Test 9: Multiple unbound vars remain unbound (no entries created)
     {
         bind_map bm(t);
         expr v1{expr::var{50}};
@@ -2505,18 +3147,13 @@ void test_bind_map_whnf() {
         expr v3{expr::var{52}};
         
         assert(bm.whnf(&v1) == &v1);
-        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.size() == 0);
         
         assert(bm.whnf(&v2) == &v2);
-        assert(bm.bindings.size() == 2);
+        assert(bm.bindings.size() == 0);
         
         assert(bm.whnf(&v3) == &v3);
-        assert(bm.bindings.size() == 3);
-        
-        // Verify all entries are null
-        assert(bm.bindings.at(50) == nullptr);
-        assert(bm.bindings.at(51) == nullptr);
-        assert(bm.bindings.at(52) == nullptr);
+        assert(bm.bindings.size() == 0);
     }
     
     // Test 10: whnf called multiple times on same var with binding
@@ -2544,11 +3181,10 @@ void test_bind_map_whnf() {
         expr v2{expr::var{71}};
         expr v3{expr::var{72}};
         
-        // Chain: v1 -> v2 -> v3 (v3 is unbound)
+        // Chain: v1 -> v2 -> v3 (v3 is unbound - no entry for it)
         bm.bindings[70] = &v2;
         bm.bindings[71] = &v3;
-        bm.bindings[72] = nullptr;  // Explicitly unbound
-        assert(bm.bindings.size() == 3);
+        assert(bm.bindings.size() == 2);
         
         const expr* result = bm.whnf(&v1);
         assert(result == &v3);  // Should return v3, the unbound var
@@ -2556,7 +3192,7 @@ void test_bind_map_whnf() {
         // Verify path compression to v3
         assert(bm.bindings.at(70) == &v3);
         assert(bm.bindings.at(71) == &v3);
-        assert(bm.bindings.size() == 3);
+        assert(bm.bindings.size() == 2);
     }
     
     // Test 12: whnf with nested cons structures
@@ -3005,33 +3641,33 @@ void test_bind_map_whnf() {
         assert(bm.bindings.size() == 5);
     }
     
-    // Test 30: Empty bindings map behavior
+    // Test 30: Empty bindings map remains empty for unbound vars
     {
         bind_map bm(t);
         assert(bm.bindings.size() == 0);
         
         expr v1{expr::var{240}};
         bm.whnf(&v1);
-        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.size() == 0);
         
         expr v2{expr::var{241}};
         bm.whnf(&v2);
-        assert(bm.bindings.size() == 2);
+        assert(bm.bindings.size() == 0);
     }
     
-    // Test 31: Same var called multiple times only creates one entry
+    // Test 31: Same unbound var called multiple times creates no entries
     {
         bind_map bm(t);
         expr v1{expr::var{250}};
         
         bm.whnf(&v1);
-        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.size() == 0);
         
         bm.whnf(&v1);
-        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.size() == 0);
         
         bm.whnf(&v1);
-        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.size() == 0);
     }
 }
 
@@ -3796,8 +4432,9 @@ void unit_test_main() {
     TEST(test_expr_pool_atom);
     TEST(test_expr_pool_var);
     TEST(test_expr_pool_cons);
-    TEST(test_bind_map_occurs_check);
+    TEST(test_bind_map_bind);
     TEST(test_bind_map_whnf);
+    TEST(test_bind_map_occurs_check);
     // TEST(test_bind_map_unify);
     // TEST(test_causal_set_empty);
     // TEST(test_causal_set_size);
