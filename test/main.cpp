@@ -1613,21 +1613,40 @@ void test_bind_map_bind() {
     {
         trail t;
         bind_map bm(t);
-        t.push();
         
         expr a1{expr::atom{"first"}};
         expr a2{expr::atom{"second"}};
         expr a3{expr::atom{"third"}};
         
+        // Frame 1: Initial binding
+        t.push();
         bm.bind(15, &a1);
         assert(bm.bindings.at(15) == &a1);
+        assert(bm.bindings.size() == 1);
         
+        // Frame 2: Update to second value
+        t.push();
         bm.bind(15, &a2);
         assert(bm.bindings.at(15) == &a2);
+        assert(bm.bindings.size() == 1);
         
+        // Frame 3: Update to third value
+        t.push();
         bm.bind(15, &a3);
         assert(bm.bindings.at(15) == &a3);
+        assert(bm.bindings.size() == 1);
         
+        // Pop Frame 3: restore to a2
+        t.pop();
+        assert(bm.bindings.at(15) == &a2);
+        assert(bm.bindings.size() == 1);
+        
+        // Pop Frame 2: restore to a1
+        t.pop();
+        assert(bm.bindings.at(15) == &a1);
+        assert(bm.bindings.size() == 1);
+        
+        // Pop Frame 1: remove entry
         t.pop();
         assert(bm.bindings.size() == 0);
     }
