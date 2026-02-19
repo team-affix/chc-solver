@@ -5969,7 +5969,7 @@ void test_bind_map_unify() {
         // Result: all three vars in same equivalence class
         assert(bm.unify(&c1, &c2));
         size_t bindings_after_first = bm.bindings.size();
-        assert(bindings_after_first == 2);  // 2 bindings
+        assert(bindings_after_first == 2);  // 2 bindings (2 vars point to the third)
         
         // V1, V2, V3 should all reduce to the same thing
         const expr* result1 = bm.whnf(&v1);
@@ -5992,7 +5992,797 @@ void test_bind_map_unify() {
         
         t.pop();
     }
+    
+    // ========== STRUCTURAL OCCURS CHECK CASES ==========
+    
+    // Test 54: Structural occurs check - cons(V1, a) with cons(cons(V1, b), a)
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{89}};
+        expr v2{expr::var{89}};  // Same index
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        
+        expr c1{expr::cons{&v1, &a1}};
+        
+        // Build cons(cons(V1, b), a) - V1 appears nested inside
+        expr inner{expr::cons{&v2, &a2}};
+        expr c2{expr::cons{&inner, &a1}};
+        
+        // Should fail: trying to bind V1 to cons(cons(V1, b), a) which contains V1
+        assert(!bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 0);  // Occurs check prevents binding
+        
+        t.pop();
+    }
+    
+    // Test 55: Structural occurs check - cons(V1, V1) with cons(a, cons(V1, b))
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{90}};
+        expr v2{expr::var{90}};  // Same index
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        
+        expr c1{expr::cons{&v1, &v1}};
+        
+        // Build cons(a, cons(V1, b))
+        expr inner{expr::cons{&v2, &a2}};
+        expr c2{expr::cons{&a1, &inner}};
+        
+        // Unifying cons(V1, V1) with cons(a, cons(V1, b))
+        // lhs: V1 with a - succeeds, binds V1 to a
+        // rhs: V1 with cons(V1, b) - should fail occurs check (V1 in structure)
+        assert(!bm.unify(&c1, &c2));
+        // Partial binding: V1 was bound to 'a' before rhs occurs check failed
+        assert(bm.bindings.size() == 1);
+        assert(bm.whnf(&v1) == &a1);
+        
+        t.pop();
+    }
+    
+    // Test 56: Structural occurs check - cons(cons(V1, V2), V1) with cons(cons(a, b), cons(c, V1))
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{91}};
+        expr v2{expr::var{92}};
+        expr v3{expr::var{91}};  // Same as V1
+        expr v4{expr::var{91}};  // Same as V1
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        expr a3{expr::atom{"c"}};
+        
+        // Build cons(cons(V1, V2), V1)
+        expr inner1{expr::cons{&v1, &v2}};
+        expr c1{expr::cons{&inner1, &v1}};
+        
+        // Build cons(cons(a, b), cons(c, V1))
+        expr inner2{expr::cons{&a1, &a2}};
+        expr inner3{expr::cons{&a3, &v3}};
+        expr c2{expr::cons{&inner2, &inner3}};
+        
+        // Unifying cons(cons(V1, V2), V1) with cons(cons(a, b), cons(c, V1))
+        // lhs: cons(V1, V2) with cons(a, b) - binds V1 to a, V2 to b
+        // rhs: V1 with cons(c, V1) - should fail occurs check (V1 in structure)
+        assert(!bm.unify(&c1, &c2));
+        // Partial bindings: V1->a and V2->b from lhs before rhs occurs check failed
+        assert(bm.bindings.size() == 2);
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v2) == &a2);
+        
+        t.pop();
+    }
+    
+    // Test 57: Structural occurs check through chain - cons(V1, V2) with cons(a, cons(V3, b)) where V1->V3
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{93}};
+        expr v2{expr::var{94}};
+        expr v3{expr::var{93}};  // Same as V1
+        expr v4{expr::var{95}};
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        
+        // Pre-existing chain: V4 -> V1
+        bm.bindings[95] = &v1;
+        
+        expr c1{expr::cons{&v4, &v2}};
+        
+        // Build cons(a, cons(V1, b))
+        expr inner{expr::cons{&v3, &a2}};
+        expr c2{expr::cons{&a1, &inner}};
+        
+        // Unifying cons(V4, V2) with cons(a, cons(V1, b))
+        // V4 reduces to V1 via chain
+        // lhs: V1 with a - succeeds, binds V1 to a
+        // rhs: V2 with cons(V1, b) - should fail occurs check through chain (V4->V1 in structure)
+        // Wait, V1 is already bound to 'a' at this point, so cons(V1, b) reduces to cons(a, b)
+        // Actually this should succeed
+        assert(bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 3);  // Original chain + V1->a + V2->cons(a,b)
+        
+        t.pop();
+    }
+    
+    // Test 58: Structural occurs check - V1 appears multiple times, one occurrence creates cycle
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{96}};
+        expr v2{expr::var{96}};  // Same as V1
+        expr v3{expr::var{96}};  // Same as V1
+        expr a1{expr::atom{"a"}};
+        
+        // Build cons(V1, cons(a, V1)) - V1 appears twice
+        expr inner{expr::cons{&a1, &v2}};
+        expr c1{expr::cons{&v1, &inner}};
+        
+        // Build cons(cons(V1, a), cons(a, b))
+        expr a2{expr::atom{"b"}};
+        expr inner2{expr::cons{&v3, &a1}};
+        expr inner3{expr::cons{&a1, &a2}};
+        expr c2{expr::cons{&inner2, &inner3}};
+        
+        // Unifying cons(V1, cons(a, V1)) with cons(cons(V1, a), cons(a, b))
+        // lhs: V1 with cons(V1, a) - should fail occurs check immediately
+        assert(!bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 0);  // Occurs check prevents binding
+        
+        t.pop();
+    }
+    
+    // ========== MULTIPLE OCCURRENCES OF SAME VAR ==========
+    
+    // Test 59: cons(V1, cons(V1, V1)) unified with cons(a, cons(a, a))
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{97}};
+        expr v2{expr::var{97}};  // Same as V1
+        expr v3{expr::var{97}};  // Same as V1
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"a"}};
+        expr a3{expr::atom{"a"}};
+        
+        // Build cons(V1, cons(V1, V1))
+        expr inner1{expr::cons{&v2, &v3}};
+        expr c1{expr::cons{&v1, &inner1}};
+        
+        // Build cons(a, cons(a, a))
+        expr inner2{expr::cons{&a2, &a3}};
+        expr c2{expr::cons{&a1, &inner2}};
+        
+        // All three occurrences of V1 must unify to 'a'
+        assert(bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 1);  // Just V1->a
+        assert(bm.bindings.count(97) == 1);
+        assert(bm.whnf(&v1) == &a1);
+        
+        t.pop();
+    }
+    
+    // Test 60: cons(cons(V1, V1), V1) - var in nested lhs and top-level rhs
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{98}};
+        expr v2{expr::var{98}};  // Same as V1
+        expr v3{expr::var{98}};  // Same as V1
+        expr a1{expr::atom{"x"}};
+        expr a2{expr::atom{"x"}};
+        expr a3{expr::atom{"x"}};
+        
+        // Build cons(cons(V1, V1), V1)
+        expr inner1{expr::cons{&v1, &v2}};
+        expr c1{expr::cons{&inner1, &v3}};
+        
+        // Build cons(cons(x, x), x)
+        expr inner2{expr::cons{&a1, &a2}};
+        expr c2{expr::cons{&inner2, &a3}};
+        
+        assert(bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 1);  // Just V1->x
+        assert(bm.bindings.count(98) == 1);
+        assert(bm.whnf(&v1) == &a1);
+        
+        t.pop();
+    }
+    
+    // Test 61: cons(V1, cons(V1, V1)) fails occurs check with cons(cons(V1, a), b)
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{99}};
+        expr v2{expr::var{99}};  // Same as V1
+        expr v3{expr::var{99}};  // Same as V1
+        expr v4{expr::var{99}};  // Same as V1
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        
+        // Build cons(V1, cons(V1, V1))
+        expr inner1{expr::cons{&v2, &v3}};
+        expr c1{expr::cons{&v1, &inner1}};
+        
+        // Build cons(cons(V1, a), b)
+        expr inner2{expr::cons{&v4, &a1}};
+        expr c2{expr::cons{&inner2, &a2}};
+        
+        // Unifying cons(V1, cons(V1, V1)) with cons(cons(V1, a), b)
+        // lhs: V1 with cons(V1, a) - should fail occurs check
+        assert(!bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 0);  // Occurs check prevents binding
+        
+        t.pop();
+    }
+    
+    // ========== ADDITIONAL STRUCTURAL TESTS ==========
+    
+    // Test 62: Var appears in both lhs and rhs of cons - consistent binding
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{100}};
+        expr v2{expr::var{101}};
+        expr a1{expr::atom{"a"}};
+        
+        // Pre-bind V2 to V1
+        bm.bindings[101] = &v1;
+        
+        expr c1{expr::cons{&v1, &v2}};
+        expr c2{expr::cons{&a1, &v1}};
+        
+        // Unifying cons(V1, V2) with cons(a, V1)
+        // V2 reduces to V1, so we're unifying cons(V1, V1) with cons(a, V1)
+        // lhs: V1 with a - binds V1 to a
+        // rhs: V1 with V1 - same thing, succeeds
+        assert(bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 2);  // Original V2->V1 + V1->a
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v2) == &a1);  // V2 transitively reduces to a
+        
+        t.pop();
+    }
+    
+    // Test 63: cons(V1, cons(V2, V1)) with cons(V2, cons(V1, V2)) - complex symmetry
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{102}};
+        expr v2{expr::var{103}};
+        
+        // Build cons(V1, cons(V2, V1))
+        expr inner1{expr::cons{&v2, &v1}};
+        expr c1{expr::cons{&v1, &inner1}};
+        
+        // Build cons(V2, cons(V1, V2))
+        expr inner2{expr::cons{&v1, &v2}};
+        expr c2{expr::cons{&v2, &inner2}};
+        
+        // Unifying cons(V1, cons(V2, V1)) with cons(V2, cons(V1, V2))
+        // lhs: V1 with V2 - creates binding (say 102->103)
+        // rhs: cons(V2, V1) with cons(V1, V2)
+        //   Both V1 and V2 now reduce to 103, so:
+        //   - lhs of rhs: V2 with V1 - both reduce to 103, succeeds
+        //   - rhs of rhs: V1 with V2 - both reduce to 103, succeeds
+        assert(bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 1);  // Just V1 and V2 unified
+        assert(bm.bindings.count(102) == 1 || bm.bindings.count(103) == 1);
+        assert(bm.whnf(&v1) == bm.whnf(&v2));
+        const expr* result = bm.whnf(&v1);
+        assert(result == &v1 || result == &v2);
+        
+        t.pop();
+    }
+    
+    // ========== CHAIN EXTENSION THROUGH UNIFICATION ==========
+    
+    // Test 64: Pre-existing chain extended by structural unification
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{104}};
+        expr v2{expr::var{105}};
+        expr v3{expr::var{106}};
+        expr a1{expr::atom{"a"}};
+        
+        // Pre-existing chain: V1 -> V2
+        bm.bindings[104] = &v2;
+        
+        expr c1{expr::cons{&v1, &a1}};
+        expr c2{expr::cons{&v3, &a1}};
+        
+        // Unify cons(V1, a) with cons(V3, a)
+        // V1 reduces to V2, so we unify V2 with V3
+        assert(bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 2);  // Original chain + new binding
+        // Either V2->V3 or V3->V2
+        assert(bm.bindings.count(105) == 1 || bm.bindings.count(106) == 1);
+        assert(bm.whnf(&v1) == bm.whnf(&v3));
+        assert(bm.whnf(&v2) == bm.whnf(&v3));
+        
+        t.pop();
+    }
+    
+    // Test 65: Multiple chains merge through structural unification
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{107}};
+        expr v2{expr::var{108}};
+        expr v3{expr::var{109}};
+        expr v4{expr::var{110}};
+        expr v5{expr::var{111}};
+        
+        // Pre-existing chains: V1->V2, V3->V4
+        bm.bindings[107] = &v2;
+        bm.bindings[109] = &v4;
+        
+        // Unify cons(V2, V4) with cons(V5, V5)
+        expr c1{expr::cons{&v2, &v4}};
+        expr c2{expr::cons{&v5, &v5}};
+        
+        // lhs: V2 with V5 - binds one to the other
+        // rhs: V4 with V5 - both now in same equivalence class
+        assert(bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 3 || bm.bindings.size() == 4);  // Original 2 chains + 1-2 new bindings
+        
+        // All five vars should reduce to the same thing
+        const expr* result = bm.whnf(&v1);
+        assert(bm.whnf(&v2) == result);
+        assert(bm.whnf(&v3) == result);
+        assert(bm.whnf(&v4) == result);
+        assert(bm.whnf(&v5) == result);
+        
+        t.pop();
+    }
+    
+    // ========== NESTED CONS WITH SHARED INNER STRUCTURE ==========
+    
+    // Test 66: Shared inner cons cell
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{112}};
+        expr v2{expr::var{113}};
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        
+        // Create shared inner: cons(V1, a)
+        expr inner{expr::cons{&v1, &a1}};
+        
+        // Build cons(inner, V2) and cons(inner, b)
+        expr c1{expr::cons{&inner, &v2}};
+        expr c2{expr::cons{&inner, &a2}};
+        
+        // Unify cons(inner, V2) with cons(inner, b)
+        // lhs: inner with inner - same pointer, succeeds
+        // rhs: V2 with b - binds V2 to b
+        assert(bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 1);  // Just V2->b, inner unchanged
+        assert(bm.bindings.count(113) == 1);
+        assert(bm.whnf(&v2) == &a2);
+        assert(bm.whnf(&v1) == &v1);  // V1 still unbound
+        
+        t.pop();
+    }
+    
+    // ========== MULTIPLE FAILURES WITH TRAIL ISOLATION ==========
+    
+    // Test 67: Multiple failures in sequence - trail isolation
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{114}};
+        expr v2{expr::var{115}};
+        expr a1{expr::atom{"x"}};
+        expr a2{expr::atom{"y"}};
+        expr a3{expr::atom{"z"}};
+        
+        // First failure
+        t.push();
+        expr c1{expr::cons{&v1, &a1}};
+        expr c2{expr::cons{&a2, &a3}};  // Mismatched rhs
+        assert(!bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 1);  // Partial: V1->a2
+        assert(bm.whnf(&v1) == &a2);
+        t.pop();
+        
+        // After pop, bindings should be undone
+        assert(bm.bindings.size() == 0);
+        assert(bm.whnf(&v1) == &v1);
+        assert(bm.whnf(&v2) == &v2);
+        
+        // Second failure - different partial bindings
+        t.push();
+        expr a4{expr::atom{"w"}};
+        expr a5{expr::atom{"q"}};
+        expr c3{expr::cons{&v2, &a4}};
+        expr c4{expr::cons{&a5, &a1}};  // Mismatched rhs
+        assert(!bm.unify(&c3, &c4));
+        assert(bm.bindings.size() == 1);  // Partial: V2->a5
+        assert(bm.whnf(&v2) == &a5);
+        assert(bm.whnf(&v1) == &v1);  // V1 still unbound (isolated from first failure)
+        t.pop();
+        
+        // After second pop, all bindings undone
+        assert(bm.bindings.size() == 0);
+        assert(bm.whnf(&v1) == &v1);
+        assert(bm.whnf(&v2) == &v2);
+    }
+    
+    // ========== DEEPLY NESTED IDENTICAL SUBSTRUCTURES ==========
+    
+    // Test 68: cons(cons(V1, V1), cons(V1, V1)) - var appears 4 times
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{116}};
+        expr v2{expr::var{116}};
+        expr v3{expr::var{116}};
+        expr v4{expr::var{116}};
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"a"}};
+        expr a3{expr::atom{"a"}};
+        expr a4{expr::atom{"a"}};
+        
+        // Build cons(cons(V1, V1), cons(V1, V1))
+        expr left1{expr::cons{&v1, &v2}};
+        expr right1{expr::cons{&v3, &v4}};
+        expr c1{expr::cons{&left1, &right1}};
+        
+        // Build cons(cons(a, a), cons(a, a))
+        expr left2{expr::cons{&a1, &a2}};
+        expr right2{expr::cons{&a3, &a4}};
+        expr c2{expr::cons{&left2, &right2}};
+        
+        // All four occurrences must bind consistently
+        assert(bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 1);  // Just V1->a
+        assert(bm.bindings.count(116) == 1);
+        assert(bm.whnf(&v1) == &a1);
+        
+        t.pop();
+    }
+    
+    // ========== CONS CHILDREN BOUND TO CONS CELLS ==========
+    
+    // Test 69: Vars bound to cons cells, then unified
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{117}};
+        expr v2{expr::var{118}};
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        
+        // Create cons(a, b)
+        expr c_ab{expr::cons{&a1, &a2}};
+        
+        // Bind both V1 and V2 to the same cons cell
+        bm.bindings[117] = &c_ab;
+        bm.bindings[118] = &c_ab;
+        
+        // Unify V1 with V2 - both reduce to same cons, should succeed
+        assert(bm.unify(&v1, &v2));
+        assert(bm.bindings.size() == 2);  // No new binding
+        assert(bm.whnf(&v1) == &c_ab);
+        assert(bm.whnf(&v2) == &c_ab);
+        
+        t.pop();
+    }
+    
+    // Test 70: Var bound to cons, unified with cons containing vars
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{119}};
+        expr v2{expr::var{120}};
+        expr v3{expr::var{121}};
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        
+        // Create cons(a, b) and bind V1 to it
+        expr c_ab{expr::cons{&a1, &a2}};
+        bm.bindings[119] = &c_ab;
+        
+        // Unify V1 with cons(V2, V3)
+        expr c2{expr::cons{&v2, &v3}};
+        
+        // V1 reduces to cons(a, b), so we unify cons(a, b) with cons(V2, V3)
+        // This should bind V2 to a and V3 to b
+        assert(bm.unify(&v1, &c2));
+        assert(bm.bindings.size() == 3);  // Original V1->cons + V2->a + V3->b
+        assert(bm.bindings.count(120) == 1);
+        assert(bm.bindings.count(121) == 1);
+        assert(bm.whnf(&v2) == &a1);
+        assert(bm.whnf(&v3) == &a2);
+        
+        t.pop();
+    }
+    
+    // ========== UNIFICATION ORDERING MATTERS ==========
+    
+    // Test 71: Pre-bound var causes failure in structural unification
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{122}};
+        expr v2{expr::var{123}};
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        expr a3{expr::atom{"c"}};
+        
+        // Pre-bind V1 to 'c'
+        bm.bindings[122] = &a3;
+        
+        // Unify cons(V1, a) with cons(b, V2)
+        expr c1{expr::cons{&v1, &a1}};
+        expr c2{expr::cons{&a2, &v2}};
+        
+        // lhs: V1 (reduces to c) with b - should fail
+        assert(!bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 1);  // Only original binding, no partial
+        assert(bm.whnf(&v1) == &a3);
+        assert(bm.whnf(&v2) == &v2);  // V2 unbound
+        
+        t.pop();
+    }
+    
+    // Test 72: Pre-bound var in rhs causes partial binding
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{124}};
+        expr v2{expr::var{125}};
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        expr a3{expr::atom{"c"}};
+        
+        // Pre-bind V2 to 'c'
+        bm.bindings[125] = &a3;
+        
+        // Unify cons(V1, a) with cons(b, V2)
+        expr c1{expr::cons{&v1, &a1}};
+        expr c2{expr::cons{&a2, &v2}};
+        
+        // lhs: V1 with b - succeeds, binds V1 to b
+        // rhs: a with V2 (reduces to c) - should fail
+        assert(!bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 2);  // Original V2->c + partial V1->b
+        assert(bm.bindings.count(124) == 1);
+        assert(bm.whnf(&v1) == &a2);
+        assert(bm.whnf(&v2) == &a3);
+        
+        t.pop();
+    }
+    
+    // ========== TRIPLE-NESTED CONS ==========
+    
+    // Test 73: Triple-nested cons with vars at each level
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{126}};
+        expr v2{expr::var{127}};
+        expr v3{expr::var{128}};
+        expr v4{expr::var{129}};
+        expr a1{expr::atom{"w"}};
+        expr a2{expr::atom{"x"}};
+        expr a3{expr::atom{"y"}};
+        expr a4{expr::atom{"z"}};
+        
+        // Build cons(cons(cons(V1, V2), V3), V4)
+        expr inner1{expr::cons{&v1, &v2}};
+        expr inner2{expr::cons{&inner1, &v3}};
+        expr c1{expr::cons{&inner2, &v4}};
+        
+        // Build cons(cons(cons(w, x), y), z)
+        expr inner3{expr::cons{&a1, &a2}};
+        expr inner4{expr::cons{&inner3, &a3}};
+        expr c2{expr::cons{&inner4, &a4}};
+        
+        assert(bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 4);  // Four bindings created
+        assert(bm.bindings.count(126) == 1);
+        assert(bm.bindings.count(127) == 1);
+        assert(bm.bindings.count(128) == 1);
+        assert(bm.bindings.count(129) == 1);
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v2) == &a2);
+        assert(bm.whnf(&v3) == &a3);
+        assert(bm.whnf(&v4) == &a4);
+        
+        t.pop();
+    }
+    
+    // Test 74: Triple-nested with some pre-existing bindings
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{130}};
+        expr v2{expr::var{131}};
+        expr v3{expr::var{132}};
+        expr v4{expr::var{133}};
+        expr a1{expr::atom{"w"}};
+        expr a2{expr::atom{"x"}};
+        expr a3{expr::atom{"y"}};
+        expr a4{expr::atom{"z"}};
+        
+        // Pre-bind V2 to x
+        bm.bindings[131] = &a2;
+        
+        // Build cons(cons(cons(V1, V2), V3), V4)
+        expr inner1{expr::cons{&v1, &v2}};
+        expr inner2{expr::cons{&inner1, &v3}};
+        expr c1{expr::cons{&inner2, &v4}};
+        
+        // Build cons(cons(cons(w, x), y), z)
+        expr inner3{expr::cons{&a1, &a2}};
+        expr inner4{expr::cons{&inner3, &a3}};
+        expr c2{expr::cons{&inner4, &a4}};
+        
+        // V2 is already bound to x, so unification should succeed
+        assert(bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 4);  // Original 1 + 3 new bindings
+        assert(bm.bindings.count(130) == 1);
+        assert(bm.bindings.count(132) == 1);
+        assert(bm.bindings.count(133) == 1);
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v2) == &a2);
+        assert(bm.whnf(&v3) == &a3);
+        assert(bm.whnf(&v4) == &a4);
+        
+        t.pop();
+    }
+    
+    // ========== COMPLEX CHAIN NETWORKS ==========
+    
+    // Test 75: Unification creates long chains through structure
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{134}};
+        expr v2{expr::var{135}};
+        expr v3{expr::var{136}};
+        expr v4{expr::var{137}};
+        expr v5{expr::var{138}};
+        expr v6{expr::var{139}};
+        
+        // First unification: cons(V1, V2) with cons(V3, V4)
+        expr c1{expr::cons{&v1, &v2}};
+        expr c2{expr::cons{&v3, &v4}};
+        assert(bm.unify(&c1, &c2));
+        size_t bindings_after_first = bm.bindings.size();
+        assert(bindings_after_first == 2);  // V1 and V2 each bound
+        
+        // Second unification: cons(V3, V5) with cons(V6, V1)
+        expr c3{expr::cons{&v3, &v5}};
+        expr c4{expr::cons{&v6, &v1}};
+        assert(bm.unify(&c3, &c4));
+        
+        // Now we have a complex network:
+        // From first: V1 and V3 unified, V2 and V4 unified
+        // From second: V3 and V6 unified, V5 and V1 unified
+        // Result: V1, V3, V5, V6 all in one equivalence class
+        //         V2, V4 in another equivalence class
+        assert(bm.whnf(&v1) == bm.whnf(&v3));
+        assert(bm.whnf(&v1) == bm.whnf(&v5));
+        assert(bm.whnf(&v1) == bm.whnf(&v6));
+        assert(bm.whnf(&v2) == bm.whnf(&v4));
+        
+        t.pop();
+    }
+    
+    // ========== STRUCTURAL OCCURS CHECK WITH MULTIPLE VAR OCCURRENCES ==========
+    
+    // Test 76: Occurs check with var appearing multiple times in target structure
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{140}};
+        expr v2{expr::var{140}};  // Same as V1
+        expr v3{expr::var{140}};  // Same as V1
+        expr a1{expr::atom{"a"}};
+        
+        // Build cons(cons(V1, V1), a) - V1 appears twice in nested structure
+        expr inner{expr::cons{&v2, &v3}};
+        expr c1{expr::cons{&inner, &a1}};
+        
+        // Try to unify V1 with this structure containing V1
+        assert(!bm.unify(&v1, &c1));
+        assert(bm.bindings.size() == 0);  // Occurs check prevents binding
+        
+        t.pop();
+    }
+    
+    // Test 77: Var unified with deeply nested cons containing another var
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{141}};
+        expr v2{expr::var{142}};
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"x"}};
+        
+        // Build deeply nested structure: cons(cons(cons(V1, a), a), a)
+        expr inner1{expr::cons{&v1, &a1}};
+        expr inner2{expr::cons{&inner1, &a1}};
+        expr inner3{expr::cons{&inner2, &a1}};
+        
+        // Unify V2 with this nested structure
+        assert(bm.unify(&v2, &inner3));
+        assert(bm.bindings.size() == 1);  // V2 bound to nested structure
+        assert(bm.bindings.count(142) == 1);
+        assert(bm.whnf(&v2) == &inner3);
+        assert(bm.whnf(&v1) == &v1);  // V1 still unbound
+        
+        // Now unify V1 with atom
+        assert(bm.unify(&v1, &a2));
+        assert(bm.bindings.size() == 2);  // V2->nested + V1->x
+        assert(bm.bindings.count(141) == 1);
+        assert(bm.whnf(&v1) == &a2);
+        
+        t.pop();
+    }
+    
+    // Test 78: Occurs check during nested cons unification
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{143}};
+        expr v2{expr::var{144}};
+        expr v3{expr::var{143}};  // Same as V1
+        expr a1{expr::atom{"a"}};
+        
+        // Build cons(V1, V2)
+        expr c1{expr::cons{&v1, &v2}};
+        
+        // Build cons(a, cons(V1, a)) - V1 appears in rhs
+        expr inner{expr::cons{&v3, &a1}};
+        expr c2{expr::cons{&a1, &inner}};
+        
+        // Unifying cons(V1, V2) with cons(a, cons(V1, a))
+        // lhs: V1 with a - succeeds, binds V1 to a
+        // rhs: V2 with cons(V1, a) - V1 now reduces to a, so cons(a, a), should succeed
+        assert(bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 2);  // V1->a, V2->cons(a,a)
+        assert(bm.whnf(&v1) == &a1);
+        // V2 should be bound to a cons cell
+        const expr* v2_result = bm.whnf(&v2);
+        assert(std::holds_alternative<expr::cons>(v2_result->content));
+        
+        t.pop();
+    }
 }
+
 
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
