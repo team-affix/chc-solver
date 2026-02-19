@@ -1771,11 +1771,10 @@ void test_bind_map_bind() {
     
     // ========== COMPLEX SCENARIOS ==========
     
-    // Test 9: Binding vars to atoms, cons, and other vars
+    // Test 9: Binding vars to atoms, cons, and other vars across frames
     {
         trail t;
         bind_map bm(t);
-        t.push();
         
         expr a1{expr::atom{"atom"}};
         expr v1{expr::var{50}};
@@ -1783,47 +1782,83 @@ void test_bind_map_bind() {
         expr a3{expr::atom{"y"}};
         expr c1{expr::cons{&a2, &a3}};
         
-        bm.bind(50, &a1);  // var -> atom
-        bm.bind(51, &v1);  // var -> var
-        bm.bind(52, &c1);  // var -> cons
-        
-        assert(bm.bindings.size() == 3);
+        // Frame 1: var -> atom
+        t.push();
+        bm.bind(50, &a1);
+        assert(bm.bindings.size() == 1);
         assert(bm.bindings.at(50) == &a1);
+        
+        // Frame 2: var -> var
+        t.push();
+        bm.bind(51, &v1);
+        assert(bm.bindings.size() == 2);
         assert(bm.bindings.at(51) == &v1);
+        
+        // Frame 3: var -> cons
+        t.push();
+        bm.bind(52, &c1);
+        assert(bm.bindings.size() == 3);
         assert(bm.bindings.at(52) == &c1);
+        
+        // Pop frames
+        t.pop();
+        assert(bm.bindings.size() == 2);
+        
+        t.pop();
+        assert(bm.bindings.size() == 1);
         
         t.pop();
         assert(bm.bindings.size() == 0);
     }
     
-    // Test 10: Chain of bindings (manual construction)
+    // Test 10: Chain of bindings built incrementally across frames
     {
         trail t;
         bind_map bm(t);
-        t.push();
         
         expr v1{expr::var{60}};
         expr v2{expr::var{61}};
         expr v3{expr::var{62}};
         expr a1{expr::atom{"end"}};
         
-        // Create chain: 60 -> v1 -> v2 -> v3 -> a1
+        // Frame 1: Start chain 60 -> v1
+        t.push();
         bm.bind(60, &v1);
-        bm.bind(61, &v2);
-        bm.bind(62, &v3);
-        bm.bind(63, &a1);
+        assert(bm.bindings.size() == 1);
         
+        // Frame 2: Extend 61 -> v2
+        t.push();
+        bm.bind(61, &v2);
+        assert(bm.bindings.size() == 2);
+        
+        // Frame 3: Extend 62 -> v3
+        t.push();
+        bm.bind(62, &v3);
+        assert(bm.bindings.size() == 3);
+        
+        // Frame 4: Terminate 63 -> a1
+        t.push();
+        bm.bind(63, &a1);
         assert(bm.bindings.size() == 4);
+        
+        // Pop frames incrementally
+        t.pop();
+        assert(bm.bindings.size() == 3);
+        
+        t.pop();
+        assert(bm.bindings.size() == 2);
+        
+        t.pop();
+        assert(bm.bindings.size() == 1);
         
         t.pop();
         assert(bm.bindings.size() == 0);
     }
     
-    // Test 11: Deeply nested cons with multiple var bindings
+    // Test 11: Deeply nested cons with multiple var bindings across frames
     {
         trail t;
         bind_map bm(t);
-        t.push();
         
         expr v1{expr::var{70}};
         expr v2{expr::var{71}};
@@ -1836,14 +1871,30 @@ void test_bind_map_bind() {
         expr a2{expr::atom{"bound1"}};
         expr a3{expr::atom{"bound2"}};
         
+        // Frame 1: Bind first var
+        t.push();
         bm.bind(70, &a2);
-        bm.bind(71, &a3);
-        bm.bind(72, &outer);
+        assert(bm.bindings.size() == 1);
         
+        // Frame 2: Bind second var
+        t.push();
+        bm.bind(71, &a3);
+        assert(bm.bindings.size() == 2);
+        
+        // Frame 3: Bind to nested cons structure
+        t.push();
+        bm.bind(72, &outer);
         assert(bm.bindings.size() == 3);
         assert(bm.bindings.at(70) == &a2);
         assert(bm.bindings.at(71) == &a3);
         assert(bm.bindings.at(72) == &outer);
+        
+        // Pop frames
+        t.pop();
+        assert(bm.bindings.size() == 2);
+        
+        t.pop();
+        assert(bm.bindings.size() == 1);
         
         t.pop();
         assert(bm.bindings.size() == 0);
@@ -1897,24 +1948,41 @@ void test_bind_map_bind() {
         assert(bm.bindings.size() == 0);
     }
     
-    // Test 13: Binding same value multiple times (no-op optimization)
+    // Test 13: Binding same value multiple times across frames (no-op optimization)
     {
         trail t;
         bind_map bm(t);
-        t.push();
         
         expr a1{expr::atom{"same"}};
         
+        // Frame 1: Initial binding
+        t.push();
         bm.bind(90, &a1);
-        size_t initial_size = bm.bindings.size();
+        assert(bm.bindings.size() == 1);
+        size_t undo_after_frame1 = t.undo_stack.size();
         
-        // Bind same value again - should be no-op
-        bm.bind(90, &a1);
-        bm.bind(90, &a1);
-        bm.bind(90, &a1);
-        
-        assert(bm.bindings.size() == initial_size);
+        // Frame 2: No-op binding (same value)
+        t.push();
+        bm.bind(90, &a1);  // Should be no-op
+        assert(bm.bindings.size() == 1);
         assert(bm.bindings.at(90) == &a1);
+        // Verify undo stack didn't grow (no-op optimization)
+        assert(t.undo_stack.size() == undo_after_frame1);  // No new undo logged
+        
+        // Frame 3: Another no-op
+        t.push();
+        bm.bind(90, &a1);  // Should be no-op
+        bm.bind(90, &a1);  // Should be no-op
+        assert(bm.bindings.at(90) == &a1);
+        // Verify undo stack didn't grow
+        assert(t.undo_stack.size() == undo_after_frame1);  // Still no new undos
+        
+        // Pop all frames
+        t.pop();
+        assert(bm.bindings.size() == 1);
+        
+        t.pop();
+        assert(bm.bindings.size() == 1);
         
         t.pop();
         assert(bm.bindings.size() == 0);
@@ -2169,7 +2237,7 @@ void test_bind_map_bind() {
         assert(bm.bindings.size() == 0);
     }
     
-    // Test 20: No-op in nested frames
+    // Test 20: No-op in nested frames with undo stack verification
     {
         trail t;
         bind_map bm(t);
@@ -2178,12 +2246,17 @@ void test_bind_map_bind() {
         
         t.push();
         bm.bind(160, &a1);
+        size_t undo_after_bind = t.undo_stack.size();
         
         t.push();
         bm.bind(160, &a1);  // No-op
+        // Verify no undo was logged
+        assert(t.undo_stack.size() == undo_after_bind);
         
         t.push();
         bm.bind(160, &a1);  // No-op
+        // Verify no undo was logged
+        assert(t.undo_stack.size() == undo_after_bind);
         
         assert(bm.bindings.size() == 1);
         assert(bm.bindings.at(160) == &a1);
