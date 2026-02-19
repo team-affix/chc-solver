@@ -2863,44 +2863,31 @@ void test_bind_map_whnf() {
     
     // Test 32: whnf with trail - bind in frame, pop frame, verify rollback
     {
-        std::cout << "Test 32: creating trail and bind_map" << std::endl;
         trail t;
         bind_map bm(t);
         
-        std::cout << "Test 32: creating expressions" << std::endl;
         expr v1{expr::var{300}};
         expr a1{expr::atom{"frame1"}};
         
-        std::cout << "Test 32: pushing frame" << std::endl;
         t.push();
-        std::cout << "Test 32: calling bind" << std::endl;
         bm.bind(300, &a1);
-        std::cout << "Test 32: after bind" << std::endl;
         assert(bm.bindings.size() == 1);
         
-        std::cout << "Test 32: calling whnf" << std::endl;
         const expr* result = bm.whnf(&v1);
-        std::cout << "Test 32: after whnf" << std::endl;
         assert(result == &a1);
         assert(bm.bindings.size() == 1);
         
-        std::cout << "Test 32: popping frame" << std::endl;
         t.pop();
-        std::cout << "Test 32: after pop" << std::endl;
         assert(bm.bindings.size() == 0);
         
         // After pop, v1 is unbound again
-        std::cout << "Test 32: calling whnf again" << std::endl;
         result = bm.whnf(&v1);
-        std::cout << "Test 32: after second whnf" << std::endl;
         assert(result == &v1);
         assert(bm.bindings.size() == 0);
-        std::cout << "Test 32: done, trail depth = " << t.depth() << std::endl;
     }
     
     // Test 33: whnf with nested frames - multiple bindings
     {
-        std::cout << "Test 33 starting" << std::endl;
         trail t;
         bind_map bm(t);
 
@@ -3290,7 +3277,7 @@ void test_bind_map_whnf() {
         assert(bm.whnf(&v1) == &v1);
     }
     
-    // Test 42: Stress test - many frames with interleaved bindings
+    // Test 42: Stress test - path compression with trail rollback
     {
         trail t;
         bind_map bm(t);
@@ -3304,51 +3291,200 @@ void test_bind_map_whnf() {
         expr a2{expr::atom{"2"}};
         expr a3{expr::atom{"3"}};
         
-        // Frame 1
+        // Frame 1: Build chain v1 -> v2 -> a1
         t.push();
-        bm.bind(400, &v2);
-        bm.bind(401, &a1);
+        bm.bind(400, &v2);  // v1 -> v2
+        bm.bind(401, &a1);  // v2 -> a1
+        
+        // Before whnf: bindings[400] = &v2, bindings[401] = &a1
+        assert(bm.bindings.at(400) == &v2);
+        assert(bm.bindings.at(401) == &a1);
+        
+        // Call whnf to trigger path compression
         assert(bm.whnf(&v1) == &a1);
+        
+        // After whnf with path compression: bindings[400] should be compressed to &a1
+        // The compression happens via bind(400, &a1) which logs to Frame 1
+        assert(bm.bindings.at(400) == &a1);  // Path compressed!
         assert(bm.bindings.size() == 2);
         
-        std::cout << "===================abc123" << std::endl;
-        // Frame 2
+        // Frame 2: Build another chain v3 -> v4 -> a2
         t.push();
-        bm.bind(402, &v3);
-        bm.bind(403, &a2);
+        bm.bind(402, &v4);  // v3 -> v4
+        bm.bind(403, &a2);  // v4 -> a2
+        
+        // v1 still resolves to a1 (already compressed)
         assert(bm.whnf(&v1) == &a1);
+        
+        // Trigger path compression for v3
         assert(bm.whnf(&v3) == &a2);
+        assert(bm.bindings.at(402) == &a2);  // Path compressed!
         assert(bm.bindings.size() == 4);
         
-        // Frame 3
+        // Frame 3: Update v2's binding (but v1 is already compressed, so won't affect v1)
         t.push();
-        bm.bind(401, &v4);  // Update v2's binding
-        bm.bind(404, &a3);
-        assert(bm.whnf(&v1) == &a3);  // v1 -> v2 -> v4 -> a3
+        bm.bind(401, &v5);  // Update: v2 -> v5 (was v2 -> a1)
+        bm.bind(404, &a3);  // v5 -> a3
+        
+        // v1 still points to a1 because it was compressed in Frame 1
+        // bindings[400] = &a1 directly, doesn't go through v2 anymore
+        assert(bm.whnf(&v1) == &a1);
+        
+        // Check v2's chain before calling whnf (before compression)
+        assert(bm.bindings.at(401) == &v5);
+        assert(bm.bindings.at(404) == &a3);
+        
+        // v2 resolves to a3, and this triggers path compression
+        assert(bm.whnf(&v2) == &a3);
+        
+        // After whnf, v2 is compressed to point directly to a3
+        assert(bm.bindings.at(401) == &a3);  // Path compressed in Frame 3!
         assert(bm.bindings.size() == 5);
         
-        // Frame 4
+        // Frame 4: Update v5 to point to v3
         t.push();
-        bm.bind(400, &a1);  // Rebind v1 directly
-        assert(bm.whnf(&v1) == &a1);
+        bm.bind(404, &v3);  // Update: v5 -> v3 (was v5 -> a3)
+        
+        // v2 still points to a3 because it was compressed in Frame 3
+        // bindings[401] = &a3 directly, doesn't go through v5 anymore
+        assert(bm.whnf(&v2) == &a3);
+        
+        // But v5 now resolves to a2 (v5 -> v3 -> a2)
+        assert(bm.whnf(&v5) == &a2);
+        assert(bm.bindings.at(404) == &a2);  // Path compressed in Frame 4!
         assert(bm.bindings.size() == 5);
         
-        // Pop all frames one by one
-        t.pop();  // Frame 4
-        assert(bm.whnf(&v1) == &a3);
+        // Pop Frame 4: restore v5 -> a3, undo v5's compression
+        t.pop();
+        assert(bm.bindings.at(404) == &a3);  // Restored
+        assert(bm.bindings.at(401) == &a3);  // v2 still compressed (from Frame 3)
+        assert(bm.whnf(&v2) == &a3);
+        assert(bm.whnf(&v5) == &a3);
         assert(bm.bindings.size() == 5);
         
-        t.pop();  // Frame 3
+        // Pop Frame 3: restore v2 -> a1, remove v5 binding, undo v2's compression
+        t.pop();
+        assert(bm.bindings.at(401) == &a1);  // Restored to original Frame 1 value
+        assert(bm.bindings.count(404) == 0);  // v5 binding removed
+        
+        // v1 is still compressed from Frame 1
+        assert(bm.bindings.at(400) == &a1);
         assert(bm.whnf(&v1) == &a1);
+        
+        // v2 now points directly to a1 again
+        assert(bm.whnf(&v2) == &a1);
+        
+        // v3 is still compressed from Frame 2
+        assert(bm.bindings.at(402) == &a2);
+        assert(bm.whnf(&v3) == &a2);
+        
         assert(bm.bindings.size() == 4);
         
-        t.pop();  // Frame 2
+        // Pop Frame 2: remove v3, v4 bindings, undo v3's compression
+        t.pop();
+        assert(bm.bindings.count(402) == 0);  // v3 binding removed
+        assert(bm.bindings.count(403) == 0);  // v4 binding removed
+        
+        // v1 is STILL compressed from Frame 1 (compression persists across frame pops)
+        assert(bm.bindings.at(400) == &a1);
         assert(bm.whnf(&v1) == &a1);
+        
+        // v2 still points to a1 from Frame 1
+        assert(bm.bindings.at(401) == &a1);
+        assert(bm.whnf(&v2) == &a1);
+        
+        // v3 is now unbound
+        assert(bm.whnf(&v3) == &v3);
+        
         assert(bm.bindings.size() == 2);
         
-        t.pop();  // Frame 1
+        // Pop Frame 1: undo v1's compression, remove all bindings
+        t.pop();
+        assert(bm.bindings.size() == 0);
+        
+        // All vars are now unbound
+        assert(bm.whnf(&v1) == &v1);
+        assert(bm.whnf(&v2) == &v2);
+        assert(bm.whnf(&v3) == &v3);
+        assert(bm.whnf(&v4) == &v4);
+        assert(bm.whnf(&v5) == &v5);
+    }
+    
+    // Test 43: Path compression with overlapping chains and multiple compressions per frame
+    {
+        trail t;
+        bind_map bm(t);
+        
+        expr v1{expr::var{500}};
+        expr v2{expr::var{501}};
+        expr v3{expr::var{502}};
+        expr v4{expr::var{503}};
+        expr v5{expr::var{504}};
+        expr v6{expr::var{505}};
+        expr a1{expr::atom{"end"}};
+        
+        // Frame 1: Create a long chain v1 -> v2 -> v3 -> v4 -> a1
+        t.push();
+        bm.bind(500, &v2);
+        bm.bind(501, &v3);
+        bm.bind(502, &v4);
+        bm.bind(503, &a1);
+        
+        // Compress the entire chain
+        assert(bm.whnf(&v1) == &a1);
+        
+        // All intermediate nodes should be compressed to a1
+        assert(bm.bindings.at(500) == &a1);  // v1 compressed
+        assert(bm.bindings.at(501) == &a1);  // v2 compressed
+        assert(bm.bindings.at(502) == &a1);  // v3 compressed
+        assert(bm.bindings.at(503) == &a1);  // v4 already pointed to a1
+        
+        // Frame 2: Create a branch - update v3 to point to v5 -> v6 -> a1
+        t.push();
+        bm.bind(502, &v5);  // Update: v3 -> v5 (was v3 -> a1 from compression)
+        bm.bind(504, &v6);  // v5 -> v6
+        bm.bind(505, &a1);  // v6 -> a1
+        
+        // v1 and v2 still point to a1 (compressed in Frame 1)
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v2) == &a1);
+        
+        // v3 now goes through the new branch
+        assert(bm.whnf(&v3) == &a1);
+        
+        // After whnf(&v3), path compression should update v3, v5, v6
+        assert(bm.bindings.at(502) == &a1);  // v3 compressed in Frame 2
+        assert(bm.bindings.at(504) == &a1);  // v5 compressed in Frame 2
+        assert(bm.bindings.at(505) == &a1);  // v6 compressed in Frame 2
+        
+        // Frame 3: Update v2 to point to v3 (creating a new connection)
+        t.push();
+        bm.bind(501, &v3);  // Update: v2 -> v3 (was v2 -> a1 from Frame 1)
+        
+        // v2 now goes through v3, which is compressed to a1
+        assert(bm.whnf(&v2) == &a1);
+        
+        // v2 should be compressed again in Frame 3
+        assert(bm.bindings.at(501) == &a1);  // v2 re-compressed in Frame 3
+        
+        // Pop Frame 3: restore v2 -> a1 from Frame 1
+        t.pop();
+        assert(bm.bindings.at(501) == &a1);  // Back to Frame 1's compression
+        assert(bm.whnf(&v2) == &a1);
+        
+        // Pop Frame 2: restore v3 -> a1 from Frame 1, remove v5, v6
+        t.pop();
+        assert(bm.bindings.at(502) == &a1);  // Back to Frame 1's compression
+        assert(bm.bindings.count(504) == 0);  // v5 removed
+        assert(bm.bindings.count(505) == 0);  // v6 removed
+        assert(bm.whnf(&v3) == &a1);
+        
+        // Pop Frame 1: remove all bindings, undo all compressions
+        t.pop();
         assert(bm.bindings.size() == 0);
         assert(bm.whnf(&v1) == &v1);
+        assert(bm.whnf(&v2) == &v2);
+        assert(bm.whnf(&v3) == &v3);
     }
 }
 
