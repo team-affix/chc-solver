@@ -13,15 +13,17 @@ const expr* bind_map::whnf(const expr* key) {
     const expr::var& var = std::get<expr::var>(key->content);
 
     // Check if the variable is bound
-    const expr*& reduced = bindings[var.index];
+    auto it = bindings.find(var.index);
     
     // If the variable is not bound, return the key
-    if (!reduced)
+    if (it == bindings.end())
         return key;
-    
-    // If the variable is bound, return the WHNF of the bound value,
-    //     and collapse the binding on backtrack
-    return reduced = whnf(reduced);
+
+    // Get the bound value
+    const expr* bound_value = it->second;
+        
+    // Collapse the binding
+    return bind(var.index, whnf(bound_value));
 }
 
 bool bind_map::occurs_check(uint32_t index, const expr* key) {
@@ -50,7 +52,7 @@ bool bind_map::unify(const expr* lhs, const expr* rhs) {
     if (const expr::var* var = std::get_if<expr::var>(&lhs->content)) {
         if (occurs_check(var->index, rhs))
             return false;
-        bindings[var->index] = rhs;
+        bind(var->index, rhs);
         return true;
     }
 
@@ -58,7 +60,7 @@ bool bind_map::unify(const expr* lhs, const expr* rhs) {
     if (const expr::var* var = std::get_if<expr::var>(&rhs->content)) {
         if (occurs_check(var->index, lhs))
             return false;
-        bindings[var->index] = lhs;
+        bind(var->index, lhs);
         return true;
     }
 
@@ -84,7 +86,32 @@ bool bind_map::unify(const expr* lhs, const expr* rhs) {
 
 }
 
+const expr* bind_map::bind(uint32_t index, const expr* value) {
+    // look up the entry for the index
+    auto it = bindings.find(index);
 
+    if (it == bindings.end()) {
+        // if the value is not found, insert it
+        trail_ref.log([this, index]{bindings.erase(index);});
+        it = bindings.insert({index, value}).first;
+    }
+    else {
+        // Get the old value
+        const expr* old_value = it->second;
+        
+        // If the new value is the same as the old value, do nothing
+        if (old_value == value)
+            return value;
+
+        // If the new value is different from the old value, insert it
+        trail_ref.log([it, old_value]{it->second = old_value;});
+
+        // Update the value
+        it->second = value;
+    }
+    
+    return value;
+}
 
 
 
