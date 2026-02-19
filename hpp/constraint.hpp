@@ -20,7 +20,9 @@ struct constraint {
 struct constraint_id_pool {
     const constraint_id* fulfillment_child(const constraint_id*, rule_id, uint32_t);
     size_t size() const;
+#ifndef DEBUG
 private:
+#endif
     const constraint_id* intern(constraint_id&&);
     std::set<constraint_id> constraint_ids;
 };
