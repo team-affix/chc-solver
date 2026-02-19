@@ -3237,6 +3237,147 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(301, &level10));
         assert(bm.bindings.size() == 1);
     }
+    
+    // Test 41: ULTIMATE STRESS TEST - Long chain to deeply nested cons with chains inside
+    {
+        bind_map bm(t);
+        
+        // Outer chain (5 levels): v0 -> v1 -> v2 -> v3 -> v4 -> nested_cons
+        expr v0{expr::var{400}};
+        expr v1{expr::var{401}};
+        expr v2{expr::var{402}};
+        expr v3{expr::var{403}};
+        expr v4{expr::var{404}};
+        
+        // Left inner chain (3 levels): v_left1 -> v_left2 -> v_left3 (target)
+        expr v_left1{expr::var{405}};
+        expr v_left2{expr::var{406}};
+        expr v_left3{expr::var{407}};
+        bm.bindings[405] = &v_left2;
+        bm.bindings[406] = &v_left3;
+        
+        // Right inner chain (3 levels): v_right1 -> v_right2 -> v_right3
+        expr v_right1{expr::var{408}};
+        expr v_right2{expr::var{409}};
+        expr v_right3{expr::var{410}};
+        bm.bindings[408] = &v_right2;
+        bm.bindings[409] = &v_right3;
+        
+        // Build deeply nested cons (4 levels) with chains at the leaves
+        // Structure: cons(cons(cons(cons(v_left1, v_right1), atom), atom), atom)
+        expr a1{expr::atom{"a"}};
+        expr level1{expr::cons{&v_left1, &v_right1}};  // Chains in both children
+        expr level2{expr::cons{&level1, &a1}};
+        expr level3{expr::cons{&level2, &a1}};
+        expr level4{expr::cons{&level3, &a1}};
+        
+        // Setup outer chain
+        bm.bindings[400] = &v1;
+        bm.bindings[401] = &v2;
+        bm.bindings[402] = &v3;
+        bm.bindings[403] = &v4;
+        bm.bindings[404] = &level4;
+        
+        // Test: v0 chains to level4, which contains level1, which has v_left1 in lhs
+        // v_left1 chains to v_left3 (target)
+        assert(bm.occurs_check(407, &v0));  // Should find v_left3 through all the indirection
+        assert(bm.occurs_check(410, &v0));  // Should find v_right3 through all the indirection
+        assert(!bm.occurs_check(400, &v0)); // After path compression
+        assert(!bm.occurs_check(405, &v0)); // v_left1 chains to v_left3
+        assert(!bm.occurs_check(408, &v0)); // v_right1 chains to v_right3
+        assert(bm.bindings.size() == 11);  // 9 explicit + 2 from whnf on unbound vars
+    }
+    
+    // Test 42: Nested cons where EVERY node has a chain
+    {
+        bind_map bm(t);
+        
+        // Build: cons(cons(chain_a, chain_b), cons(chain_c, chain_d))
+        // where each chain is 2 levels deep
+        
+        // Chain A: va1 -> va2 (unbound)
+        expr va1{expr::var{500}};
+        expr va2{expr::var{501}};
+        bm.bindings[500] = &va2;
+        
+        // Chain B: vb1 -> vb2 (unbound)
+        expr vb1{expr::var{502}};
+        expr vb2{expr::var{503}};
+        bm.bindings[502] = &vb2;
+        
+        // Chain C: vc1 -> vc2 (unbound)
+        expr vc1{expr::var{504}};
+        expr vc2{expr::var{505}};
+        bm.bindings[504] = &vc2;
+        
+        // Chain D: vd1 -> vd2 (unbound)
+        expr vd1{expr::var{506}};
+        expr vd2{expr::var{507}};
+        bm.bindings[506] = &vd2;
+        
+        expr left{expr::cons{&va1, &vb1}};
+        expr right{expr::cons{&vc1, &vd1}};
+        expr outer{expr::cons{&left, &right}};
+        
+        // All four target vars should be found
+        assert(bm.occurs_check(501, &outer));  // va2
+        // After first check, all 4 unbound vars have been visited and have entries
+        assert(bm.occurs_check(503, &outer));  // vb2
+        assert(bm.occurs_check(505, &outer));  // vc2
+        assert(bm.occurs_check(507, &outer));  // vd2
+        
+        // None of the chain heads should be found (after compression)
+        assert(!bm.occurs_check(500, &outer));
+        assert(!bm.occurs_check(502, &outer));
+        assert(!bm.occurs_check(504, &outer));
+        assert(!bm.occurs_check(506, &outer));
+        
+        // occurs_check traverses tree and calls whnf on nodes, creating entries as needed
+        // The exact count depends on traversal order and short-circuit evaluation
+        assert(bm.bindings.size() >= 8);  // At least the 8 explicit bindings
+    }
+    
+    // Test 43: Chain to nested cons, where nested cons contains chains to more nested cons
+    {
+        bind_map bm(t);
+        
+        // Outer chain: v0 -> v1 -> outer_cons
+        expr v0{expr::var{600}};
+        expr v1{expr::var{601}};
+        
+        // Inner left chain: v_left -> inner_left_cons
+        expr v_left{expr::var{602}};
+        
+        // Inner right chain: v_right -> inner_right_cons
+        expr v_right{expr::var{603}};
+        
+        // Target var deep inside
+        expr v_target{expr::var{604}};
+        expr a1{expr::atom{"a"}};
+        
+        // Build: outer_cons = cons(v_left, v_right)
+        //        v_left -> inner_left_cons = cons(v_target, a1)
+        //        v_right -> inner_right_cons = cons(a1, a1)
+        expr inner_left_cons{expr::cons{&v_target, &a1}};
+        expr inner_right_cons{expr::cons{&a1, &a1}};
+        
+        bm.bindings[602] = &inner_left_cons;
+        bm.bindings[603] = &inner_right_cons;
+        
+        expr outer_cons{expr::cons{&v_left, &v_right}};
+        
+        bm.bindings[600] = &v1;
+        bm.bindings[601] = &outer_cons;
+        
+        // v0 -> v1 -> outer_cons
+        // outer_cons.lhs = v_left -> inner_left_cons
+        // inner_left_cons.lhs = v_target
+        assert(bm.occurs_check(604, &v0));  // Should find v_target through all the indirection
+        assert(!bm.occurs_check(600, &v0)); // After path compression
+        assert(!bm.occurs_check(602, &v0)); // v_left chains to cons (no var 602 in result)
+        assert(!bm.occurs_check(603, &v0)); // v_right chains to cons (no var 603 in result)
+        assert(bm.bindings.size() == 5);
+    }
 }
 
 // void test_unification_graph_cin_dijkstra() {
