@@ -2520,6 +2520,725 @@ void test_bind_map_whnf() {
     }
 }
 
+void test_bind_map_occurs_check() {
+    trail t;
+    
+    // occurs_check determines if a variable (by index) occurs anywhere in an expression,
+    // even through indirection via bindings. It uses whnf to follow chains.
+    // Tests cover: atoms, unbound vars, bound vars, chains, cons structures, nested cons,
+    // and various combinations. Circular bindings (undefined behavior) are not tested.
+    
+    // Test 1: occurs_check on atom - should return false
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"test"}};
+        assert(!bm.occurs_check(0, &a1));
+        assert(!bm.occurs_check(100, &a1));
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 2: occurs_check on unbound var with same index - should return true
+    {
+        bind_map bm(t);
+        expr v1{expr::var{5}};
+        assert(bm.occurs_check(5, &v1));
+        assert(bm.bindings.size() == 1);  // whnf creates entry
+    }
+    
+    // Test 3: occurs_check on unbound var with different index - should return false
+    {
+        bind_map bm(t);
+        expr v1{expr::var{10}};
+        assert(!bm.occurs_check(5, &v1));
+        assert(!bm.occurs_check(11, &v1));
+        assert(bm.bindings.size() == 1);
+    }
+    
+    // Test 4: occurs_check on var bound to atom - should return false
+    {
+        bind_map bm(t);
+        expr v1{expr::var{15}};
+        expr a1{expr::atom{"bound"}};
+        bm.bindings[15] = &a1;
+        
+        assert(!bm.occurs_check(15, &v1));  // v1 reduces to atom
+        assert(!bm.occurs_check(20, &v1));
+        assert(bm.bindings.size() == 1);
+    }
+    
+    // Test 5: occurs_check on var bound to same var - creates infinite loop, SKIP
+    // This is undefined behavior - circular binding
+    
+    // Test 6: occurs_check through chain ending in unbound var
+    {
+        bind_map bm(t);
+        expr v1{expr::var{30}};
+        expr v2{expr::var{31}};
+        expr v3{expr::var{32}};
+        
+        // Chain: v1 -> v2 -> v3 (v3 is unbound, don't set it explicitly)
+        bm.bindings[30] = &v2;
+        bm.bindings[31] = &v3;
+        // Don't set bindings[32] - let whnf handle it
+        
+        // v1 eventually points to v3 (var 32)
+        assert(bm.occurs_check(32, &v1));
+        assert(bm.bindings.size() == 3);  // whnf will create entry for 32
+    }
+    
+    // Test 7: occurs_check through chain ending in atom
+    {
+        bind_map bm(t);
+        expr v1{expr::var{40}};
+        expr v2{expr::var{41}};
+        expr a1{expr::atom{"end"}};
+        
+        // Chain: v1 -> v2 -> atom
+        bm.bindings[40] = &v2;
+        bm.bindings[41] = &a1;
+        
+        assert(!bm.occurs_check(40, &v1));
+        assert(!bm.occurs_check(41, &v1));
+        assert(!bm.occurs_check(99, &v1));
+        assert(bm.bindings.size() == 2);
+    }
+    
+    // Test 8: occurs_check on cons with no vars
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"left"}};
+        expr a2{expr::atom{"right"}};
+        expr c1{expr::cons{&a1, &a2}};
+        
+        assert(!bm.occurs_check(0, &c1));
+        assert(!bm.occurs_check(50, &c1));
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 9: occurs_check on cons with matching var in lhs
+    {
+        bind_map bm(t);
+        expr v1{expr::var{55}};
+        expr a1{expr::atom{"right"}};
+        expr c1{expr::cons{&v1, &a1}};
+        
+        assert(bm.occurs_check(55, &c1));
+        assert(!bm.occurs_check(56, &c1));
+        assert(bm.bindings.size() == 1);
+    }
+    
+    // Test 10: occurs_check on cons with matching var in rhs
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"left"}};
+        expr v1{expr::var{60}};
+        expr c1{expr::cons{&a1, &v1}};
+        
+        assert(bm.occurs_check(60, &c1));
+        assert(!bm.occurs_check(61, &c1));
+        assert(bm.bindings.size() == 1);
+    }
+    
+    // Test 11: occurs_check on cons with matching var in both children
+    {
+        bind_map bm(t);
+        expr v1{expr::var{65}};
+        expr v2{expr::var{65}};  // Same index
+        expr c1{expr::cons{&v1, &v2}};
+        
+        assert(bm.occurs_check(65, &c1));
+        assert(bm.bindings.size() == 1);
+    }
+    
+    // Test 12: occurs_check on cons with different vars
+    {
+        bind_map bm(t);
+        expr v1{expr::var{70}};
+        expr v2{expr::var{71}};
+        expr c1{expr::cons{&v1, &v2}};
+        
+        assert(bm.occurs_check(70, &c1));
+        assert(bm.occurs_check(71, &c1));
+        assert(!bm.occurs_check(72, &c1));
+        assert(bm.bindings.size() == 2);
+    }
+    
+    // Test 13: occurs_check on nested cons
+    {
+        bind_map bm(t);
+        expr v1{expr::var{75}};
+        expr a1{expr::atom{"inner"}};
+        expr inner_cons{expr::cons{&v1, &a1}};
+        expr a2{expr::atom{"outer"}};
+        expr outer_cons{expr::cons{&inner_cons, &a2}};
+        
+        assert(bm.occurs_check(75, &outer_cons));  // v1 is in nested cons
+        assert(!bm.occurs_check(76, &outer_cons));
+        assert(bm.bindings.size() == 1);
+    }
+    
+    // Test 14: occurs_check on deeply nested cons
+    {
+        bind_map bm(t);
+        expr v1{expr::var{80}};
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        expr a3{expr::atom{"c"}};
+        
+        // Build: cons(cons(cons(v1, a1), a2), a3)
+        expr inner1{expr::cons{&v1, &a1}};
+        expr inner2{expr::cons{&inner1, &a2}};
+        expr outer{expr::cons{&inner2, &a3}};
+        
+        assert(bm.occurs_check(80, &outer));
+        assert(!bm.occurs_check(81, &outer));
+        assert(bm.bindings.size() == 1);
+    }
+    
+    // Test 15: occurs_check with var bound to cons containing same var (indirect cycle)
+    // This is undefined behavior - circular binding
+    // {
+    //     bind_map bm(t);
+    //     expr v1{expr::var{85}};
+    //     expr v2{expr::var{85}};  // Same index
+    //     expr a1{expr::atom{"test"}};
+    //     expr c1{expr::cons{&v2, &a1}};
+    //     
+    //     bm.bindings[85] = &c1;
+    //     
+    //     // v1 is bound to cons containing v2 (same index), so occurs_check should find it
+    //     assert(bm.occurs_check(85, &v1));
+    //     assert(bm.bindings.size() == 1);
+    // }
+    
+    // Test 16: occurs_check with var bound to cons not containing that var
+    {
+        bind_map bm(t);
+        expr v1{expr::var{90}};
+        expr v2{expr::var{91}};
+        expr a1{expr::atom{"test"}};
+        expr c1{expr::cons{&v2, &a1}};
+        
+        bm.bindings[90] = &c1;
+        
+        assert(!bm.occurs_check(90, &v1));  // v1 -> c1, but c1 doesn't contain v1
+        assert(bm.occurs_check(91, &v1));   // v1 -> c1 which contains v2
+        assert(bm.bindings.size() == 2);
+    }
+    
+    // Test 17: occurs_check through chain to cons
+    {
+        bind_map bm(t);
+        expr v1{expr::var{95}};
+        expr v2{expr::var{96}};
+        expr v3{expr::var{97}};
+        expr a1{expr::atom{"test"}};
+        expr c1{expr::cons{&v3, &a1}};
+        
+        // Chain: v1 -> v2 -> c1 (which contains v3, v3 unbound)
+        bm.bindings[95] = &v2;
+        bm.bindings[96] = &c1;
+        
+        assert(!bm.occurs_check(95, &v1));  // After whnf, v1 -> c1, doesn't contain v1
+        assert(!bm.occurs_check(96, &v1));
+        assert(bm.occurs_check(97, &v1));   // c1 contains v3
+        assert(bm.bindings.size() == 3);
+    }
+    
+    // Test 18: occurs_check on cons with bound vars
+    {
+        bind_map bm(t);
+        expr v1{expr::var{100}};
+        expr v2{expr::var{101}};
+        expr a1{expr::atom{"bound"}};
+        
+        // Bind v2 to atom
+        bm.bindings[101] = &a1;
+        
+        expr c1{expr::cons{&v1, &v2}};
+        
+        assert(bm.occurs_check(100, &c1));  // v1 is in cons
+        assert(!bm.occurs_check(101, &c1)); // v2 reduces to atom
+        assert(bm.bindings.size() == 2);
+    }
+    
+    // Test 19: occurs_check with multiple levels of indirection
+    {
+        bind_map bm(t);
+        expr v1{expr::var{105}};
+        expr v2{expr::var{106}};
+        expr v3{expr::var{107}};
+        expr v4{expr::var{108}};
+        
+        // Chain: v1 -> v2 -> v3 -> v4 (v4 unbound)
+        bm.bindings[105] = &v2;
+        bm.bindings[106] = &v3;
+        bm.bindings[107] = &v4;
+        
+        assert(bm.occurs_check(108, &v1));  // Eventually points to v4
+        assert(!bm.occurs_check(105, &v1)); // After path compression
+        assert(bm.bindings.size() == 4);
+    }
+    
+    // Test 20: occurs_check on cons where both children are bound vars
+    {
+        bind_map bm(t);
+        expr v1{expr::var{110}};
+        expr v2{expr::var{111}};
+        expr a1{expr::atom{"left_bound"}};
+        expr a2{expr::atom{"right_bound"}};
+        
+        bm.bindings[110] = &a1;
+        bm.bindings[111] = &a2;
+        
+        expr c1{expr::cons{&v1, &v2}};
+        
+        assert(!bm.occurs_check(110, &c1));  // Both reduce to atoms
+        assert(!bm.occurs_check(111, &c1));
+        assert(!bm.occurs_check(112, &c1));
+        assert(bm.bindings.size() == 2);
+    }
+    
+    // Test 21: occurs_check on cons with chain in lhs
+    {
+        bind_map bm(t);
+        expr v1{expr::var{115}};
+        expr v2{expr::var{116}};
+        expr v3{expr::var{117}};
+        expr a1{expr::atom{"rhs"}};
+        
+        // v1 -> v2 -> v3 (v3 unbound)
+        bm.bindings[115] = &v2;
+        bm.bindings[116] = &v3;
+        
+        expr c1{expr::cons{&v1, &a1}};
+        
+        assert(bm.occurs_check(117, &c1));  // v1 chains to v3
+        assert(!bm.occurs_check(115, &c1)); // After compression
+        assert(!bm.occurs_check(116, &c1));
+        assert(bm.bindings.size() == 3);
+    }
+    
+    // Test 22: occurs_check with cons of cons, target var in nested structure
+    {
+        bind_map bm(t);
+        expr v1{expr::var{120}};
+        expr v2{expr::var{121}};
+        expr a1{expr::atom{"a"}};
+        
+        expr inner{expr::cons{&v1, &a1}};
+        expr outer{expr::cons{&inner, &v2}};
+        
+        assert(bm.occurs_check(120, &outer));
+        assert(bm.occurs_check(121, &outer));
+        assert(!bm.occurs_check(122, &outer));
+        assert(bm.bindings.size() == 2);
+    }
+    
+    // Test 23: occurs_check on var bound to deeply nested structure
+    {
+        bind_map bm(t);
+        expr v_outer{expr::var{125}};
+        expr v_inner{expr::var{126}};
+        expr a1{expr::atom{"deep"}};
+        expr a2{expr::atom{"deeper"}};
+        
+        // Build nested: cons(cons(v_inner, a1), a2)
+        expr inner{expr::cons{&v_inner, &a1}};
+        expr outer{expr::cons{&inner, &a2}};
+        
+        bm.bindings[125] = &outer;
+        
+        assert(!bm.occurs_check(125, &v_outer));  // v_outer -> outer, doesn't contain itself
+        assert(bm.occurs_check(126, &v_outer));   // outer contains v_inner
+        assert(bm.bindings.size() == 2);
+    }
+    
+    // Test 24: occurs_check with symmetric cons (same var on both sides)
+    {
+        bind_map bm(t);
+        expr v1{expr::var{130}};
+        expr v2{expr::var{130}};  // Same var
+        expr c1{expr::cons{&v1, &v2}};
+        
+        assert(bm.occurs_check(130, &c1));
+        assert(bm.bindings.size() == 1);
+    }
+    
+    // Test 25: occurs_check on empty bindings map
+    {
+        bind_map bm(t);
+        expr v1{expr::var{135}};
+        
+        assert(bm.bindings.size() == 0);
+        assert(bm.occurs_check(135, &v1));
+        assert(bm.bindings.size() == 1);  // whnf creates entry
+    }
+    
+    // Test 26: occurs_check with var bound through multiple cons layers
+    {
+        bind_map bm(t);
+        expr v1{expr::var{140}};
+        expr v2{expr::var{141}};
+        expr a1{expr::atom{"base"}};
+        
+        // Build: cons(cons(a1, v2), a1) where v2 is unbound
+        expr inner{expr::cons{&a1, &v2}};
+        expr outer{expr::cons{&inner, &a1}};
+        
+        bm.bindings[140] = &outer;
+        
+        assert(!bm.occurs_check(140, &v1));  // v1 -> outer, doesn't contain itself
+        assert(bm.occurs_check(141, &v1));   // outer contains v2
+        assert(bm.bindings.size() == 2);
+    }
+    
+    // Test 27: occurs_check with all atoms (no vars anywhere)
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        expr a3{expr::atom{"c"}};
+        
+        expr c1{expr::cons{&a1, &a2}};
+        expr c2{expr::cons{&c1, &a3}};
+        
+        assert(!bm.occurs_check(0, &c2));
+        assert(!bm.occurs_check(999, &c2));
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 28: occurs_check with var bound to var bound to cons containing target
+    {
+        bind_map bm(t);
+        expr v1{expr::var{145}};
+        expr v2{expr::var{146}};
+        expr v3{expr::var{147}};
+        expr a1{expr::atom{"test"}};
+        
+        expr c1{expr::cons{&v3, &a1}};  // v3 unbound
+        bm.bindings[145] = &v2;
+        bm.bindings[146] = &c1;
+        
+        assert(!bm.occurs_check(145, &v1));  // After whnf, v1 -> c1
+        assert(!bm.occurs_check(146, &v1));
+        assert(bm.occurs_check(147, &v1));   // c1 contains v3
+        assert(bm.bindings.size() == 3);
+    }
+    
+    // Test 29: Very long chain (10 levels) ending in unbound var
+    {
+        bind_map bm(t);
+        expr v0{expr::var{200}};
+        expr v1{expr::var{201}};
+        expr v2{expr::var{202}};
+        expr v3{expr::var{203}};
+        expr v4{expr::var{204}};
+        expr v5{expr::var{205}};
+        expr v6{expr::var{206}};
+        expr v7{expr::var{207}};
+        expr v8{expr::var{208}};
+        expr v9{expr::var{209}};
+        
+        // Chain: v0 -> v1 -> v2 -> ... -> v9 (unbound)
+        bm.bindings[200] = &v1;
+        bm.bindings[201] = &v2;
+        bm.bindings[202] = &v3;
+        bm.bindings[203] = &v4;
+        bm.bindings[204] = &v5;
+        bm.bindings[205] = &v6;
+        bm.bindings[206] = &v7;
+        bm.bindings[207] = &v8;
+        bm.bindings[208] = &v9;
+        
+        assert(bm.occurs_check(209, &v0));  // v0 eventually points to v9
+        assert(!bm.occurs_check(200, &v0)); // After path compression
+        assert(!bm.occurs_check(205, &v0)); // Middle of chain
+        assert(bm.bindings.size() == 10);  // 9 bindings + 1 for v9 from whnf
+    }
+    
+    // Test 30: Very long chain ending in atom
+    {
+        bind_map bm(t);
+        expr v0{expr::var{210}};
+        expr v1{expr::var{211}};
+        expr v2{expr::var{212}};
+        expr v3{expr::var{213}};
+        expr v4{expr::var{214}};
+        expr v5{expr::var{215}};
+        expr v6{expr::var{216}};
+        expr v7{expr::var{217}};
+        expr a1{expr::atom{"end"}};
+        
+        bm.bindings[210] = &v1;
+        bm.bindings[211] = &v2;
+        bm.bindings[212] = &v3;
+        bm.bindings[213] = &v4;
+        bm.bindings[214] = &v5;
+        bm.bindings[215] = &v6;
+        bm.bindings[216] = &v7;
+        bm.bindings[217] = &a1;
+        
+        assert(!bm.occurs_check(210, &v0));
+        assert(!bm.occurs_check(217, &v0));
+        assert(!bm.occurs_check(999, &v0));
+        assert(bm.bindings.size() == 8);
+    }
+    
+    // Test 31: Deeply nested cons (5 levels) with var at bottom
+    {
+        bind_map bm(t);
+        expr v1{expr::var{220}};
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        expr a3{expr::atom{"c"}};
+        expr a4{expr::atom{"d"}};
+        
+        // Build: cons(cons(cons(cons(cons(v1, a1), a2), a3), a4), a1)
+        expr level1{expr::cons{&v1, &a1}};
+        expr level2{expr::cons{&level1, &a2}};
+        expr level3{expr::cons{&level2, &a3}};
+        expr level4{expr::cons{&level3, &a4}};
+        expr level5{expr::cons{&level4, &a1}};
+        
+        assert(bm.occurs_check(220, &level5));
+        assert(!bm.occurs_check(221, &level5));
+        assert(bm.bindings.size() == 1);
+    }
+    
+    // Test 32: Deeply nested cons with var at different positions
+    {
+        bind_map bm(t);
+        expr v1{expr::var{225}};
+        expr v2{expr::var{226}};
+        expr v3{expr::var{227}};
+        expr a1{expr::atom{"x"}};
+        
+        // Build: cons(cons(v1, v2), cons(a1, v3))
+        expr left{expr::cons{&v1, &v2}};
+        expr right{expr::cons{&a1, &v3}};
+        expr outer{expr::cons{&left, &right}};
+        
+        assert(bm.occurs_check(225, &outer));  // v1 in left subtree
+        assert(bm.occurs_check(226, &outer));  // v2 in left subtree
+        assert(bm.occurs_check(227, &outer));  // v3 in right subtree
+        assert(!bm.occurs_check(228, &outer));
+        assert(bm.bindings.size() == 3);
+    }
+    
+    // Test 33: Var bound to deeply nested cons containing bound vars
+    {
+        bind_map bm(t);
+        expr v_outer{expr::var{230}};
+        expr v1{expr::var{231}};
+        expr v2{expr::var{232}};
+        expr v3{expr::var{233}};
+        expr a1{expr::atom{"bound1"}};
+        expr a2{expr::atom{"bound2"}};
+        
+        // Bind some vars to atoms
+        bm.bindings[231] = &a1;
+        bm.bindings[232] = &a2;
+        
+        // Build: cons(cons(v1, v2), cons(v3, a1))
+        expr left{expr::cons{&v1, &v2}};
+        expr right{expr::cons{&v3, &a1}};
+        expr outer{expr::cons{&left, &right}};
+        
+        bm.bindings[230] = &outer;
+        
+        // v_outer -> outer, check what's in outer
+        assert(!bm.occurs_check(230, &v_outer));  // v_outer doesn't contain itself
+        assert(!bm.occurs_check(231, &v_outer));  // v1 reduces to atom
+        assert(!bm.occurs_check(232, &v_outer));  // v2 reduces to atom
+        assert(bm.occurs_check(233, &v_outer));   // v3 is unbound in outer
+        assert(bm.bindings.size() == 4);
+    }
+    
+    // Test 34: Long chain to deeply nested cons with target var deep inside
+    {
+        bind_map bm(t);
+        expr v_chain1{expr::var{240}};
+        expr v_chain2{expr::var{241}};
+        expr v_chain3{expr::var{242}};
+        expr v_target{expr::var{243}};
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        
+        // Build nested cons: cons(cons(cons(v_target, a1), a2), a1)
+        expr inner1{expr::cons{&v_target, &a1}};
+        expr inner2{expr::cons{&inner1, &a2}};
+        expr outer{expr::cons{&inner2, &a1}};
+        
+        // Chain: v_chain1 -> v_chain2 -> v_chain3 -> outer
+        bm.bindings[240] = &v_chain2;
+        bm.bindings[241] = &v_chain3;
+        bm.bindings[242] = &outer;
+        
+        assert(bm.occurs_check(243, &v_chain1));  // Target is deep in the cons
+        assert(!bm.occurs_check(240, &v_chain1)); // After path compression
+        assert(!bm.occurs_check(241, &v_chain1));
+        assert(!bm.occurs_check(242, &v_chain1));
+        assert(bm.bindings.size() == 4);
+    }
+    
+    // Test 35: Cons with chains in both children
+    {
+        bind_map bm(t);
+        expr v_left1{expr::var{250}};
+        expr v_left2{expr::var{251}};
+        expr v_left3{expr::var{252}};
+        expr v_right1{expr::var{253}};
+        expr v_right2{expr::var{254}};
+        expr v_right3{expr::var{255}};
+        
+        // Left chain: v_left1 -> v_left2 -> v_left3 (unbound)
+        bm.bindings[250] = &v_left2;
+        bm.bindings[251] = &v_left3;
+        
+        // Right chain: v_right1 -> v_right2 -> v_right3 (unbound)
+        bm.bindings[253] = &v_right2;
+        bm.bindings[254] = &v_right3;
+        
+        expr c1{expr::cons{&v_left1, &v_right1}};
+        
+        assert(bm.occurs_check(252, &c1));  // v_left3 via left child
+        assert(bm.occurs_check(255, &c1));  // v_right3 via right child
+        assert(!bm.occurs_check(250, &c1)); // After path compression
+        assert(!bm.occurs_check(253, &c1)); // After path compression
+        assert(bm.bindings.size() == 6);  // 4 initial + 2 from whnf on unbound vars
+    }
+    
+    // Test 36: Very complex nested structure with multiple vars at different depths
+    {
+        bind_map bm(t);
+        expr v1{expr::var{260}};
+        expr v2{expr::var{261}};
+        expr v3{expr::var{262}};
+        expr v4{expr::var{263}};
+        expr v5{expr::var{264}};
+        expr a1{expr::atom{"atom"}};
+        
+        // Build: cons(cons(v1, cons(v2, v3)), cons(cons(v4, v5), a1))
+        expr inner_left_right{expr::cons{&v2, &v3}};
+        expr inner_left{expr::cons{&v1, &inner_left_right}};
+        expr inner_right_left{expr::cons{&v4, &v5}};
+        expr inner_right{expr::cons{&inner_right_left, &a1}};
+        expr outer{expr::cons{&inner_left, &inner_right}};
+        
+        assert(bm.occurs_check(260, &outer));  // v1 in left subtree
+        assert(bm.occurs_check(261, &outer));  // v2 in left subtree, nested
+        assert(bm.occurs_check(262, &outer));  // v3 in left subtree, nested
+        assert(bm.occurs_check(263, &outer));  // v4 in right subtree, nested
+        assert(bm.occurs_check(264, &outer));  // v5 in right subtree, nested
+        assert(!bm.occurs_check(265, &outer));
+        assert(bm.bindings.size() == 5);
+    }
+    
+    // Test 37: Chain to cons, where cons children are also chains
+    {
+        bind_map bm(t);
+        expr v_outer{expr::var{270}};
+        expr v_mid{expr::var{271}};
+        
+        expr v_left1{expr::var{272}};
+        expr v_left2{expr::var{273}};
+        expr a_left{expr::atom{"left_end"}};
+        
+        expr v_right1{expr::var{274}};
+        expr v_right2{expr::var{275}};
+        expr a_right{expr::atom{"right_end"}};
+        
+        // Left chain: v_left1 -> v_left2 -> a_left
+        bm.bindings[272] = &v_left2;
+        bm.bindings[273] = &a_left;
+        
+        // Right chain: v_right1 -> v_right2 -> a_right
+        bm.bindings[274] = &v_right2;
+        bm.bindings[275] = &a_right;
+        
+        expr c1{expr::cons{&v_left1, &v_right1}};
+        
+        // Outer chain: v_outer -> v_mid -> c1
+        bm.bindings[270] = &v_mid;
+        bm.bindings[271] = &c1;
+        
+        // After whnf, v_outer -> c1
+        // c1's children will be reduced when occurs_check recurses
+        assert(!bm.occurs_check(270, &v_outer));
+        assert(!bm.occurs_check(271, &v_outer));
+        assert(!bm.occurs_check(272, &v_outer));  // v_left1 reduces to atom
+        assert(!bm.occurs_check(273, &v_outer));  // v_left2 reduces to atom
+        assert(!bm.occurs_check(274, &v_outer));  // v_right1 reduces to atom
+        assert(!bm.occurs_check(275, &v_outer));  // v_right2 reduces to atom
+        assert(bm.bindings.size() == 6);
+    }
+    
+    // Test 38: Cons with one child being a long chain ending in target var
+    {
+        bind_map bm(t);
+        expr v1{expr::var{280}};
+        expr v2{expr::var{281}};
+        expr v3{expr::var{282}};
+        expr v4{expr::var{283}};
+        expr v5{expr::var{284}};
+        expr a1{expr::atom{"other"}};
+        
+        // Chain: v1 -> v2 -> v3 -> v4 -> v5 (unbound)
+        bm.bindings[280] = &v2;
+        bm.bindings[281] = &v3;
+        bm.bindings[282] = &v4;
+        bm.bindings[283] = &v5;
+        
+        expr c1{expr::cons{&v1, &a1}};
+        
+        assert(bm.occurs_check(284, &c1));  // v5 is at end of chain in lhs
+        assert(!bm.occurs_check(280, &c1)); // After path compression
+        assert(bm.bindings.size() == 5);  // 4 initial + 1 from whnf on v5
+    }
+    
+    // Test 39: Multiple nested cons with same var appearing in different positions
+    {
+        bind_map bm(t);
+        expr v1{expr::var{290}};
+        expr v2{expr::var{290}};  // Same index as v1
+        expr v3{expr::var{290}};  // Same index as v1
+        expr a1{expr::atom{"x"}};
+        
+        // Build: cons(cons(v1, a1), cons(v2, v3))
+        expr left{expr::cons{&v1, &a1}};
+        expr right{expr::cons{&v2, &v3}};
+        expr outer{expr::cons{&left, &right}};
+        
+        assert(bm.occurs_check(290, &outer));  // Var 290 appears 3 times
+        assert(bm.bindings.size() == 1);
+    }
+    
+    // Test 40: Stress test - very deep nesting (10 levels) with var at bottom
+    {
+        bind_map bm(t);
+        expr v1{expr::var{300}};
+        expr a1{expr::atom{"a"}};
+        
+        // Build 10 levels of nesting
+        expr* current = &v1;
+        expr level1{expr::cons{current, &a1}};
+        expr level2{expr::cons{&level1, &a1}};
+        expr level3{expr::cons{&level2, &a1}};
+        expr level4{expr::cons{&level3, &a1}};
+        expr level5{expr::cons{&level4, &a1}};
+        expr level6{expr::cons{&level5, &a1}};
+        expr level7{expr::cons{&level6, &a1}};
+        expr level8{expr::cons{&level7, &a1}};
+        expr level9{expr::cons{&level8, &a1}};
+        expr level10{expr::cons{&level9, &a1}};
+        
+        assert(bm.occurs_check(300, &level10));  // Should find v1 at the bottom
+        assert(!bm.occurs_check(301, &level10));
+        assert(bm.bindings.size() == 1);
+    }
+}
+
 // void test_unification_graph_cin_dijkstra() {
 //     trail t;
     
@@ -2961,6 +3680,7 @@ void unit_test_main() {
     TEST(test_expr_pool_var);
     TEST(test_expr_pool_cons);
     TEST(test_bind_map_whnf);
+    TEST(test_bind_map_occurs_check);
     // TEST(test_causal_set_empty);
     // TEST(test_causal_set_size);
     // TEST(test_causal_set_count);
