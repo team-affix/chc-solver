@@ -4975,6 +4975,7 @@ void test_bind_map_unify() {
         expr c1{expr::cons{&a1, &a2}};
         assert(bm.unify(&v1, &c1));
         assert(bm.bindings.size() == 1);
+        assert(bm.bindings.count(2) == 1);  // v1 is bound
         assert(bm.whnf(&v1) == &c1);
 
         t.pop();
@@ -4991,6 +4992,7 @@ void test_bind_map_unify() {
         expr c1{expr::cons{&a1, &a2}};
         assert(bm.unify(&c1, &v1));  // Commuted
         assert(bm.bindings.size() == 1);
+        assert(bm.bindings.count(3) == 1);  // v1 is bound
         assert(bm.whnf(&v1) == &c1);
 
         t.pop();
@@ -5005,10 +5007,13 @@ void test_bind_map_unify() {
         expr v2{expr::var{5}};
         assert(bm.unify(&v1, &v2));
         assert(bm.bindings.size() == 1);  // One var bound to the other
-        // One should be bound to the other
+        // Verify one of them is bound (either 4->v2 or 5->v1)
+        assert(bm.bindings.count(4) == 1 || bm.bindings.count(5) == 1);
+        // Both should reduce to the same thing
         const expr* result1 = bm.whnf(&v1);
         const expr* result2 = bm.whnf(&v2);
-        assert(result1 == result2);  // Both reduce to same thing
+        assert(result1 == result2);
+        assert(result1 == &v1 || result1 == &v2);  // Result is one of the vars
         t.pop();
     }
     
@@ -5021,9 +5026,13 @@ void test_bind_map_unify() {
         expr v2{expr::var{7}};
         assert(bm.unify(&v2, &v1));  // Commuted
         assert(bm.bindings.size() == 1);
+        // Verify one of them is bound (either 6->v2 or 7->v1)
+        assert(bm.bindings.count(6) == 1 || bm.bindings.count(7) == 1);
+        // Both should reduce to the same thing
         const expr* result1 = bm.whnf(&v1);
         const expr* result2 = bm.whnf(&v2);
         assert(result1 == result2);
+        assert(result1 == &v1 || result1 == &v2);  // Result is one of the vars
 
         t.pop();
     }
@@ -5040,7 +5049,7 @@ void test_bind_map_unify() {
         expr a1{expr::atom{"test"}};
         expr c1{expr::cons{&v2, &a1}};
         assert(!bm.unify(&v1, &c1));  // Should fail occurs check
-        // Bindings may be created during occurs_check
+        assert(bm.bindings.size() == 0);  // No binding created (occurs check before bind)
 
         t.pop();
     }
@@ -5055,6 +5064,7 @@ void test_bind_map_unify() {
         expr a1{expr::atom{"test"}};
         expr c1{expr::cons{&v2, &a1}};
         assert(!bm.unify(&c1, &v1));  // Commuted
+        assert(bm.bindings.size() == 0);  // No binding created (occurs check before bind)
 
         t.pop();
     }
@@ -5074,6 +5084,7 @@ void test_bind_map_unify() {
         
         expr c1{expr::cons{&v2, &a1}};
         assert(!bm.unify(&v1, &c1));  // Should fail: v1 with cons containing chain to v1
+        assert(bm.bindings.size() == 1);  // Only original binding (v2 -> v3), no new binding
 
         t.pop();
     }
@@ -5092,6 +5103,7 @@ void test_bind_map_unify() {
         
         expr c1{expr::cons{&v2, &a1}};
         assert(!bm.unify(&c1, &v1));  // Commuted
+        assert(bm.bindings.size() == 1);  // Only original binding (v2 -> v3), no new binding
 
         t.pop();
     }
@@ -5111,6 +5123,7 @@ void test_bind_map_unify() {
         expr outer{expr::cons{&inner2, &a1}};
         
         assert(!bm.unify(&v1, &outer));  // Should fail
+        assert(bm.bindings.size() == 0);  // No binding created (occurs check before bind)
 
         t.pop();
     }
@@ -5129,6 +5142,7 @@ void test_bind_map_unify() {
         expr outer{expr::cons{&inner2, &a1}};
         
         assert(!bm.unify(&outer, &v1));  // Commuted
+        assert(bm.bindings.size() == 0);  // No binding created (occurs check before bind)
 
         t.pop();
     }
@@ -5148,6 +5162,8 @@ void test_bind_map_unify() {
         bm.bindings[20] = &v2;
         
         assert(bm.unify(&v1, &a1));  // Should bind v2 to a1
+        assert(bm.bindings.size() == 2);  // Original chain + new binding (v2 -> a1)
+        assert(bm.bindings.count(21) == 1);  // v2 is now bound
         assert(bm.whnf(&v1) == &a1);
         assert(bm.whnf(&v2) == &a1);
 
@@ -5166,6 +5182,8 @@ void test_bind_map_unify() {
         bm.bindings[22] = &v2;
         
         assert(bm.unify(&a1, &v1));  // Commuted
+        assert(bm.bindings.size() == 2);  // Original chain + new binding (v2 -> a1)
+        assert(bm.bindings.count(23) == 1);  // v2 is now bound
         assert(bm.whnf(&v1) == &a1);
         assert(bm.whnf(&v2) == &a1);
 
@@ -5183,8 +5201,10 @@ void test_bind_map_unify() {
         // v1 -> v2
         bm.bindings[24] = &v2;
         
-        assert(bm.unify(&v1, &v2));  // Both reduce to v2
-        assert(bm.whnf(&v1) == bm.whnf(&v2));
+        assert(bm.unify(&v1, &v2));  // Both reduce to v2, already unified
+        assert(bm.bindings.size() == 1);  // No new binding created
+        assert(bm.whnf(&v1) == &v2);
+        assert(bm.whnf(&v2) == &v2);
 
         t.pop();
     }
@@ -5200,7 +5220,9 @@ void test_bind_map_unify() {
         bm.bindings[26] = &v2;
         
         assert(bm.unify(&v2, &v1));  // Commuted
-        assert(bm.whnf(&v1) == bm.whnf(&v2));
+        assert(bm.bindings.size() == 1);  // No new binding created
+        assert(bm.whnf(&v1) == &v2);
+        assert(bm.whnf(&v2) == &v2);
 
         t.pop();
     }
@@ -5222,6 +5244,8 @@ void test_bind_map_unify() {
         bm.bindings[30] = &v4;
         
         assert(bm.unify(&v1, &a1));  // Should bind v4 to a1
+        assert(bm.bindings.size() == 4);  // 3 original chain + 1 new binding (v4 -> a1)
+        assert(bm.bindings.count(31) == 1);  // v4 is now bound
         assert(bm.whnf(&v1) == &a1);
         assert(bm.whnf(&v4) == &a1);
 
@@ -5244,6 +5268,8 @@ void test_bind_map_unify() {
         bm.bindings[34] = &v4;
         
         assert(bm.unify(&a1, &v1));  // Commuted
+        assert(bm.bindings.size() == 4);  // 3 original chain + 1 new binding (v4 -> a1)
+        assert(bm.bindings.count(35) == 1);  // v4 is now bound
         assert(bm.whnf(&v1) == &a1);
         assert(bm.whnf(&v4) == &a1);
 
@@ -5304,6 +5330,7 @@ void test_bind_map_unify() {
         expr c2{expr::cons{&a3, &a4}};
         
         assert(!bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 0);  // No bindings created (all atoms)
 
         t.pop();
     }
@@ -5322,6 +5349,7 @@ void test_bind_map_unify() {
         expr c2{expr::cons{&a3, &a4}};
         
         assert(!bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 0);  // No bindings created (all atoms)
 
         t.pop();
     }
@@ -5340,6 +5368,8 @@ void test_bind_map_unify() {
         expr c2{expr::cons{&a2, &a3}};
         
         assert(bm.unify(&c1, &c2));  // Should bind v1 to a2
+        assert(bm.bindings.size() == 1);  // One binding created
+        assert(bm.bindings.count(40) == 1);  // v1 is bound
         assert(bm.whnf(&v1) == &a2);
 
         t.pop();
@@ -5359,6 +5389,8 @@ void test_bind_map_unify() {
         expr c2{expr::cons{&a2, &a3}};
         
         assert(bm.unify(&c2, &c1));  // Commuted
+        assert(bm.bindings.size() == 1);  // One binding created
+        assert(bm.bindings.count(41) == 1);  // v1 is bound
         assert(bm.whnf(&v1) == &a2);
 
         t.pop();
@@ -5378,6 +5410,9 @@ void test_bind_map_unify() {
         expr c2{expr::cons{&a2, &a3}};
         
         assert(!bm.unify(&c1, &c2));  // rhs children don't match
+        // Partial binding left: v1 was bound to a2 before rhs failed
+        assert(bm.bindings.size() == 1);
+        assert(bm.whnf(&v1) == &a2);
 
         t.pop();
     }
@@ -5396,6 +5431,9 @@ void test_bind_map_unify() {
         expr c2{expr::cons{&a2, &a3}};
         
         assert(!bm.unify(&c2, &c1));  // Commuted
+        // Partial binding left: v1 was bound to a2 before rhs failed
+        assert(bm.bindings.size() == 1);
+        assert(bm.whnf(&v1) == &a2);
 
         t.pop();
     }
@@ -5496,7 +5534,12 @@ void test_bind_map_unify() {
         expr c2{expr::cons{&v2, &a2}};
         
         assert(bm.unify(&c1, &c2));  // Should bind v1 to v2
+        assert(bm.bindings.size() == 1);  // Verify binding was created
+        assert(bm.bindings.count(50) == 1 || bm.bindings.count(51) == 1);
         assert(bm.whnf(&v1) == bm.whnf(&v2));
+        // Both should reduce to one of the vars
+        const expr* result = bm.whnf(&v1);
+        assert(result == &v1 || result == &v2);
 
         t.pop();
     }
@@ -5515,7 +5558,12 @@ void test_bind_map_unify() {
         expr c2{expr::cons{&v2, &a2}};
         
         assert(bm.unify(&c2, &c1));  // Commuted
+        assert(bm.bindings.size() == 1);  // Verify binding was created
+        assert(bm.bindings.count(52) == 1 || bm.bindings.count(53) == 1);
         assert(bm.whnf(&v1) == bm.whnf(&v2));
+        // Both should reduce to one of the vars
+        const expr* result = bm.whnf(&v1);
+        assert(result == &v1 || result == &v2);
 
         t.pop();
     }
@@ -5538,6 +5586,9 @@ void test_bind_map_unify() {
         expr c2{expr::cons{&a2, &inner2}};
         
         assert(bm.unify(&c1, &c2));  // v1 -> a2, v2 -> a3
+        assert(bm.bindings.size() == 2);  // Two bindings created
+        assert(bm.bindings.count(54) == 1);  // v1 is bound
+        assert(bm.bindings.count(55) == 1);  // v2 is bound
         assert(bm.whnf(&v1) == &a2);
         assert(bm.whnf(&v2) == &a3);
 
@@ -5562,6 +5613,9 @@ void test_bind_map_unify() {
         expr c2{expr::cons{&a2, &inner2}};
         
         assert(bm.unify(&c2, &c1));  // Commuted
+        assert(bm.bindings.size() == 2);  // Two bindings created
+        assert(bm.bindings.count(56) == 1);  // v1 is bound
+        assert(bm.bindings.count(57) == 1);  // v2 is bound
         assert(bm.whnf(&v1) == &a2);
         assert(bm.whnf(&v2) == &a3);
 
@@ -5582,14 +5636,17 @@ void test_bind_map_unify() {
         
         // First unification: v1 with a1
         assert(bm.unify(&v1, &a1));
+        assert(bm.bindings.size() == 1);
         assert(bm.whnf(&v1) == &a1);
         
         // Second unification: v2 with a2
         assert(bm.unify(&v2, &a2));
+        assert(bm.bindings.size() == 2);
         assert(bm.whnf(&v2) == &a2);
         
         // Third unification: v3 with a3
         assert(bm.unify(&v3, &a3));
+        assert(bm.bindings.size() == 3);
         assert(bm.whnf(&v3) == &a3);
         
         // All bindings should persist
@@ -5611,9 +5668,11 @@ void test_bind_map_unify() {
         
         // First: unify v1 with v2
         assert(bm.unify(&v1, &v2));
+        assert(bm.bindings.size() == 1);  // One binding created
         
         // Second: unify v1 with a1 (should bind v2 to a1 via v1)
         assert(bm.unify(&v1, &a1));
+        assert(bm.bindings.size() == 2);  // Two bindings total
         
         // Both should now point to a1
         assert(bm.whnf(&v1) == &a1);
@@ -5629,6 +5688,7 @@ void test_bind_map_unify() {
         t.push();
         expr v1{expr::var{65}};
         assert(bm.unify(&v1, &v1));  // Same pointer
+        assert(bm.bindings.size() == 0);  // No binding created
 
         t.pop();
     }
@@ -5644,6 +5704,7 @@ void test_bind_map_unify() {
         bm.bindings[66] = &a1;
         
         assert(bm.unify(&v1, &a1));  // v1 reduces to a1, unifying a1 with a1
+        assert(bm.bindings.size() == 1);  // No new binding, still just the original
 
         t.pop();
     }
@@ -5661,6 +5722,7 @@ void test_bind_map_unify() {
         bm.bindings[68] = &a1;
         
         assert(bm.unify(&v1, &v2));  // Both reduce to a1
+        assert(bm.bindings.size() == 2);  // No new binding, still just the two original
 
         t.pop();
     }
@@ -5679,6 +5741,7 @@ void test_bind_map_unify() {
         bm.bindings[70] = &a2;
         
         assert(!bm.unify(&v1, &v2));  // Reduce to different atoms
+        assert(bm.bindings.size() == 2);  // No new binding, still just the two original
 
         t.pop();
     }
@@ -5709,6 +5772,10 @@ void test_bind_map_unify() {
         expr outer2{expr::cons{&left2, &right2}};
         
         assert(bm.unify(&outer1, &outer2));
+        assert(bm.bindings.size() == 3);  // Three bindings: v1->a2, v2->a3, v3->a4
+        assert(bm.bindings.count(71) == 1);  // v1 is bound
+        assert(bm.bindings.count(72) == 1);  // v2 is bound
+        assert(bm.bindings.count(73) == 1);  // v3 is bound
         assert(bm.whnf(&v1) == &a2);
         assert(bm.whnf(&v2) == &a3);
         assert(bm.whnf(&v3) == &a4);
@@ -5733,8 +5800,12 @@ void test_bind_map_unify() {
         bm.bindings[76] = &v4;
         
         assert(bm.unify(&v1, &v3));  // Should unify v2 with v4
+        assert(bm.bindings.size() == 3);  // Original 2 chains + 1 new binding (v2 <-> v4)
         assert(bm.whnf(&v1) == bm.whnf(&v3));
         assert(bm.whnf(&v2) == bm.whnf(&v4));
+        // All four vars should reduce to the same final target
+        const expr* result = bm.whnf(&v1);
+        assert(result == &v2 || result == &v4);  // Should be one of the tail vars
 
         t.pop();
     }
@@ -5753,6 +5824,7 @@ void test_bind_map_unify() {
         expr c2{expr::cons{&a3, &a4}};
         
         assert(!bm.unify(&c1, &c2));  // lhs matches, rhs doesn't
+        assert(bm.bindings.size() == 0);  // No bindings created (all atoms)
 
         t.pop();
     }
@@ -5771,6 +5843,7 @@ void test_bind_map_unify() {
         expr c2{expr::cons{&a3, &a4}};
         
         assert(!bm.unify(&c1, &c2));  // Should fail on lhs
+        assert(bm.bindings.size() == 0);  // No bindings created (all atoms)
 
         t.pop();
     }
@@ -5799,6 +5872,9 @@ void test_bind_map_unify() {
         expr outer2{expr::cons{&inner4, &a5}};
         
         assert(bm.unify(&outer1, &outer2));
+        assert(bm.bindings.size() == 2);  // Two bindings: v1->a2, v2->a4
+        assert(bm.bindings.count(80) == 1);  // v1 is bound
+        assert(bm.bindings.count(81) == 1);  // v2 is bound
         assert(bm.whnf(&v1) == &a2);
         assert(bm.whnf(&v2) == &a4);
 
