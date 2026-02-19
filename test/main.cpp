@@ -1395,67 +1395,140 @@ void test_expr_pool_atom() {
     
     // Test corner case: content added in earlier frame should not be removed by later frame pop
     t.push();  // Frame A
+    assert(pool.exprs.size() == checkpoint_start);
+    
     const expr* early_content_1 = pool.atom("early_1");
+    assert(pool.exprs.size() == checkpoint_start + 1);
+    assert(pool.exprs.count(*early_content_1) == 1);
+    
     const expr* early_content_2 = pool.atom("early_2");
+    assert(pool.exprs.size() == checkpoint_start + 2);
+    assert(pool.exprs.count(*early_content_2) == 1);
+    
     size_t checkpoint_a = pool.size();
     assert(checkpoint_a == checkpoint_start + 2);
+    assert(pool.exprs.size() == checkpoint_a);
     
     t.push();  // Frame B
+    assert(pool.exprs.size() == checkpoint_a);
+    
     const expr* mid_content = pool.atom("mid_content");
+    assert(pool.exprs.size() == checkpoint_a + 1);
+    assert(pool.exprs.count(*mid_content) == 1);
+    
     size_t checkpoint_b = pool.size();
     assert(checkpoint_b == checkpoint_a + 1);
+    assert(pool.exprs.size() == checkpoint_b);
     
     // Re-intern early content in Frame B - should not log since already exists
     const expr* early_content_1_again = pool.atom("early_1");
     assert(early_content_1 == early_content_1_again);
     assert(pool.size() == checkpoint_b);  // Size unchanged
+    assert(pool.exprs.size() == checkpoint_b);  // Set size also unchanged
+    assert(pool.exprs.count(*early_content_1) == 1);  // Still in set
     
     // Add more new content in Frame B
     const expr* late_content_1 = pool.atom("late_1");
+    assert(pool.exprs.size() == checkpoint_b + 1);
+    assert(pool.exprs.count(*late_content_1) == 1);
+    
     const expr* late_content_2 = pool.atom("late_2");
+    assert(pool.exprs.size() == checkpoint_b + 2);
+    assert(pool.exprs.count(*late_content_2) == 1);
+    
     size_t checkpoint_b_final = pool.size();
     assert(checkpoint_b_final == checkpoint_b + 2);
+    assert(pool.exprs.size() == checkpoint_b_final);
     
     t.push();  // Frame C
+    assert(pool.exprs.size() == checkpoint_b_final);
+    
     // Re-intern content from both Frame A and Frame B
     const expr* early_content_2_again = pool.atom("early_2");
     assert(early_content_2 == early_content_2_again);
+    assert(pool.exprs.size() == checkpoint_b_final);  // No change
+    assert(pool.exprs.count(*early_content_2) == 1);
+    
     const expr* mid_content_again = pool.atom("mid_content");
     assert(mid_content == mid_content_again);
     assert(pool.size() == checkpoint_b_final);  // Size unchanged
+    assert(pool.exprs.size() == checkpoint_b_final);  // Set size unchanged
+    assert(pool.exprs.count(*mid_content) == 1);
     
     // Add new content in Frame C
     const expr* frame_c_content = pool.atom("frame_c");
+    assert(pool.exprs.size() == checkpoint_b_final + 1);
+    assert(pool.exprs.count(*frame_c_content) == 1);
+    
     size_t checkpoint_c = pool.size();
     assert(checkpoint_c == checkpoint_b_final + 1);
+    assert(pool.exprs.size() == checkpoint_c);
+    
+    // Verify all content from all frames is present
+    assert(pool.exprs.count(*early_content_1) == 1);
+    assert(pool.exprs.count(*early_content_2) == 1);
+    assert(pool.exprs.count(*mid_content) == 1);
+    assert(pool.exprs.count(*late_content_1) == 1);
+    assert(pool.exprs.count(*late_content_2) == 1);
+    assert(pool.exprs.count(*frame_c_content) == 1);
     
     // Pop Frame C - only frame_c_content should be removed
     t.pop();
     assert(pool.size() == checkpoint_b_final);
+    assert(pool.exprs.size() == checkpoint_b_final);
+    
+    // frame_c_content should no longer be in the set
+    // Note: We can't safely dereference frame_c_content after it's removed from the set
+    // because the pointer may be invalidated. We can only check what remains.
     
     // Verify early and mid content still exist
     const expr* verify_early_1 = pool.atom("early_1");
     assert(verify_early_1 == early_content_1);
+    assert(pool.exprs.count(*verify_early_1) == 1);
+    
     const expr* verify_mid = pool.atom("mid_content");
     assert(verify_mid == mid_content);
+    assert(pool.exprs.count(*verify_mid) == 1);
+    
     const expr* verify_late_1 = pool.atom("late_1");
     assert(verify_late_1 == late_content_1);
+    assert(pool.exprs.count(*verify_late_1) == 1);
+    
     assert(pool.size() == checkpoint_b_final);  // Still unchanged
+    assert(pool.exprs.size() == checkpoint_b_final);
+    
+    // Verify all Frame A and Frame B content is still present
+    assert(pool.exprs.count(*early_content_1) == 1);
+    assert(pool.exprs.count(*early_content_2) == 1);
+    assert(pool.exprs.count(*mid_content) == 1);
+    assert(pool.exprs.count(*late_content_1) == 1);
+    assert(pool.exprs.count(*late_content_2) == 1);
     
     // Pop Frame B - should remove mid_content, late_1, late_2 but NOT early_1, early_2
     t.pop();
     assert(pool.size() == checkpoint_a);
+    assert(pool.exprs.size() == checkpoint_a);
     
     // Verify early content still exists
     const expr* verify_early_1_after_b = pool.atom("early_1");
     assert(verify_early_1_after_b == early_content_1);
+    assert(pool.exprs.count(*verify_early_1_after_b) == 1);
+    
     const expr* verify_early_2_after_b = pool.atom("early_2");
     assert(verify_early_2_after_b == early_content_2);
+    assert(pool.exprs.count(*verify_early_2_after_b) == 1);
+    
     assert(pool.size() == checkpoint_a);  // Still unchanged
+    assert(pool.exprs.size() == checkpoint_a);
+    
+    // Verify only Frame A content remains
+    assert(pool.exprs.count(*early_content_1) == 1);
+    assert(pool.exprs.count(*early_content_2) == 1);
     
     // Pop Frame A - should remove early_1 and early_2
     t.pop();
     assert(pool.size() == checkpoint_start);
+    assert(pool.exprs.size() == checkpoint_start);
     
     // Pop initial frame
     t.pop();
@@ -1599,63 +1672,131 @@ void test_expr_pool_var() {
     
     // Test corner case: content added in earlier frame should not be removed by later frame pop
     t.push();  // Frame A
+    assert(pool.exprs.size() == checkpoint_start);
+    
     const expr* early_var_1 = pool.var(500);
+    assert(pool.exprs.size() == checkpoint_start + 1);
+    assert(pool.exprs.count(*early_var_1) == 1);
+    
     const expr* early_var_2 = pool.var(501);
+    assert(pool.exprs.size() == checkpoint_start + 2);
+    assert(pool.exprs.count(*early_var_2) == 1);
+    
     size_t checkpoint_a = pool.size();
     assert(checkpoint_a == checkpoint_start + 2);
+    assert(pool.exprs.size() == checkpoint_a);
     
     t.push();  // Frame B
+    assert(pool.exprs.size() == checkpoint_a);
+    
     const expr* mid_var = pool.var(600);
+    assert(pool.exprs.size() == checkpoint_a + 1);
+    assert(pool.exprs.count(*mid_var) == 1);
+    
     size_t checkpoint_b = pool.size();
     assert(checkpoint_b == checkpoint_a + 1);
+    assert(pool.exprs.size() == checkpoint_b);
     
     // Re-intern early content in Frame B - should not log since already exists
     const expr* early_var_1_again = pool.var(500);
     assert(early_var_1 == early_var_1_again);
     assert(pool.size() == checkpoint_b);  // Size unchanged
+    assert(pool.exprs.size() == checkpoint_b);  // Set size also unchanged
+    assert(pool.exprs.count(*early_var_1) == 1);  // Still in set
     
     // Add more new content in Frame B
     const expr* late_var_1 = pool.var(700);
+    assert(pool.exprs.size() == checkpoint_b + 1);
+    assert(pool.exprs.count(*late_var_1) == 1);
+    
     const expr* late_var_2 = pool.var(701);
+    assert(pool.exprs.size() == checkpoint_b + 2);
+    assert(pool.exprs.count(*late_var_2) == 1);
+    
     size_t checkpoint_b_final = pool.size();
     assert(checkpoint_b_final == checkpoint_b + 2);
+    assert(pool.exprs.size() == checkpoint_b_final);
     
     t.push();  // Frame C
+    assert(pool.exprs.size() == checkpoint_b_final);
+    
     // Re-intern content from both Frame A and Frame B
     const expr* early_var_2_again = pool.var(501);
     assert(early_var_2 == early_var_2_again);
+    assert(pool.exprs.size() == checkpoint_b_final);  // No change
+    assert(pool.exprs.count(*early_var_2) == 1);
+    
     const expr* mid_var_again = pool.var(600);
     assert(mid_var == mid_var_again);
     assert(pool.size() == checkpoint_b_final);  // Size unchanged
+    assert(pool.exprs.size() == checkpoint_b_final);  // Set size unchanged
+    assert(pool.exprs.count(*mid_var) == 1);
     
     // Add new content in Frame C
     const expr* frame_c_var = pool.var(800);
+    assert(pool.exprs.size() == checkpoint_b_final + 1);
+    assert(pool.exprs.count(*frame_c_var) == 1);
+    
     size_t checkpoint_c = pool.size();
     assert(checkpoint_c == checkpoint_b_final + 1);
+    assert(pool.exprs.size() == checkpoint_c);
+    
+    // Verify all content from all frames is present
+    assert(pool.exprs.count(*early_var_1) == 1);
+    assert(pool.exprs.count(*early_var_2) == 1);
+    assert(pool.exprs.count(*mid_var) == 1);
+    assert(pool.exprs.count(*late_var_1) == 1);
+    assert(pool.exprs.count(*late_var_2) == 1);
+    assert(pool.exprs.count(*frame_c_var) == 1);
     
     // Pop Frame C - only frame_c_var should be removed
     t.pop();
     assert(pool.size() == checkpoint_b_final);
+    assert(pool.exprs.size() == checkpoint_b_final);
     
     // Verify early and mid content still exist
     const expr* verify_early_1 = pool.var(500);
     assert(verify_early_1 == early_var_1);
+    assert(pool.exprs.count(*verify_early_1) == 1);
+    
     const expr* verify_mid = pool.var(600);
     assert(verify_mid == mid_var);
+    assert(pool.exprs.count(*verify_mid) == 1);
+    
     const expr* verify_late_1 = pool.var(700);
     assert(verify_late_1 == late_var_1);
+    assert(pool.exprs.count(*verify_late_1) == 1);
+    
     assert(pool.size() == checkpoint_b_final);  // Still unchanged
+    assert(pool.exprs.size() == checkpoint_b_final);
+    
+    // Verify all Frame A and Frame B content is still present
+    assert(pool.exprs.count(*early_var_1) == 1);
+    assert(pool.exprs.count(*early_var_2) == 1);
+    assert(pool.exprs.count(*mid_var) == 1);
+    assert(pool.exprs.count(*late_var_1) == 1);
+    assert(pool.exprs.count(*late_var_2) == 1);
     
     // Pop Frame B - should remove mid_var, late_var_1, late_var_2 but NOT early vars
     t.pop();
     assert(pool.size() == checkpoint_a);
+    assert(pool.exprs.size() == checkpoint_a);
     
     // Verify early content still exists
     const expr* verify_early_1_after_b = pool.var(500);
     assert(verify_early_1_after_b == early_var_1);
+    assert(pool.exprs.count(*verify_early_1_after_b) == 1);
+    
     const expr* verify_early_2_after_b = pool.var(501);
     assert(verify_early_2_after_b == early_var_2);
+    assert(pool.exprs.count(*verify_early_2_after_b) == 1);
+    
     assert(pool.size() == checkpoint_a);  // Still unchanged
+    assert(pool.exprs.size() == checkpoint_a);
+    
+    // Verify only Frame A content remains
+    assert(pool.exprs.count(*early_var_1) == 1);
+    assert(pool.exprs.count(*early_var_2) == 1);
     
     // Pop Frame A - should remove early vars
     t.pop();
@@ -1824,62 +1965,141 @@ void test_expr_pool_cons() {
     
     // Test corner case: content added in earlier frame should not be removed by later frame pop
     t.push();  // Frame A
+    assert(pool.exprs.size() == checkpoint_start);
+    
     const expr* early_atom_1 = pool.atom("early_atom_1");
+    assert(pool.exprs.size() == checkpoint_start + 1);
+    assert(pool.exprs.count(*early_atom_1) == 1);
+    
     const expr* early_atom_2 = pool.atom("early_atom_2");
+    assert(pool.exprs.size() == checkpoint_start + 2);
+    assert(pool.exprs.count(*early_atom_2) == 1);
+    
     const expr* early_cons = pool.cons(early_atom_1, early_atom_2);
+    assert(pool.exprs.size() == checkpoint_start + 3);
+    assert(pool.exprs.count(*early_cons) == 1);
+    
     size_t checkpoint_a = pool.size();
     assert(checkpoint_a == checkpoint_start + 3);
+    assert(pool.exprs.size() == checkpoint_a);
     
     t.push();  // Frame B
+    assert(pool.exprs.size() == checkpoint_a);
+    
     const expr* mid_atom = pool.atom("mid_atom");
+    assert(pool.exprs.size() == checkpoint_a + 1);
+    assert(pool.exprs.count(*mid_atom) == 1);
+    
     const expr* mid_cons = pool.cons(early_atom_1, mid_atom);  // Uses early_atom_1
+    assert(pool.exprs.size() == checkpoint_a + 2);
+    assert(pool.exprs.count(*mid_cons) == 1);
+    
     size_t checkpoint_b = pool.size();
     assert(checkpoint_b == checkpoint_a + 2);  // mid_atom, mid_cons
+    assert(pool.exprs.size() == checkpoint_b);
     
     // Re-intern early cons in Frame B - should not log since already exists
     const expr* early_cons_again = pool.cons(early_atom_1, early_atom_2);
     assert(early_cons == early_cons_again);
     assert(pool.size() == checkpoint_b);  // Size unchanged
+    assert(pool.exprs.size() == checkpoint_b);  // Set size also unchanged
+    assert(pool.exprs.count(*early_cons) == 1);  // Still in set
     
     // Add more new content in Frame B
     const expr* late_atom = pool.atom("late_atom");
+    assert(pool.exprs.size() == checkpoint_b + 1);
+    assert(pool.exprs.count(*late_atom) == 1);
+    
     const expr* late_cons = pool.cons(late_atom, mid_atom);
+    assert(pool.exprs.size() == checkpoint_b + 2);
+    assert(pool.exprs.count(*late_cons) == 1);
+    
     size_t checkpoint_b_final = pool.size();
     assert(checkpoint_b_final == checkpoint_b + 2);
+    assert(pool.exprs.size() == checkpoint_b_final);
     
     t.push();  // Frame C
+    assert(pool.exprs.size() == checkpoint_b_final);
+    
     // Re-intern content from both Frame A and Frame B
     const expr* early_cons_again2 = pool.cons(early_atom_1, early_atom_2);
     assert(early_cons == early_cons_again2);
+    assert(pool.exprs.size() == checkpoint_b_final);  // No change
+    assert(pool.exprs.count(*early_cons) == 1);
+    
     const expr* mid_cons_again = pool.cons(early_atom_1, mid_atom);
     assert(mid_cons == mid_cons_again);
     assert(pool.size() == checkpoint_b_final);  // Size unchanged
+    assert(pool.exprs.size() == checkpoint_b_final);  // Set size unchanged
+    assert(pool.exprs.count(*mid_cons) == 1);
     
     // Add new content in Frame C
     const expr* frame_c_atom = pool.atom("frame_c_atom");
+    assert(pool.exprs.size() == checkpoint_b_final + 1);
+    assert(pool.exprs.count(*frame_c_atom) == 1);
+    
     const expr* frame_c_cons = pool.cons(frame_c_atom, early_atom_1);
+    assert(pool.exprs.size() == checkpoint_b_final + 2);
+    assert(pool.exprs.count(*frame_c_cons) == 1);
+    
     size_t checkpoint_c = pool.size();
     assert(checkpoint_c == checkpoint_b_final + 2);
+    assert(pool.exprs.size() == checkpoint_c);
+    
+    // Verify all content from all frames is present
+    assert(pool.exprs.count(*early_atom_1) == 1);
+    assert(pool.exprs.count(*early_atom_2) == 1);
+    assert(pool.exprs.count(*early_cons) == 1);
+    assert(pool.exprs.count(*mid_atom) == 1);
+    assert(pool.exprs.count(*mid_cons) == 1);
+    assert(pool.exprs.count(*late_atom) == 1);
+    assert(pool.exprs.count(*late_cons) == 1);
+    assert(pool.exprs.count(*frame_c_atom) == 1);
+    assert(pool.exprs.count(*frame_c_cons) == 1);
     
     // Pop Frame C - only frame_c_atom and frame_c_cons should be removed
     t.pop();
     assert(pool.size() == checkpoint_b_final);
+    assert(pool.exprs.size() == checkpoint_b_final);
     
     // Verify early and mid content still exist
     const expr* verify_early_cons = pool.cons(early_atom_1, early_atom_2);
     assert(verify_early_cons == early_cons);
+    assert(pool.exprs.count(*verify_early_cons) == 1);
+    
     const expr* verify_mid_cons = pool.cons(early_atom_1, mid_atom);
     assert(verify_mid_cons == mid_cons);
+    assert(pool.exprs.count(*verify_mid_cons) == 1);
+    
     assert(pool.size() == checkpoint_b_final);  // Still unchanged
+    assert(pool.exprs.size() == checkpoint_b_final);
+    
+    // Verify all Frame A and Frame B content is still present
+    assert(pool.exprs.count(*early_atom_1) == 1);
+    assert(pool.exprs.count(*early_atom_2) == 1);
+    assert(pool.exprs.count(*early_cons) == 1);
+    assert(pool.exprs.count(*mid_atom) == 1);
+    assert(pool.exprs.count(*mid_cons) == 1);
+    assert(pool.exprs.count(*late_atom) == 1);
+    assert(pool.exprs.count(*late_cons) == 1);
     
     // Pop Frame B - should remove mid_atom, mid_cons, late_atom, late_cons but NOT early content
     t.pop();
     assert(pool.size() == checkpoint_a);
+    assert(pool.exprs.size() == checkpoint_a);
     
     // Verify early content still exists
     const expr* verify_early_cons_after_b = pool.cons(early_atom_1, early_atom_2);
     assert(verify_early_cons_after_b == early_cons);
+    assert(pool.exprs.count(*verify_early_cons_after_b) == 1);
+    
     assert(pool.size() == checkpoint_a);  // Still unchanged
+    assert(pool.exprs.size() == checkpoint_a);
+    
+    // Verify only Frame A content remains
+    assert(pool.exprs.count(*early_atom_1) == 1);
+    assert(pool.exprs.count(*early_atom_2) == 1);
+    assert(pool.exprs.count(*early_cons) == 1);
     
     // Pop Frame A - should remove early atoms and cons
     t.pop();
