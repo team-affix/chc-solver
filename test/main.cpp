@@ -5347,12 +5347,6 @@ void unit_test_main() {
     TEST(test_bind_map_whnf);
     TEST(test_bind_map_occurs_check);
     TEST(test_bind_map_unify);
-    // TEST(test_causal_set_empty);
-    // TEST(test_causal_set_size);
-    // TEST(test_causal_set_count);
-    // TEST(test_causal_set_operator_plus);
-    // TEST(test_causal_set_operator_spaceship);
-    // TEST(test_unification_graph_cin_dijkstra);
 }
 
 int main() {
