@@ -5880,6 +5880,118 @@ void test_bind_map_unify() {
 
         t.pop();
     }
+    
+    // Test 51: Unification failure with trail - partial bindings should be undone
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{82}};
+        expr a1{expr::atom{"x"}};
+        expr a2{expr::atom{"y"}};
+        expr c1{expr::cons{&v1, &a1}};
+        
+        expr a3{expr::atom{"z"}};
+        expr a4{expr::atom{"w"}};  // Different from a1
+        expr c2{expr::cons{&a3, &a4}};
+        
+        // Push frame before unification
+        t.push();
+        
+        // This should fail (rhs mismatch), leaving partial binding v1->a3
+        assert(!bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 1);  // Partial binding left
+        assert(bm.bindings.count(82) == 1);
+        assert(bm.whnf(&v1) == &a3);
+        
+        // Pop frame - partial bindings should be undone
+        t.pop();
+        assert(bm.bindings.size() == 0);  // All bindings undone
+        assert(bm.bindings.count(82) == 0);  // v1 is unbound again
+        assert(bm.whnf(&v1) == &v1);  // v1 reduces to itself
+    }
+    
+    // Test 52: Multiple unifications with shared vars - transitive constraints
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{83}};
+        expr v2{expr::var{84}};
+        expr v3{expr::var{85}};
+        
+        // First structure: cons(V1, V1) - both children are same var
+        expr c1{expr::cons{&v1, &v1}};
+        
+        // Second structure: cons(a, V2)
+        expr a1{expr::atom{"a"}};
+        expr c2{expr::cons{&a1, &v2}};
+        
+        // Unify cons(V1, V1) with cons(a, V2)
+        // This should bind V1 to 'a' and V2 to 'a'
+        assert(bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 2);  // V1->a and V2->a (or V2->V1)
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v2) == &a1);
+        
+        // Now try to unify cons(V1, V1) with cons(V3, k)
+        expr a2{expr::atom{"k"}};
+        expr c3{expr::cons{&v3, &a2}};
+        
+        // This should fail because V1 reduces to 'a', so we're trying to unify
+        // cons(a, a) with cons(V3, k), which would bind V3 to 'a', but then
+        // the rhs would try to unify 'a' with 'k', which fails
+        assert(!bm.unify(&c1, &c3));
+        // Partial binding: V3 was bound to 'a' before rhs failed
+        assert(bm.bindings.size() == 3);  // Original 2 + V3->a
+        assert(bm.bindings.count(85) == 1);
+        assert(bm.whnf(&v3) == &a1);
+        
+        t.pop();
+    }
+    
+    // Test 53: Chained structural unifications - transitive binding propagation
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        expr v1{expr::var{86}};
+        expr v2{expr::var{87}};
+        expr v3{expr::var{88}};
+        
+        // First structure: cons(V1, V1)
+        expr c1{expr::cons{&v1, &v1}};
+        
+        // Second structure: cons(V2, V3)
+        expr c2{expr::cons{&v2, &v3}};
+        
+        // Unify cons(V1, V1) with cons(V2, V3)
+        // This unifies V1 with V2 (lhs), then V1 with V3 (rhs)
+        // Result: all three vars in same equivalence class
+        assert(bm.unify(&c1, &c2));
+        size_t bindings_after_first = bm.bindings.size();
+        assert(bindings_after_first == 2);  // 2 bindings
+        
+        // V1, V2, V3 should all reduce to the same thing
+        const expr* result1 = bm.whnf(&v1);
+        const expr* result2 = bm.whnf(&v2);
+        const expr* result3 = bm.whnf(&v3);
+        assert(result1 == result2);
+        assert(result2 == result3);
+        // Result should be one of the three vars
+        assert(result1 == &v1 || result1 == &v2 || result1 == &v3);
+        
+        // Now unify V3 with atom 'a'
+        expr a1{expr::atom{"a"}};
+        assert(bm.unify(&v3, &a1));
+        assert(bm.bindings.size() == bindings_after_first + 1);  // One more binding
+        
+        // All three vars should now reduce to 'a'
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v2) == &a1);
+        assert(bm.whnf(&v3) == &a1);
+        
+        t.pop();
+    }
 }
 
 void unit_test_main() {
