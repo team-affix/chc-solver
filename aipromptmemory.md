@@ -53,6 +53,21 @@
   - If a bug in the core source code is highly likely, **STOP TESTING IMMEDIATELY** and report it to the user
 - **DO NOT CORRECT BUGS IN CORE SOURCE CODE** - report them to the user and let them fix it
 
+### Assertive Testing Philosophy
+
+- **Don't be afraid to assert what you think should be true, even if you're unsure**
+- If you have an idea about what the state of something should be mid-test, make an assertion for it
+- When an assertion fails:
+  1. Check if the failure makes sense given the system's actual behavior
+  2. If the behavior is correct, adjust the assertion to match reality
+  3. This process is VALUABLE because it forces you to confront and justify the actual behavior
+- **Benefits of this approach:**
+  - Forces deep understanding of the system by vetting assumptions
+  - Even "wrong" initial assertions lead to correct final assertions
+  - The corrected assertions serve as regression tests for the future
+  - Comprehensive assertions catch bugs that might otherwise go unnoticed
+- **Example:** When testing `expr_pool` with nested frames, assert `pool.exprs.size()` after every operation, even if you're not 100% sure what the size should be. If it fails, investigate why, then fix the assertion to match the correct behavior.
+
 ## Communication
 
 - Do not be overly verbose or use unnecessary superlatives
