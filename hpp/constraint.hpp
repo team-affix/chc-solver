@@ -1,15 +1,28 @@
 #ifndef CONSTRAINT_HPP
 #define CONSTRAINT_HPP
 
-#include <list>
 #include <cstdint>
+#include "rule.hpp"
 #include "expr.hpp"
 
-using constraint_id = std::list<uint32_t>;
+struct constraint_id {
+    const constraint_id* parent;
+    rule_id chosen_rule;
+    uint32_t body_index;
+    auto operator<=>(const constraint_id&) const = default;
+};
 
 struct constraint {
-    constraint_id id;
+    const constraint_id* id;
     const expr* internal_expr;
+};
+
+struct constraint_id_pool {
+    const constraint_id* fulfillment_child(const constraint_id*, rule_id, uint32_t);
+    size_t size() const;
+private:
+    const constraint_id* intern(constraint_id&&);
+    std::set<constraint_id> constraint_ids;
 };
 
 #endif
