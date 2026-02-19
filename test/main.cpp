@@ -7382,20 +7382,31 @@ void test_constraint_id_pool_intern() {
         // Create parent
         constraint_id id_parent{nullptr, 2, 1};
         const constraint_id* parent = pool.intern(std::move(id_parent));
+        assert(pool.constraint_ids.size() == 1);
         
         constraint_id id5{parent, 10, 0};
         const constraint_id* ptr5 = pool.intern(std::move(id5));
         assert(pool.size() == 2);
+        assert(pool.constraint_ids.size() == 2);
+        assert(ptr5->parent == parent);
+        assert(ptr5->chosen_rule == 10);
+        assert(ptr5->body_index == 0);
         
         constraint_id id6{parent, 10, 1};
         const constraint_id* ptr6 = pool.intern(std::move(id6));
         assert(pool.size() == 3);
+        assert(pool.constraint_ids.size() == 3);
+        assert(ptr6->parent == parent);
+        assert(ptr6->chosen_rule == 10);
+        assert(ptr6->body_index == 1);
+        assert(ptr5 != ptr6);  // Different body_index means different constraint_ids
         
         // Same parent, same rule, same index - duplicate
         constraint_id id7{parent, 10, 0};
         const constraint_id* ptr7 = pool.intern(std::move(id7));
         assert(ptr7 == ptr5);  // Should be same pointer
         assert(pool.size() == 3);  // No new entry
+        assert(pool.constraint_ids.size() == 3);
     }
     
     // Test 6: Different parent, same rule and index
@@ -7408,15 +7419,24 @@ void test_constraint_id_pool_intern() {
         
         constraint_id id_p2{nullptr, 2, 1};
         const constraint_id* parent2 = pool.intern(std::move(id_p2));
+        assert(parent1 != parent2);
         
         constraint_id id8{parent1, 99, 5};
         const constraint_id* ptr8 = pool.intern(std::move(id8));
         assert(pool.size() == 3);
+        assert(pool.constraint_ids.size() == 3);
+        assert(ptr8->parent == parent1);
+        assert(ptr8->chosen_rule == 99);
+        assert(ptr8->body_index == 5);
         
         constraint_id id9{parent2, 99, 5};
         const constraint_id* ptr9 = pool.intern(std::move(id9));
         assert(ptr9 != ptr8);  // Different parents, so different constraint_ids
         assert(pool.size() == 4);
+        assert(pool.constraint_ids.size() == 4);
+        assert(ptr9->parent == parent2);
+        assert(ptr9->chosen_rule == 99);
+        assert(ptr9->body_index == 5);
     }
     
     // Test 7: Chain of parents
@@ -7425,18 +7445,25 @@ void test_constraint_id_pool_intern() {
         
         constraint_id id1{nullptr, 1, 0};
         const constraint_id* p1 = pool.intern(std::move(id1));
+        assert(pool.constraint_ids.size() == 1);
         
         constraint_id id10{p1, 20, 0};
         const constraint_id* p2 = pool.intern(std::move(id10));
         assert(pool.size() == 2);
+        assert(pool.constraint_ids.size() == 2);
+        assert(p2->chosen_rule == 20);
         
         constraint_id id11{p2, 21, 0};
         const constraint_id* p3 = pool.intern(std::move(id11));
         assert(pool.size() == 3);
+        assert(pool.constraint_ids.size() == 3);
+        assert(p3->chosen_rule == 21);
         
         constraint_id id12{p3, 22, 0};
         const constraint_id* p4 = pool.intern(std::move(id12));
         assert(pool.size() == 4);
+        assert(pool.constraint_ids.size() == 4);
+        assert(p4->chosen_rule == 22);
         
         // Verify the chain
         assert(p4->parent == p3);
@@ -7453,7 +7480,10 @@ void test_constraint_id_pool_intern() {
         const constraint_id* ptr13 = pool.intern(std::move(id13));
         assert(ptr13->chosen_rule == 1000);
         assert(ptr13->body_index == 999);
+        assert(ptr13->parent == nullptr);
         assert(pool.size() == 1);
+        assert(pool.constraint_ids.size() == 1);
+        assert(pool.constraint_ids.count(*ptr13) == 1);
     }
     
     // Test 9: Zero values
@@ -7464,7 +7494,87 @@ void test_constraint_id_pool_intern() {
         const constraint_id* ptr14 = pool.intern(std::move(id14));
         assert(ptr14->chosen_rule == 0);
         assert(ptr14->body_index == 0);
+        assert(ptr14->parent == nullptr);
         assert(pool.size() == 1);
+        assert(pool.constraint_ids.size() == 1);
+        assert(pool.constraint_ids.count(*ptr14) == 1);
+    }
+    
+    // Test 10: Same parent, different rule, same body_index
+    {
+        constraint_id_pool pool;
+        
+        constraint_id id_parent{nullptr, 100, 0};
+        const constraint_id* parent = pool.intern(std::move(id_parent));
+        
+        constraint_id id1{parent, 10, 5};
+        const constraint_id* ptr1 = pool.intern(std::move(id1));
+        assert(pool.size() == 2);
+        
+        constraint_id id2{parent, 20, 5};
+        const constraint_id* ptr2 = pool.intern(std::move(id2));
+        assert(pool.size() == 3);
+        assert(pool.constraint_ids.size() == 3);
+        
+        // Different rules means different constraint_ids
+        assert(ptr1 != ptr2);
+        assert(ptr1->parent == parent);
+        assert(ptr2->parent == parent);
+        assert(ptr1->chosen_rule == 10);
+        assert(ptr2->chosen_rule == 20);
+        assert(ptr1->body_index == 5);
+        assert(ptr2->body_index == 5);
+    }
+    
+    // Test 11: Multiple duplicates in sequence
+    {
+        constraint_id_pool pool;
+        
+        constraint_id id1{nullptr, 42, 7};
+        const constraint_id* ptr1 = pool.intern(std::move(id1));
+        assert(pool.size() == 1);
+        
+        // Intern the same thing multiple times
+        constraint_id id2{nullptr, 42, 7};
+        const constraint_id* ptr2 = pool.intern(std::move(id2));
+        assert(ptr2 == ptr1);
+        assert(pool.size() == 1);
+        
+        constraint_id id3{nullptr, 42, 7};
+        const constraint_id* ptr3 = pool.intern(std::move(id3));
+        assert(ptr3 == ptr1);
+        assert(pool.size() == 1);
+        
+        constraint_id id4{nullptr, 42, 7};
+        const constraint_id* ptr4 = pool.intern(std::move(id4));
+        assert(ptr4 == ptr1);
+        assert(pool.size() == 1);
+        assert(pool.constraint_ids.size() == 1);
+    }
+    
+    // Test 12: Pointer stability - pointers remain valid after more insertions
+    {
+        constraint_id_pool pool;
+        
+        constraint_id id1{nullptr, 1, 0};
+        const constraint_id* ptr1 = pool.intern(std::move(id1));
+        
+        // Store values
+        const constraint_id* parent_stored = ptr1->parent;
+        rule_id rule_stored = ptr1->chosen_rule;
+        uint32_t index_stored = ptr1->body_index;
+        
+        // Add many more entries
+        for (uint32_t i = 2; i < 50; ++i) {
+            constraint_id id{nullptr, i, i * 2};
+            pool.intern(std::move(id));
+        }
+        
+        // Original pointer should still be valid with same values
+        assert(ptr1->parent == parent_stored);
+        assert(ptr1->chosen_rule == rule_stored);
+        assert(ptr1->body_index == index_stored);
+        assert(pool.constraint_ids.count(*ptr1) == 1);
     }
 }
 
@@ -7503,10 +7613,14 @@ void test_constraint_id_pool_fulfillment_child() {
         constraint_id_pool pool;
         
         const constraint_id* child1 = pool.fulfillment_child(nullptr, 1, 0);
+        assert(pool.size() == 1);
+        assert(pool.constraint_ids.size() == 1);
+        
         const constraint_id* child3 = pool.fulfillment_child(nullptr, 1, 0);
         
         assert(child3 == child1);  // Should be interned to same pointer
         assert(pool.size() == 1);  // No new entry
+        assert(pool.constraint_ids.size() == 1);
     }
     
     // Test 4: Create child with parent
@@ -7532,20 +7646,27 @@ void test_constraint_id_pool_fulfillment_child() {
         
         const constraint_id* parent = pool.fulfillment_child(nullptr, 20, 0);
         assert(pool.size() == 1);
+        assert(pool.constraint_ids.size() == 1);
         
         const constraint_id* child1 = pool.fulfillment_child(parent, 21, 0);
         assert(pool.size() == 2);
+        assert(pool.constraint_ids.size() == 2);
         assert(child1->parent == parent);
+        assert(child1->chosen_rule == 21);
         assert(child1->body_index == 0);
         
         const constraint_id* child2 = pool.fulfillment_child(parent, 21, 1);
         assert(pool.size() == 3);
+        assert(pool.constraint_ids.size() == 3);
         assert(child2->parent == parent);
+        assert(child2->chosen_rule == 21);
         assert(child2->body_index == 1);
         
         const constraint_id* child3 = pool.fulfillment_child(parent, 21, 2);
         assert(pool.size() == 4);
+        assert(pool.constraint_ids.size() == 4);
         assert(child3->parent == parent);
+        assert(child3->chosen_rule == 21);
         assert(child3->body_index == 2);
         
         // All children should be distinct
@@ -7562,11 +7683,13 @@ void test_constraint_id_pool_fulfillment_child() {
         
         const constraint_id* original = pool.fulfillment_child(parent, 21, 1);
         size_t size_before = pool.size();
+        assert(pool.constraint_ids.size() == size_before);
         
         const constraint_id* duplicate = pool.fulfillment_child(parent, 21, 1);
         
         assert(duplicate == original);  // Should be same pointer
         assert(pool.size() == size_before);  // No new entry
+        assert(pool.constraint_ids.size() == size_before);
     }
     
     // Test 7: Create deep chain of fulfillments
@@ -7575,22 +7698,33 @@ void test_constraint_id_pool_fulfillment_child() {
         
         const constraint_id* level0 = pool.fulfillment_child(nullptr, 100, 0);
         size_t size_after_level0 = pool.size();
+        assert(level0->chosen_rule == 100);
+        assert(level0->body_index == 0);
+        assert(pool.constraint_ids.size() == size_after_level0);
         
         const constraint_id* level1 = pool.fulfillment_child(level0, 101, 0);
         assert(pool.size() == size_after_level0 + 1);
+        assert(pool.constraint_ids.size() == size_after_level0 + 1);
         assert(level1->parent == level0);
+        assert(level1->chosen_rule == 101);
         
         const constraint_id* level2 = pool.fulfillment_child(level1, 102, 0);
         assert(pool.size() == size_after_level0 + 2);
+        assert(pool.constraint_ids.size() == size_after_level0 + 2);
         assert(level2->parent == level1);
+        assert(level2->chosen_rule == 102);
         
         const constraint_id* level3 = pool.fulfillment_child(level2, 103, 0);
         assert(pool.size() == size_after_level0 + 3);
+        assert(pool.constraint_ids.size() == size_after_level0 + 3);
         assert(level3->parent == level2);
+        assert(level3->chosen_rule == 103);
         
         const constraint_id* level4 = pool.fulfillment_child(level3, 104, 0);
         assert(pool.size() == size_after_level0 + 4);
+        assert(pool.constraint_ids.size() == size_after_level0 + 4);
         assert(level4->parent == level3);
+        assert(level4->chosen_rule == 104);
         
         // Verify the full chain
         assert(level4->parent->parent->parent->parent == level0);
@@ -7603,20 +7737,26 @@ void test_constraint_id_pool_fulfillment_child() {
         
         const constraint_id* parent1 = pool.fulfillment_child(nullptr, 200, 0);
         const constraint_id* parent2 = pool.fulfillment_child(nullptr, 201, 0);
+        assert(parent1 != parent2);
         size_t size_before = pool.size();
+        assert(pool.constraint_ids.size() == size_before);
         
         const constraint_id* child1 = pool.fulfillment_child(parent1, 50, 5);
         assert(pool.size() == size_before + 1);
+        assert(pool.constraint_ids.size() == size_before + 1);
         
         const constraint_id* child2 = pool.fulfillment_child(parent2, 50, 5);
         assert(pool.size() == size_before + 2);
+        assert(pool.constraint_ids.size() == size_before + 2);
         
         // Different parents means different constraint_ids
         assert(child1 != child2);
         assert(child1->parent == parent1);
         assert(child2->parent == parent2);
         assert(child1->chosen_rule == child2->chosen_rule);
+        assert(child1->chosen_rule == 50);
         assert(child1->body_index == child2->body_index);
+        assert(child1->body_index == 5);
     }
     
     // Test 9: Branching tree structure
@@ -7662,6 +7802,7 @@ void test_constraint_id_pool_fulfillment_child() {
         const constraint_id* child3 = pool.fulfillment_child(parent, 401, 3);
         
         assert(pool.size() == size_before + 4);
+        assert(pool.constraint_ids.size() == size_before + 4);
         
         // All should be distinct
         assert(child0 != child1);
@@ -7680,6 +7821,12 @@ void test_constraint_id_pool_fulfillment_child() {
         assert(child1->chosen_rule == 401);
         assert(child2->chosen_rule == 401);
         assert(child3->chosen_rule == 401);
+        
+        // Verify body_index values
+        assert(child0->body_index == 0);
+        assert(child1->body_index == 1);
+        assert(child2->body_index == 2);
+        assert(child3->body_index == 3);
     }
     
     // Test 11: Verify all entries are in the set
@@ -7707,7 +7854,93 @@ void test_constraint_id_pool_fulfillment_child() {
         const constraint_id* max_child = pool.fulfillment_child(nullptr, UINT32_MAX, UINT32_MAX);
         assert(max_child->chosen_rule == UINT32_MAX);
         assert(max_child->body_index == UINT32_MAX);
+        assert(max_child->parent == nullptr);
+        assert(pool.size() == 1);
+        assert(pool.constraint_ids.size() == 1);
         assert(pool.constraint_ids.count(*max_child) == 1);
+    }
+    
+    // Test 13: Same parent, different rule, same body_index
+    {
+        constraint_id_pool pool;
+        
+        const constraint_id* parent = pool.fulfillment_child(nullptr, 500, 0);
+        
+        const constraint_id* child1 = pool.fulfillment_child(parent, 10, 7);
+        const constraint_id* child2 = pool.fulfillment_child(parent, 20, 7);
+        const constraint_id* child3 = pool.fulfillment_child(parent, 30, 7);
+        
+        assert(pool.size() == 4);
+        assert(pool.constraint_ids.size() == 4);
+        
+        // All should be distinct (different rules)
+        assert(child1 != child2);
+        assert(child2 != child3);
+        assert(child1 != child3);
+        
+        // Verify all have same parent and body_index but different rules
+        assert(child1->parent == parent);
+        assert(child2->parent == parent);
+        assert(child3->parent == parent);
+        assert(child1->body_index == 7);
+        assert(child2->body_index == 7);
+        assert(child3->body_index == 7);
+        assert(child1->chosen_rule == 10);
+        assert(child2->chosen_rule == 20);
+        assert(child3->chosen_rule == 30);
+    }
+    
+    // Test 14: Multiple duplicates in sequence
+    {
+        constraint_id_pool pool;
+        
+        const constraint_id* parent = pool.fulfillment_child(nullptr, 600, 0);
+        const constraint_id* first = pool.fulfillment_child(parent, 601, 5);
+        assert(pool.size() == 2);
+        
+        // Call multiple times with same parameters
+        const constraint_id* dup1 = pool.fulfillment_child(parent, 601, 5);
+        assert(dup1 == first);
+        assert(pool.size() == 2);
+        
+        const constraint_id* dup2 = pool.fulfillment_child(parent, 601, 5);
+        assert(dup2 == first);
+        assert(pool.size() == 2);
+        
+        const constraint_id* dup3 = pool.fulfillment_child(parent, 601, 5);
+        assert(dup3 == first);
+        assert(pool.size() == 2);
+        assert(pool.constraint_ids.size() == 2);
+    }
+    
+    // Test 15: Pointer stability across many insertions
+    {
+        constraint_id_pool pool;
+        
+        const constraint_id* root = pool.fulfillment_child(nullptr, 1, 0);
+        const constraint_id* child = pool.fulfillment_child(root, 2, 0);
+        
+        // Store the values
+        const constraint_id* root_parent = root->parent;
+        rule_id root_rule = root->chosen_rule;
+        uint32_t root_index = root->body_index;
+        const constraint_id* child_parent = child->parent;
+        rule_id child_rule = child->chosen_rule;
+        uint32_t child_index = child->body_index;
+        
+        // Add many more entries
+        for (uint32_t i = 3; i < 100; ++i) {
+            pool.fulfillment_child(nullptr, i, i % 10);
+        }
+        
+        // Original pointers should still be valid with same values
+        assert(root->parent == root_parent);
+        assert(root->chosen_rule == root_rule);
+        assert(root->body_index == root_index);
+        assert(child->parent == child_parent);
+        assert(child->chosen_rule == child_rule);
+        assert(child->body_index == child_index);
+        assert(child->parent == root);  // Relationship still valid
     }
 }
 
