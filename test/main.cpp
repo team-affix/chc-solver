@@ -3380,6 +3380,752 @@ void test_bind_map_occurs_check() {
     }
 }
 
+void test_bind_map_unify() {
+    trail t;
+    
+    // unify() performs Prolog-like unification with occurs check
+    // It's a symmetric operation: unify(a, b) should behave like unify(b, a)
+    // Tests verify symmetry by commuting arguments between consecutive test cases
+    
+    // ========== BASIC CASES ==========
+    
+    // Test 1: Identical expressions (same pointer) - should succeed
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"test"}};
+        assert(bm.unify(&a1, &a1));
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 2: Two different atoms - should fail
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"foo"}};
+        expr a2{expr::atom{"bar"}};
+        assert(!bm.unify(&a1, &a2));
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 3: Two different atoms (commuted) - should fail
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"foo"}};
+        expr a2{expr::atom{"bar"}};
+        assert(!bm.unify(&a2, &a1));  // Commuted
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 4: Two identical atoms (different objects) - should succeed
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"same"}};
+        expr a2{expr::atom{"same"}};
+        assert(bm.unify(&a1, &a2));
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 5: Two identical atoms (commuted) - should succeed
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"same"}};
+        expr a2{expr::atom{"same"}};
+        assert(bm.unify(&a2, &a1));  // Commuted
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 6: Unbound var with atom - should succeed and create binding
+    {
+        bind_map bm(t);
+        expr v1{expr::var{0}};
+        expr a1{expr::atom{"bound"}};
+        assert(bm.unify(&v1, &a1));
+        assert(bm.bindings.size() == 1);  // Just v1 -> a1
+        assert(bm.bindings.count(0) == 1);
+        assert(bm.whnf(&v1) == &a1);
+    }
+    
+    // Test 7: Atom with unbound var (commuted) - should succeed and create binding
+    {
+        bind_map bm(t);
+        expr v1{expr::var{1}};
+        expr a1{expr::atom{"bound"}};
+        assert(bm.unify(&a1, &v1));  // Commuted
+        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.count(1) == 1);
+        assert(bm.whnf(&v1) == &a1);
+    }
+    
+    // Test 8: Unbound var with cons - should succeed and create binding
+    {
+        bind_map bm(t);
+        expr v1{expr::var{2}};
+        expr a1{expr::atom{"x"}};
+        expr a2{expr::atom{"y"}};
+        expr c1{expr::cons{&a1, &a2}};
+        assert(bm.unify(&v1, &c1));
+        assert(bm.bindings.size() == 1);
+        assert(bm.whnf(&v1) == &c1);
+    }
+    
+    // Test 9: Cons with unbound var (commuted) - should succeed and create binding
+    {
+        bind_map bm(t);
+        expr v1{expr::var{3}};
+        expr a1{expr::atom{"x"}};
+        expr a2{expr::atom{"y"}};
+        expr c1{expr::cons{&a1, &a2}};
+        assert(bm.unify(&c1, &v1));  // Commuted
+        assert(bm.bindings.size() == 1);
+        assert(bm.whnf(&v1) == &c1);
+    }
+    
+    // Test 10: Two unbound vars - should succeed and create binding
+    {
+        bind_map bm(t);
+        expr v1{expr::var{4}};
+        expr v2{expr::var{5}};
+        assert(bm.unify(&v1, &v2));
+        assert(bm.bindings.size() == 2);  // Both get entries from whnf
+        // One should be bound to the other
+        const expr* result1 = bm.whnf(&v1);
+        const expr* result2 = bm.whnf(&v2);
+        assert(result1 == result2);  // Both reduce to same thing
+    }
+    
+    // Test 11: Two unbound vars (commuted) - should succeed and create binding
+    {
+        bind_map bm(t);
+        expr v1{expr::var{6}};
+        expr v2{expr::var{7}};
+        assert(bm.unify(&v2, &v1));  // Commuted
+        assert(bm.bindings.size() == 2);
+        const expr* result1 = bm.whnf(&v1);
+        const expr* result2 = bm.whnf(&v2);
+        assert(result1 == result2);
+    }
+    
+    // ========== OCCURS CHECK CASES ==========
+    
+    // Test 12: Var with cons containing that var - should fail (occurs check)
+    {
+        bind_map bm(t);
+        expr v1{expr::var{10}};
+        expr v2{expr::var{10}};  // Same index
+        expr a1{expr::atom{"test"}};
+        expr c1{expr::cons{&v2, &a1}};
+        assert(!bm.unify(&v1, &c1));  // Should fail occurs check
+        // Bindings may be created during occurs_check
+    }
+    
+    // Test 13: Cons containing var with that var (commuted) - should fail
+    {
+        bind_map bm(t);
+        expr v1{expr::var{11}};
+        expr v2{expr::var{11}};
+        expr a1{expr::atom{"test"}};
+        expr c1{expr::cons{&v2, &a1}};
+        assert(!bm.unify(&c1, &v1));  // Commuted
+    }
+    
+    // Test 14: Var with cons containing chain to that var - should fail
+    {
+        bind_map bm(t);
+        expr v1{expr::var{12}};
+        expr v2{expr::var{13}};
+        expr v3{expr::var{12}};  // Same as v1
+        expr a1{expr::atom{"test"}};
+        
+        // v2 -> v3 (which is same index as v1)
+        bm.bindings[13] = &v3;
+        
+        expr c1{expr::cons{&v2, &a1}};
+        assert(!bm.unify(&v1, &c1));  // Should fail: v1 with cons containing chain to v1
+    }
+    
+    // Test 15: Cons with chain to var, unified with that var (commuted) - should fail
+    {
+        bind_map bm(t);
+        expr v1{expr::var{14}};
+        expr v2{expr::var{15}};
+        expr v3{expr::var{14}};
+        expr a1{expr::atom{"test"}};
+        
+        bm.bindings[15] = &v3;
+        
+        expr c1{expr::cons{&v2, &a1}};
+        assert(!bm.unify(&c1, &v1));  // Commuted
+    }
+    
+    // Test 16: Var with deeply nested cons containing that var - should fail
+    {
+        bind_map bm(t);
+        expr v1{expr::var{16}};
+        expr v2{expr::var{16}};
+        expr a1{expr::atom{"a"}};
+        
+        // Build: cons(cons(cons(v2, a1), a1), a1)
+        expr inner1{expr::cons{&v2, &a1}};
+        expr inner2{expr::cons{&inner1, &a1}};
+        expr outer{expr::cons{&inner2, &a1}};
+        
+        assert(!bm.unify(&v1, &outer));  // Should fail
+    }
+    
+    // Test 17: Deeply nested cons with var, unified with that var (commuted) - should fail
+    {
+        bind_map bm(t);
+        expr v1{expr::var{17}};
+        expr v2{expr::var{17}};
+        expr a1{expr::atom{"a"}};
+        
+        expr inner1{expr::cons{&v2, &a1}};
+        expr inner2{expr::cons{&inner1, &a1}};
+        expr outer{expr::cons{&inner2, &a1}};
+        
+        assert(!bm.unify(&outer, &v1));  // Commuted
+    }
+    
+    // ========== CHAIN CASES ==========
+    
+    // Test 18: Var bound to another var, unify with atom - should follow chain
+    {
+        bind_map bm(t);
+        expr v1{expr::var{20}};
+        expr v2{expr::var{21}};
+        expr a1{expr::atom{"target"}};
+        
+        // v1 -> v2 (unbound)
+        bm.bindings[20] = &v2;
+        
+        assert(bm.unify(&v1, &a1));  // Should bind v2 to a1
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v2) == &a1);
+    }
+    
+    // Test 19: Atom with var bound to another var (commuted) - should follow chain
+    {
+        bind_map bm(t);
+        expr v1{expr::var{22}};
+        expr v2{expr::var{23}};
+        expr a1{expr::atom{"target"}};
+        
+        bm.bindings[22] = &v2;
+        
+        assert(bm.unify(&a1, &v1));  // Commuted
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v2) == &a1);
+    }
+    
+    // Test 20: Two vars in a chain, unify them - should succeed (already unified)
+    {
+        bind_map bm(t);
+        expr v1{expr::var{24}};
+        expr v2{expr::var{25}};
+        
+        // v1 -> v2
+        bm.bindings[24] = &v2;
+        
+        assert(bm.unify(&v1, &v2));  // Both reduce to v2
+        assert(bm.whnf(&v1) == bm.whnf(&v2));
+    }
+    
+    // Test 21: Two vars in a chain, unify them (commuted) - should succeed
+    {
+        bind_map bm(t);
+        expr v1{expr::var{26}};
+        expr v2{expr::var{27}};
+        
+        bm.bindings[26] = &v2;
+        
+        assert(bm.unify(&v2, &v1));  // Commuted
+        assert(bm.whnf(&v1) == bm.whnf(&v2));
+    }
+    
+    // Test 22: Long chain of vars, unify head with atom
+    {
+        bind_map bm(t);
+        expr v1{expr::var{28}};
+        expr v2{expr::var{29}};
+        expr v3{expr::var{30}};
+        expr v4{expr::var{31}};
+        expr a1{expr::atom{"end"}};
+        
+        // Chain: v1 -> v2 -> v3 -> v4 (unbound)
+        bm.bindings[28] = &v2;
+        bm.bindings[29] = &v3;
+        bm.bindings[30] = &v4;
+        
+        assert(bm.unify(&v1, &a1));  // Should bind v4 to a1
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v4) == &a1);
+    }
+    
+    // Test 23: Atom with long chain of vars (commuted)
+    {
+        bind_map bm(t);
+        expr v1{expr::var{32}};
+        expr v2{expr::var{33}};
+        expr v3{expr::var{34}};
+        expr v4{expr::var{35}};
+        expr a1{expr::atom{"end"}};
+        
+        bm.bindings[32] = &v2;
+        bm.bindings[33] = &v3;
+        bm.bindings[34] = &v4;
+        
+        assert(bm.unify(&a1, &v1));  // Commuted
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v4) == &a1);
+    }
+    
+    // ========== CONS UNIFICATION CASES ==========
+    
+    // Test 24: Two cons with same atoms - should succeed
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"x"}};
+        expr a2{expr::atom{"y"}};
+        expr c1{expr::cons{&a1, &a2}};
+        
+        expr a3{expr::atom{"x"}};
+        expr a4{expr::atom{"y"}};
+        expr c2{expr::cons{&a3, &a4}};
+        
+        assert(bm.unify(&c1, &c2));
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 25: Two cons with same atoms (commuted) - should succeed
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"x"}};
+        expr a2{expr::atom{"y"}};
+        expr c1{expr::cons{&a1, &a2}};
+        
+        expr a3{expr::atom{"x"}};
+        expr a4{expr::atom{"y"}};
+        expr c2{expr::cons{&a3, &a4}};
+        
+        assert(bm.unify(&c2, &c1));  // Commuted
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 26: Two cons with different atoms in lhs - should fail
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"x"}};
+        expr a2{expr::atom{"y"}};
+        expr c1{expr::cons{&a1, &a2}};
+        
+        expr a3{expr::atom{"z"}};  // Different
+        expr a4{expr::atom{"y"}};
+        expr c2{expr::cons{&a3, &a4}};
+        
+        assert(!bm.unify(&c1, &c2));
+    }
+    
+    // Test 27: Two cons with different atoms in rhs - should fail
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"x"}};
+        expr a2{expr::atom{"y"}};
+        expr c1{expr::cons{&a1, &a2}};
+        
+        expr a3{expr::atom{"x"}};
+        expr a4{expr::atom{"z"}};  // Different
+        expr c2{expr::cons{&a3, &a4}};
+        
+        assert(!bm.unify(&c1, &c2));
+    }
+    
+    // Test 28: Cons with vars that can be unified - should succeed
+    {
+        bind_map bm(t);
+        expr v1{expr::var{40}};
+        expr a1{expr::atom{"y"}};
+        expr c1{expr::cons{&v1, &a1}};
+        
+        expr a2{expr::atom{"x"}};
+        expr a3{expr::atom{"y"}};
+        expr c2{expr::cons{&a2, &a3}};
+        
+        assert(bm.unify(&c1, &c2));  // Should bind v1 to a2
+        assert(bm.whnf(&v1) == &a2);
+    }
+    
+    // Test 29: Cons with vars that can be unified (commuted) - should succeed
+    {
+        bind_map bm(t);
+        expr v1{expr::var{41}};
+        expr a1{expr::atom{"y"}};
+        expr c1{expr::cons{&v1, &a1}};
+        
+        expr a2{expr::atom{"x"}};
+        expr a3{expr::atom{"y"}};
+        expr c2{expr::cons{&a2, &a3}};
+        
+        assert(bm.unify(&c2, &c1));  // Commuted
+        assert(bm.whnf(&v1) == &a2);
+    }
+    
+    // Test 30: Cons with vars that cannot be unified (conflicting) - should fail
+    {
+        bind_map bm(t);
+        expr v1{expr::var{42}};
+        expr a1{expr::atom{"y"}};
+        expr c1{expr::cons{&v1, &a1}};
+        
+        expr a2{expr::atom{"x"}};
+        expr a3{expr::atom{"z"}};  // Conflicts with a1
+        expr c2{expr::cons{&a2, &a3}};
+        
+        assert(!bm.unify(&c1, &c2));  // rhs children don't match
+    }
+    
+    // Test 31: Cons with vars that cannot be unified (commuted) - should fail
+    {
+        bind_map bm(t);
+        expr v1{expr::var{43}};
+        expr a1{expr::atom{"y"}};
+        expr c1{expr::cons{&v1, &a1}};
+        
+        expr a2{expr::atom{"x"}};
+        expr a3{expr::atom{"z"}};
+        expr c2{expr::cons{&a2, &a3}};
+        
+        assert(!bm.unify(&c2, &c1));  // Commuted
+    }
+    
+    // Test 32: Nested cons structures - should recursively unify
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        expr inner1{expr::cons{&a1, &a2}};
+        expr a3{expr::atom{"c"}};
+        expr outer1{expr::cons{&inner1, &a3}};
+        
+        expr a4{expr::atom{"a"}};
+        expr a5{expr::atom{"b"}};
+        expr inner2{expr::cons{&a4, &a5}};
+        expr a6{expr::atom{"c"}};
+        expr outer2{expr::cons{&inner2, &a6}};
+        
+        assert(bm.unify(&outer1, &outer2));
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 33: Nested cons structures (commuted) - should recursively unify
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        expr inner1{expr::cons{&a1, &a2}};
+        expr a3{expr::atom{"c"}};
+        expr outer1{expr::cons{&inner1, &a3}};
+        
+        expr a4{expr::atom{"a"}};
+        expr a5{expr::atom{"b"}};
+        expr inner2{expr::cons{&a4, &a5}};
+        expr a6{expr::atom{"c"}};
+        expr outer2{expr::cons{&inner2, &a6}};
+        
+        assert(bm.unify(&outer2, &outer1));  // Commuted
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // ========== TYPE MISMATCH CASES ==========
+    
+    // Test 34: Atom with cons - should fail
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"test"}};
+        expr a2{expr::atom{"x"}};
+        expr a3{expr::atom{"y"}};
+        expr c1{expr::cons{&a2, &a3}};
+        
+        assert(!bm.unify(&a1, &c1));
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 35: Cons with atom (commuted) - should fail
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"test"}};
+        expr a2{expr::atom{"x"}};
+        expr a3{expr::atom{"y"}};
+        expr c1{expr::cons{&a2, &a3}};
+        
+        assert(!bm.unify(&c1, &a1));  // Commuted
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // ========== COMPLEX CASES ==========
+    
+    // Test 36: Unify two cons where children need transitive unification
+    {
+        bind_map bm(t);
+        expr v1{expr::var{50}};
+        expr a1{expr::atom{"a"}};
+        expr c1{expr::cons{&v1, &a1}};
+        
+        expr v2{expr::var{51}};
+        expr a2{expr::atom{"a"}};
+        expr c2{expr::cons{&v2, &a2}};
+        
+        assert(bm.unify(&c1, &c2));  // Should bind v1 to v2
+        assert(bm.whnf(&v1) == bm.whnf(&v2));
+    }
+    
+    // Test 37: Transitive unification (commuted)
+    {
+        bind_map bm(t);
+        expr v1{expr::var{52}};
+        expr a1{expr::atom{"a"}};
+        expr c1{expr::cons{&v1, &a1}};
+        
+        expr v2{expr::var{53}};
+        expr a2{expr::atom{"a"}};
+        expr c2{expr::cons{&v2, &a2}};
+        
+        assert(bm.unify(&c2, &c1));  // Commuted
+        assert(bm.whnf(&v1) == bm.whnf(&v2));
+    }
+    
+    // Test 38: Unify cons with nested vars - cons(v1, cons(v2, a)) with cons(a, cons(b, a))
+    {
+        bind_map bm(t);
+        expr v1{expr::var{54}};
+        expr v2{expr::var{55}};
+        expr a1{expr::atom{"a"}};
+        expr inner1{expr::cons{&v2, &a1}};
+        expr c1{expr::cons{&v1, &inner1}};
+        
+        expr a2{expr::atom{"a"}};
+        expr a3{expr::atom{"b"}};
+        expr a4{expr::atom{"a"}};
+        expr inner2{expr::cons{&a3, &a4}};
+        expr c2{expr::cons{&a2, &inner2}};
+        
+        assert(bm.unify(&c1, &c2));  // v1 -> a2, v2 -> a3
+        assert(bm.whnf(&v1) == &a2);
+        assert(bm.whnf(&v2) == &a3);
+    }
+    
+    // Test 39: Nested vars (commuted)
+    {
+        bind_map bm(t);
+        expr v1{expr::var{56}};
+        expr v2{expr::var{57}};
+        expr a1{expr::atom{"a"}};
+        expr inner1{expr::cons{&v2, &a1}};
+        expr c1{expr::cons{&v1, &inner1}};
+        
+        expr a2{expr::atom{"a"}};
+        expr a3{expr::atom{"b"}};
+        expr a4{expr::atom{"a"}};
+        expr inner2{expr::cons{&a3, &a4}};
+        expr c2{expr::cons{&a2, &inner2}};
+        
+        assert(bm.unify(&c2, &c1));  // Commuted
+        assert(bm.whnf(&v1) == &a2);
+        assert(bm.whnf(&v2) == &a3);
+    }
+    
+    // Test 40: Multiple unifications building up bindings
+    {
+        bind_map bm(t);
+        expr v1{expr::var{60}};
+        expr v2{expr::var{61}};
+        expr v3{expr::var{62}};
+        expr a1{expr::atom{"x"}};
+        expr a2{expr::atom{"y"}};
+        expr a3{expr::atom{"z"}};
+        
+        // First unification: v1 with a1
+        assert(bm.unify(&v1, &a1));
+        assert(bm.whnf(&v1) == &a1);
+        
+        // Second unification: v2 with a2
+        assert(bm.unify(&v2, &a2));
+        assert(bm.whnf(&v2) == &a2);
+        
+        // Third unification: v3 with a3
+        assert(bm.unify(&v3, &a3));
+        assert(bm.whnf(&v3) == &a3);
+        
+        // All bindings should persist
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v2) == &a2);
+        assert(bm.whnf(&v3) == &a3);
+    }
+    
+    // Test 41: Unify after previous unification - bindings persist
+    {
+        bind_map bm(t);
+        expr v1{expr::var{63}};
+        expr v2{expr::var{64}};
+        expr a1{expr::atom{"first"}};
+        
+        // First: unify v1 with v2
+        assert(bm.unify(&v1, &v2));
+        
+        // Second: unify v1 with a1 (should bind v2 to a1 via v1)
+        assert(bm.unify(&v1, &a1));
+        
+        // Both should now point to a1
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v2) == &a1);
+    }
+    
+    // Test 42: Self-unification of var - should succeed
+    {
+        bind_map bm(t);
+        expr v1{expr::var{65}};
+        assert(bm.unify(&v1, &v1));  // Same pointer
+    }
+    
+    // Test 43: Unify bound var with its binding - should succeed
+    {
+        bind_map bm(t);
+        expr v1{expr::var{66}};
+        expr a1{expr::atom{"bound"}};
+        
+        bm.bindings[66] = &a1;
+        
+        assert(bm.unify(&v1, &a1));  // v1 reduces to a1, unifying a1 with a1
+    }
+    
+    // Test 44: Unify two bound vars bound to same thing - should succeed
+    {
+        bind_map bm(t);
+        expr v1{expr::var{67}};
+        expr v2{expr::var{68}};
+        expr a1{expr::atom{"same"}};
+        
+        bm.bindings[67] = &a1;
+        bm.bindings[68] = &a1;
+        
+        assert(bm.unify(&v1, &v2));  // Both reduce to a1
+    }
+    
+    // Test 45: Unify two bound vars bound to different atoms - should fail
+    {
+        bind_map bm(t);
+        expr v1{expr::var{69}};
+        expr v2{expr::var{70}};
+        expr a1{expr::atom{"first"}};
+        expr a2{expr::atom{"second"}};
+        
+        bm.bindings[69] = &a1;
+        bm.bindings[70] = &a2;
+        
+        assert(!bm.unify(&v1, &v2));  // Reduce to different atoms
+    }
+    
+    // Test 46: Deeply nested cons unification with vars at various levels
+    {
+        bind_map bm(t);
+        expr v1{expr::var{71}};
+        expr v2{expr::var{72}};
+        expr v3{expr::var{73}};
+        expr a1{expr::atom{"a"}};
+        
+        // Build: cons(cons(v1, v2), cons(v3, a1))
+        expr left1{expr::cons{&v1, &v2}};
+        expr right1{expr::cons{&v3, &a1}};
+        expr outer1{expr::cons{&left1, &right1}};
+        
+        expr a2{expr::atom{"x"}};
+        expr a3{expr::atom{"y"}};
+        expr a4{expr::atom{"z"}};
+        expr a5{expr::atom{"a"}};
+        
+        // Build: cons(cons(a2, a3), cons(a4, a5))
+        expr left2{expr::cons{&a2, &a3}};
+        expr right2{expr::cons{&a4, &a5}};
+        expr outer2{expr::cons{&left2, &right2}};
+        
+        assert(bm.unify(&outer1, &outer2));
+        assert(bm.whnf(&v1) == &a2);
+        assert(bm.whnf(&v2) == &a3);
+        assert(bm.whnf(&v3) == &a4);
+    }
+    
+    // Test 47: Unify with chains on both sides
+    {
+        bind_map bm(t);
+        expr v1{expr::var{74}};
+        expr v2{expr::var{75}};
+        expr v3{expr::var{76}};
+        expr v4{expr::var{77}};
+        
+        // Left chain: v1 -> v2 (unbound)
+        bm.bindings[74] = &v2;
+        
+        // Right chain: v3 -> v4 (unbound)
+        bm.bindings[76] = &v4;
+        
+        assert(bm.unify(&v1, &v3));  // Should unify v2 with v4
+        assert(bm.whnf(&v1) == bm.whnf(&v3));
+        assert(bm.whnf(&v2) == bm.whnf(&v4));
+    }
+    
+    // Test 48: Cons unification where lhs succeeds but rhs fails
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"x"}};
+        expr a2{expr::atom{"y"}};
+        expr c1{expr::cons{&a1, &a2}};
+        
+        expr a3{expr::atom{"x"}};
+        expr a4{expr::atom{"z"}};  // Different from a2
+        expr c2{expr::cons{&a3, &a4}};
+        
+        assert(!bm.unify(&c1, &c2));  // lhs matches, rhs doesn't
+    }
+    
+    // Test 49: Cons unification where first child fails (short circuit)
+    {
+        bind_map bm(t);
+        expr a1{expr::atom{"x"}};
+        expr a2{expr::atom{"y"}};
+        expr c1{expr::cons{&a1, &a2}};
+        
+        expr a3{expr::atom{"z"}};  // Different from a1
+        expr a4{expr::atom{"y"}};
+        expr c2{expr::cons{&a3, &a4}};
+        
+        assert(!bm.unify(&c1, &c2));  // Should fail on lhs
+    }
+    
+    // Test 50: Very complex nested unification
+    {
+        bind_map bm(t);
+        expr v1{expr::var{80}};
+        expr v2{expr::var{81}};
+        
+        // Build complex structure with vars
+        expr a1{expr::atom{"a"}};
+        expr inner1{expr::cons{&v1, &a1}};
+        expr inner2{expr::cons{&inner1, &v2}};
+        expr outer1{expr::cons{&inner2, &a1}};
+        
+        // Build matching structure with atoms
+        expr a2{expr::atom{"x"}};
+        expr a3{expr::atom{"a"}};
+        expr inner3{expr::cons{&a2, &a3}};
+        expr a4{expr::atom{"y"}};
+        expr inner4{expr::cons{&inner3, &a4}};
+        expr a5{expr::atom{"a"}};
+        expr outer2{expr::cons{&inner4, &a5}};
+        
+        assert(bm.unify(&outer1, &outer2));
+        assert(bm.whnf(&v1) == &a2);
+        assert(bm.whnf(&v2) == &a4);
+    }
+}
+
 // void test_unification_graph_cin_dijkstra() {
 //     trail t;
     
@@ -3822,6 +4568,7 @@ void unit_test_main() {
     TEST(test_expr_pool_cons);
     TEST(test_bind_map_whnf);
     TEST(test_bind_map_occurs_check);
+    TEST(test_bind_map_unify);
     // TEST(test_causal_set_empty);
     // TEST(test_causal_set_size);
     // TEST(test_causal_set_count);
