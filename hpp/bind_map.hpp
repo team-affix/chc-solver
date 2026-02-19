@@ -4,7 +4,6 @@
 #include <map>
 #include "expr.hpp"
 
-
 struct bind_map {
     bind_map(trail&);
     const expr* whnf(const expr*);
