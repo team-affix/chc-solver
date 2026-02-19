@@ -2165,6 +2165,1193 @@ void test_bind_map_bind() {
     }
 }
 
+void test_bind_map_whnf() {
+    // Test 1: whnf of atom returns itself
+    {
+        trail t;
+        bind_map bm(t);
+        expr a1{expr::atom{"test"}};
+        const expr* result = bm.whnf(&a1);
+        assert(result == &a1);
+        assert(bm.bindings.size() == 0);  // No bindings created for non-vars
+    }
+    
+    // Test 2: whnf of cons returns itself
+    {
+        trail t;
+        bind_map bm(t);
+        expr a1{expr::atom{"left"}};
+        expr a2{expr::atom{"right"}};
+        expr c1{expr::cons{&a1, &a2}};
+        const expr* result = bm.whnf(&c1);
+        assert(result == &c1);
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 3: whnf of unbound var returns itself (no entry created)
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{0}};
+        const expr* result = bm.whnf(&v1);
+        assert(result == &v1);
+        assert(bm.bindings.size() == 0);  // No default initialization
+    }
+    
+    // Test 4: whnf of bound var returns the binding
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{1}};
+        expr a1{expr::atom{"bound"}};
+        bm.bindings[1] = &a1;
+        
+        const expr* result = bm.whnf(&v1);
+        assert(result == &a1);
+        assert(bm.bindings.size() == 1);
+    }
+    
+    // Test 5: whnf with chain of var bindings (path compression)
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{10}};
+        expr v2{expr::var{11}};
+        expr v3{expr::var{12}};
+        expr a1{expr::atom{"end"}};
+        
+        // Create chain: v1 -> v2 -> v3 -> a1
+        bm.bindings[10] = &v2;
+        bm.bindings[11] = &v3;
+        bm.bindings[12] = &a1;
+        assert(bm.bindings.size() == 3);
+        
+        const expr* result = bm.whnf(&v1);
+        assert(result == &a1);
+        
+        // Verify path compression: v1 should now point directly to a1
+        assert(bm.bindings.at(10) == &a1);
+        // v2 should also be compressed to a1
+        assert(bm.bindings.at(11) == &a1);
+        assert(bm.bindings.size() == 3);
+    }
+    
+    // Test 6: whnf with long chain
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{20}};
+        expr v2{expr::var{21}};
+        expr v3{expr::var{22}};
+        expr v4{expr::var{23}};
+        expr v5{expr::var{24}};
+        expr a1{expr::atom{"final"}};
+        
+        // Create chain: v1 -> v2 -> v3 -> v4 -> v5 -> a1
+        bm.bindings[20] = &v2;
+        bm.bindings[21] = &v3;
+        bm.bindings[22] = &v4;
+        bm.bindings[23] = &v5;
+        bm.bindings[24] = &a1;
+        assert(bm.bindings.size() == 5);
+        
+        const expr* result = bm.whnf(&v1);
+        assert(result == &a1);
+        
+        // Verify all intermediate vars are compressed to a1
+        assert(bm.bindings.at(20) == &a1);
+        assert(bm.bindings.at(21) == &a1);
+        assert(bm.bindings.at(22) == &a1);
+        assert(bm.bindings.at(23) == &a1);
+        assert(bm.bindings.size() == 5);
+    }
+    
+    // Test 7: whnf with var bound to cons
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{30}};
+        expr a1{expr::atom{"x"}};
+        expr a2{expr::atom{"y"}};
+        expr c1{expr::cons{&a1, &a2}};
+        
+        bm.bindings[30] = &c1;
+        assert(bm.bindings.size() == 1);
+        
+        const expr* result = bm.whnf(&v1);
+        assert(result == &c1);
+        assert(std::holds_alternative<expr::cons>(result->content));
+        assert(bm.bindings.size() == 1);
+    }
+    
+    // Test 8: whnf with var bound to another var bound to cons
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{40}};
+        expr v2{expr::var{41}};
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        expr c1{expr::cons{&a1, &a2}};
+        
+        bm.bindings[40] = &v2;
+        bm.bindings[41] = &c1;
+        assert(bm.bindings.size() == 2);
+        
+        const expr* result = bm.whnf(&v1);
+        assert(result == &c1);
+        // Verify path compression
+        assert(bm.bindings.at(40) == &c1);
+        assert(bm.bindings.size() == 2);
+    }
+    
+    // Test 9: Multiple unbound vars remain unbound (no entries created)
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{50}};
+        expr v2{expr::var{51}};
+        expr v3{expr::var{52}};
+        
+        assert(bm.whnf(&v1) == &v1);
+        assert(bm.bindings.size() == 0);
+        
+        assert(bm.whnf(&v2) == &v2);
+        assert(bm.bindings.size() == 0);
+        
+        assert(bm.whnf(&v3) == &v3);
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 10: whnf called multiple times on same var with binding
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{60}};
+        expr a1{expr::atom{"repeated"}};
+        bm.bindings[60] = &a1;
+        assert(bm.bindings.size() == 1);
+        
+        const expr* r1 = bm.whnf(&v1);
+        const expr* r2 = bm.whnf(&v1);
+        const expr* r3 = bm.whnf(&v1);
+        
+        assert(r1 == &a1);
+        assert(r2 == &a1);
+        assert(r3 == &a1);
+        assert(bm.bindings.size() == 1);
+    }
+    
+    // Test 11: whnf with var bound to var bound to var (partial chain)
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{70}};
+        expr v2{expr::var{71}};
+        expr v3{expr::var{72}};
+        
+        // Chain: v1 -> v2 -> v3 (v3 is unbound - no entry for it)
+        bm.bindings[70] = &v2;
+        bm.bindings[71] = &v3;
+        assert(bm.bindings.size() == 2);
+        
+        const expr* result = bm.whnf(&v1);
+        assert(result == &v3);  // Should return v3, the unbound var
+        
+        // Verify path compression to v3
+        assert(bm.bindings.at(70) == &v3);
+        assert(bm.bindings.at(71) == &v3);
+        assert(bm.bindings.size() == 2);
+    }
+    
+    // Test 12: whnf with nested cons structures
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{80}};
+        expr a1{expr::atom{"inner"}};
+        expr a2{expr::atom{"outer"}};
+        expr inner_cons{expr::cons{&a1, &a2}};
+        expr a3{expr::atom{"wrap"}};
+        expr outer_cons{expr::cons{&inner_cons, &a3}};
+        
+        bm.bindings[80] = &outer_cons;
+        assert(bm.bindings.size() == 1);
+        
+        const expr* result = bm.whnf(&v1);
+        assert(result == &outer_cons);
+        assert(std::holds_alternative<expr::cons>(result->content));
+        assert(bm.bindings.size() == 1);
+    }
+    
+    // Test 13: whnf with different var indices
+    {
+        trail t;
+        bind_map bm(t);
+        expr v_small{expr::var{0}};
+        expr v_large{expr::var{UINT32_MAX}};
+        expr a1{expr::atom{"small"}};
+        expr a2{expr::atom{"large"}};
+        
+        bm.bindings[0] = &a1;
+        bm.bindings[UINT32_MAX] = &a2;
+        assert(bm.bindings.size() == 2);
+        
+        assert(bm.whnf(&v_small) == &a1);
+        assert(bm.whnf(&v_large) == &a2);
+        assert(bm.bindings.size() == 2);
+    }
+    
+    // Test 14: whnf preserves atom values
+    {
+        trail t;
+        bind_map bm(t);
+        expr a1{expr::atom{""}};
+        expr a2{expr::atom{"test123"}};
+        expr a3{expr::atom{"!@#$%"}};
+        
+        assert(bm.whnf(&a1) == &a1);
+        assert(bm.whnf(&a2) == &a2);
+        assert(bm.whnf(&a3) == &a3);
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 15: whnf with complex chain ending in cons
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{90}};
+        expr v2{expr::var{91}};
+        expr v3{expr::var{92}};
+        expr a1{expr::atom{"left"}};
+        expr a2{expr::atom{"right"}};
+        expr c1{expr::cons{&a1, &a2}};
+        
+        // Chain: v1 -> v2 -> v3 -> c1
+        bm.bindings[90] = &v2;
+        bm.bindings[91] = &v3;
+        bm.bindings[92] = &c1;
+        assert(bm.bindings.size() == 3);
+        
+        const expr* result = bm.whnf(&v1);
+        assert(result == &c1);
+        
+        // Verify all vars compressed to c1
+        assert(bm.bindings.at(90) == &c1);
+        assert(bm.bindings.at(91) == &c1);
+        assert(bm.bindings.size() == 3);
+    }
+    
+    // Test 16: WHNF does NOT reduce vars inside cons (WEAK head, not strong)
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{100}};
+        expr v2{expr::var{101}};
+        expr a1{expr::atom{"bound_atom"}};
+        
+        // Bind v2 to an atom
+        bm.bindings[101] = &a1;
+        
+        // Create cons with v1 and v2 as children
+        expr c1{expr::cons{&v1, &v2}};
+        
+        // whnf of the cons should return the cons itself, NOT reduce children
+        const expr* result = bm.whnf(&c1);
+        assert(result == &c1);
+        assert(std::holds_alternative<expr::cons>(result->content));
+        
+        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
+        // Children should still be the original var pointers, NOT reduced
+        assert(cons_ref.lhs == &v1);
+        assert(cons_ref.rhs == &v2);
+        assert(bm.bindings.size() == 1);
+    }
+    
+    // Test 17: Var bound to cons containing bound vars - children not reduced
+    {
+        trail t;
+        bind_map bm(t);
+        expr v_outer{expr::var{110}};
+        expr v_left{expr::var{111}};
+        expr v_right{expr::var{112}};
+        expr a1{expr::atom{"left_val"}};
+        expr a2{expr::atom{"right_val"}};
+        
+        // Bind the inner vars
+        bm.bindings[111] = &a1;
+        bm.bindings[112] = &a2;
+        
+        // Create cons with bound vars as children
+        expr c1{expr::cons{&v_left, &v_right}};
+        bm.bindings[110] = &c1;
+        assert(bm.bindings.size() == 3);
+        
+        const expr* result = bm.whnf(&v_outer);
+        assert(result == &c1);
+        
+        // The cons children should still point to vars, not atoms
+        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
+        assert(cons_ref.lhs == &v_left);
+        assert(cons_ref.rhs == &v_right);
+        assert(bm.bindings.size() == 3);
+    }
+    
+    // Test 18: Chain ending in cons with bound vars inside
+    {
+        trail t;
+        bind_map bm(t);
+        expr v_chain1{expr::var{120}};
+        expr v_chain2{expr::var{121}};
+        expr v_inner1{expr::var{122}};
+        expr v_inner2{expr::var{123}};
+        expr a1{expr::atom{"inner_bound"}};
+        
+        bm.bindings[122] = &a1;
+        
+        expr c1{expr::cons{&v_inner1, &v_inner2}};
+        bm.bindings[120] = &v_chain2;
+        bm.bindings[121] = &c1;
+        assert(bm.bindings.size() == 3);
+        
+        const expr* result = bm.whnf(&v_chain1);
+        assert(result == &c1);
+        
+        // Cons children should be unchanged
+        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
+        assert(cons_ref.lhs == &v_inner1);
+        assert(cons_ref.rhs == &v_inner2);
+        
+        // Path compression on outer chain
+        assert(bm.bindings.at(120) == &c1);
+        assert(bm.bindings.size() == 3);
+    }
+    
+    // Test 19: Deeply nested cons with vars at all levels
+    {
+        trail t;
+        bind_map bm(t);
+        expr v_outer{expr::var{130}};
+        expr v1{expr::var{131}};
+        expr v2{expr::var{132}};
+        expr v3{expr::var{133}};
+        expr v4{expr::var{134}};
+        
+        // Bind some inner vars
+        expr a1{expr::atom{"bound1"}};
+        expr a2{expr::atom{"bound2"}};
+        bm.bindings[131] = &a1;
+        bm.bindings[133] = &a2;
+        
+        // Create nested structure: cons(cons(v1, v2), cons(v3, v4))
+        expr inner_left{expr::cons{&v1, &v2}};
+        expr inner_right{expr::cons{&v3, &v4}};
+        expr outer{expr::cons{&inner_left, &inner_right}};
+        
+        bm.bindings[130] = &outer;
+        assert(bm.bindings.size() == 3);
+        
+        const expr* result = bm.whnf(&v_outer);
+        assert(result == &outer);
+        
+        // Verify structure is unchanged - vars inside cons are not reduced
+        const expr::cons& outer_cons = std::get<expr::cons>(result->content);
+        assert(outer_cons.lhs == &inner_left);
+        assert(outer_cons.rhs == &inner_right);
+        
+        const expr::cons& left_cons = std::get<expr::cons>(outer_cons.lhs->content);
+        assert(left_cons.lhs == &v1);  // Still points to var, not a1
+        assert(left_cons.rhs == &v2);
+        
+        const expr::cons& right_cons = std::get<expr::cons>(outer_cons.rhs->content);
+        assert(right_cons.lhs == &v3);  // Still points to var, not a2
+        assert(right_cons.rhs == &v4);
+        
+        assert(bm.bindings.size() == 3);
+    }
+    
+    // Test 20: Var bound to cons of vars, one of which chains to atom
+    {
+        trail t;
+        bind_map bm(t);
+        expr v_outer{expr::var{140}};
+        expr v_left{expr::var{141}};
+        expr v_right{expr::var{142}};
+        expr v_chain{expr::var{143}};
+        expr a1{expr::atom{"chained"}};
+        
+        // v_left chains to atom
+        bm.bindings[141] = &v_chain;
+        bm.bindings[143] = &a1;
+        
+        expr c1{expr::cons{&v_left, &v_right}};
+        bm.bindings[140] = &c1;
+        assert(bm.bindings.size() == 3);
+        
+        const expr* result = bm.whnf(&v_outer);
+        assert(result == &c1);
+        
+        // Cons children should be unchanged - v_left is NOT reduced to a1
+        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
+        assert(cons_ref.lhs == &v_left);
+        assert(cons_ref.rhs == &v_right);
+        assert(bm.bindings.size() == 3);
+    }
+    
+    // Test 21: Multiple vars bound to same atom
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{150}};
+        expr v2{expr::var{151}};
+        expr v3{expr::var{152}};
+        expr a1{expr::atom{"shared"}};
+        
+        bm.bindings[150] = &a1;
+        bm.bindings[151] = &a1;
+        bm.bindings[152] = &a1;
+        assert(bm.bindings.size() == 3);
+        
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v2) == &a1);
+        assert(bm.whnf(&v3) == &a1);
+        assert(bm.bindings.size() == 3);
+    }
+    
+    // Test 22: Multiple vars bound to same cons
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{160}};
+        expr v2{expr::var{161}};
+        expr a1{expr::atom{"x"}};
+        expr a2{expr::atom{"y"}};
+        expr c1{expr::cons{&a1, &a2}};
+        
+        bm.bindings[160] = &c1;
+        bm.bindings[161] = &c1;
+        assert(bm.bindings.size() == 2);
+        
+        assert(bm.whnf(&v1) == &c1);
+        assert(bm.whnf(&v2) == &c1);
+        assert(bm.bindings.size() == 2);
+    }
+    
+    // Test 23: Cons of unbound vars
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{170}};
+        expr v2{expr::var{171}};
+        expr c1{expr::cons{&v1, &v2}};
+        
+        const expr* result = bm.whnf(&c1);
+        assert(result == &c1);
+        
+        // Cons children remain as unbound vars
+        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
+        assert(cons_ref.lhs == &v1);
+        assert(cons_ref.rhs == &v2);
+        assert(bm.bindings.size() == 0);  // No bindings created
+    }
+    
+    // Test 24: Cons of mix (atom and var)
+    {
+        trail t;
+        bind_map bm(t);
+        expr a1{expr::atom{"atom"}};
+        expr v1{expr::var{180}};
+        expr c1{expr::cons{&a1, &v1}};
+        
+        const expr* result = bm.whnf(&c1);
+        assert(result == &c1);
+        
+        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
+        assert(cons_ref.lhs == &a1);
+        assert(cons_ref.rhs == &v1);  // Var not reduced
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 25: Cons of mix (var and cons)
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{190}};
+        expr a1{expr::atom{"inner"}};
+        expr a2{expr::atom{"inner2"}};
+        expr inner_cons{expr::cons{&a1, &a2}};
+        expr outer_cons{expr::cons{&v1, &inner_cons}};
+        
+        const expr* result = bm.whnf(&outer_cons);
+        assert(result == &outer_cons);
+        
+        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
+        assert(cons_ref.lhs == &v1);  // Var not reduced
+        assert(cons_ref.rhs == &inner_cons);
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 26: Var bound to cons of bound vars - only outer reduced
+    {
+        trail t;
+        bind_map bm(t);
+        expr v_outer{expr::var{200}};
+        expr v_inner1{expr::var{201}};
+        expr v_inner2{expr::var{202}};
+        expr a1{expr::atom{"val1"}};
+        expr a2{expr::atom{"val2"}};
+        
+        // Bind inner vars
+        bm.bindings[201] = &a1;
+        bm.bindings[202] = &a2;
+        
+        // Create cons with bound vars
+        expr c1{expr::cons{&v_inner1, &v_inner2}};
+        bm.bindings[200] = &c1;
+        assert(bm.bindings.size() == 3);
+        
+        const expr* result = bm.whnf(&v_outer);
+        assert(result == &c1);
+        
+        // Children should STILL be vars, not reduced to atoms
+        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
+        assert(cons_ref.lhs == &v_inner1);
+        assert(cons_ref.rhs == &v_inner2);
+        assert(std::holds_alternative<expr::var>(cons_ref.lhs->content));
+        assert(std::holds_alternative<expr::var>(cons_ref.rhs->content));
+        assert(bm.bindings.size() == 3);
+    }
+    
+    // Test 27: Chain to cons of chained vars
+    {
+        trail t;
+        bind_map bm(t);
+        expr v_outer{expr::var{210}};
+        expr v_mid{expr::var{211}};
+        expr v_left{expr::var{212}};
+        expr v_right{expr::var{213}};
+        expr v_left_chain{expr::var{214}};
+        expr a1{expr::atom{"left_end"}};
+        
+        // v_left chains to atom
+        bm.bindings[212] = &v_left_chain;
+        bm.bindings[214] = &a1;
+        
+        // Cons contains chained var and unbound var
+        expr c1{expr::cons{&v_left, &v_right}};
+        bm.bindings[210] = &v_mid;
+        bm.bindings[211] = &c1;
+        assert(bm.bindings.size() == 4);
+        
+        const expr* result = bm.whnf(&v_outer);
+        assert(result == &c1);
+        
+        // Cons children should be unchanged - not reduced
+        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
+        assert(cons_ref.lhs == &v_left);  // Still v_left, not a1
+        assert(cons_ref.rhs == &v_right);
+        
+        // Outer chain should be compressed
+        assert(bm.bindings.at(210) == &c1);
+        assert(bm.bindings.size() == 4);
+    }
+    
+    // Test 28: Deeply nested cons with vars everywhere
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{220}};
+        expr v2{expr::var{221}};
+        expr v3{expr::var{222}};
+        expr v4{expr::var{223}};
+        expr a1{expr::atom{"deep"}};
+        
+        // Bind v4
+        bm.bindings[223] = &a1;
+        
+        // Create: cons(cons(v1, v2), cons(v3, v4))
+        expr inner_left{expr::cons{&v1, &v2}};
+        expr inner_right{expr::cons{&v3, &v4}};
+        expr outer{expr::cons{&inner_left, &inner_right}};
+        
+        const expr* result = bm.whnf(&outer);
+        assert(result == &outer);
+        
+        // All structure should be preserved, vars not reduced
+        const expr::cons& outer_cons = std::get<expr::cons>(result->content);
+        assert(outer_cons.lhs == &inner_left);
+        assert(outer_cons.rhs == &inner_right);
+        
+        const expr::cons& left_cons = std::get<expr::cons>(outer_cons.lhs->content);
+        assert(left_cons.lhs == &v1);
+        assert(left_cons.rhs == &v2);
+        
+        const expr::cons& right_cons = std::get<expr::cons>(outer_cons.rhs->content);
+        assert(right_cons.lhs == &v3);
+        assert(right_cons.rhs == &v4);  // Still v4, not a1
+        
+        assert(bm.bindings.size() == 1);
+    }
+    
+    // Test 29: Var chain to cons of var chains
+    {
+        trail t;
+        bind_map bm(t);
+        expr v_outer{expr::var{230}};
+        expr v_outer_chain{expr::var{231}};
+        expr v_left{expr::var{232}};
+        expr v_left_chain{expr::var{233}};
+        expr v_right{expr::var{234}};
+        expr a_left{expr::atom{"left"}};
+        expr a_right{expr::atom{"right"}};
+        
+        // Setup chains
+        bm.bindings[232] = &v_left_chain;
+        bm.bindings[233] = &a_left;
+        bm.bindings[234] = &a_right;
+        
+        expr c1{expr::cons{&v_left, &v_right}};
+        bm.bindings[230] = &v_outer_chain;
+        bm.bindings[231] = &c1;
+        assert(bm.bindings.size() == 5);
+        
+        const expr* result = bm.whnf(&v_outer);
+        assert(result == &c1);
+        
+        // Cons children are still original vars, not reduced
+        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
+        assert(cons_ref.lhs == &v_left);
+        assert(cons_ref.rhs == &v_right);
+        
+        // Outer chain compressed
+        assert(bm.bindings.at(230) == &c1);
+        assert(bm.bindings.size() == 5);
+    }
+    
+    // Test 30: Empty bindings map remains empty for unbound vars
+    {
+        trail t;
+        bind_map bm(t);
+        assert(bm.bindings.size() == 0);
+        
+        expr v1{expr::var{240}};
+        bm.whnf(&v1);
+        assert(bm.bindings.size() == 0);
+        
+        expr v2{expr::var{241}};
+        bm.whnf(&v2);
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 31: Same unbound var called multiple times creates no entries
+    {
+        trail t;
+        bind_map bm(t);
+        expr v1{expr::var{250}};
+        
+        bm.whnf(&v1);
+        assert(bm.bindings.size() == 0);
+        
+        bm.whnf(&v1);
+        assert(bm.bindings.size() == 0);
+        
+        bm.whnf(&v1);
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // ========== TRAIL INTEGRATION TESTS ==========
+    
+    // Test 32: whnf with trail - bind in frame, pop frame, verify rollback
+    {
+        std::cout << "Test 32: creating trail and bind_map" << std::endl;
+        trail t;
+        bind_map bm(t);
+        
+        std::cout << "Test 32: creating expressions" << std::endl;
+        expr v1{expr::var{300}};
+        expr a1{expr::atom{"frame1"}};
+        
+        std::cout << "Test 32: pushing frame" << std::endl;
+        t.push();
+        std::cout << "Test 32: calling bind" << std::endl;
+        bm.bind(300, &a1);
+        std::cout << "Test 32: after bind" << std::endl;
+        assert(bm.bindings.size() == 1);
+        
+        std::cout << "Test 32: calling whnf" << std::endl;
+        const expr* result = bm.whnf(&v1);
+        std::cout << "Test 32: after whnf" << std::endl;
+        assert(result == &a1);
+        assert(bm.bindings.size() == 1);
+        
+        std::cout << "Test 32: popping frame" << std::endl;
+        t.pop();
+        std::cout << "Test 32: after pop" << std::endl;
+        assert(bm.bindings.size() == 0);
+        
+        // After pop, v1 is unbound again
+        std::cout << "Test 32: calling whnf again" << std::endl;
+        result = bm.whnf(&v1);
+        std::cout << "Test 32: after second whnf" << std::endl;
+        assert(result == &v1);
+        assert(bm.bindings.size() == 0);
+        std::cout << "Test 32: done, trail depth = " << t.depth() << std::endl;
+    }
+    
+    // Test 33: whnf with nested frames - multiple bindings
+    {
+        std::cout << "Test 33 starting" << std::endl;
+        trail t;
+        bind_map bm(t);
+
+        expr v1{expr::var{310}};
+        expr v2{expr::var{311}};
+        expr a1{expr::atom{"outer"}};
+        expr a2{expr::atom{"inner"}};
+        
+        // Frame 1: bind v1 to a1
+        t.push();
+        bm.bind(310, &a1);
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.bindings.size() == 1);
+        
+        // Frame 2: bind v2 to a2
+        t.push();
+        bm.bind(311, &a2);
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v2) == &a2);
+        assert(bm.bindings.size() == 2);
+        
+        // Pop frame 2
+        t.pop();
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v2) == &v2);  // v2 unbound again
+        assert(bm.bindings.size() == 1);
+        
+        // Pop frame 1
+        t.pop();
+        assert(bm.whnf(&v1) == &v1);  // v1 unbound again
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 34: whnf with path compression across frames
+    {
+        trail t;
+        bind_map bm(t);
+        
+        expr v1{expr::var{320}};
+        expr v2{expr::var{321}};
+        expr v3{expr::var{322}};
+        expr a1{expr::atom{"end"}};
+        
+        // Frame 1: v1 -> v2
+        t.push();
+        bm.bind(320, &v2);
+        assert(bm.bindings.size() == 1);
+        
+        // Frame 2: v2 -> v3
+        t.push();
+        bm.bind(321, &v3);
+        assert(bm.bindings.size() == 2);
+        
+        // Frame 3: v3 -> a1
+        t.push();
+        bm.bind(322, &a1);
+        assert(bm.bindings.size() == 3);
+        
+        // whnf should follow chain and compress
+        const expr* result = bm.whnf(&v1);
+        assert(result == &a1);
+        assert(bm.bindings.size() == 3);  // Path compression updates values, not count
+        
+        // After compression, v1 should point directly to a1
+        assert(bm.bindings.at(320) == &a1);
+        
+        // Pop frame 3
+        t.pop();
+        assert(bm.bindings.size() == 2);
+        // v1 should be restored to point to v2
+        assert(bm.bindings.at(320) == &v2);
+        
+        // Pop frame 2
+        t.pop();
+        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.at(320) == &v2);  // Still points to v2
+        
+        // Pop frame 1
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 35: whnf with trail - update binding in nested frame
+    {
+        trail t;
+        bind_map bm(t);
+        
+        expr v1{expr::var{330}};
+        expr a1{expr::atom{"first"}};
+        expr a2{expr::atom{"second"}};
+        
+        // Frame 1: bind v1 to a1
+        t.push();
+        bm.bind(330, &a1);
+        assert(bm.whnf(&v1) == &a1);
+        std::map<uint32_t, const expr*> checkpoint1 = bm.bindings;
+        
+        // Frame 2: update v1 to a2
+        t.push();
+        bm.bind(330, &a2);
+        assert(bm.whnf(&v1) == &a2);
+        assert(bm.bindings.size() == 1);
+        
+        // Pop frame 2 - should restore to a1
+        t.pop();
+        assert(bm.bindings == checkpoint1);
+        assert(bm.whnf(&v1) == &a1);
+        
+        // Pop frame 1 - should be unbound
+        t.pop();
+        assert(bm.bindings.size() == 0);
+        assert(bm.whnf(&v1) == &v1);
+    }
+    
+    // Test 36: Complex - chain built across frames, then popped
+    {
+        trail t;
+        bind_map bm(t);
+        
+        expr v1{expr::var{340}};
+        expr v2{expr::var{341}};
+        expr v3{expr::var{342}};
+        expr v4{expr::var{343}};
+        expr a1{expr::atom{"final"}};
+        
+        // Frame 1: v1 -> v2
+        t.push();
+        bm.bind(340, &v2);
+        
+        // Frame 2: v2 -> v3
+        t.push();
+        bm.bind(341, &v3);
+        
+        // Frame 3: v3 -> v4
+        t.push();
+        bm.bind(342, &v4);
+        
+        // Frame 4: v4 -> a1
+        t.push();
+        bm.bind(343, &a1);
+        
+        // Full chain: v1 -> v2 -> v3 -> v4 -> a1
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.bindings.size() == 4);
+        
+        // Pop frame 4: v4 becomes unbound
+        t.pop();
+        assert(bm.bindings.size() == 3);
+        assert(bm.whnf(&v1) == &v4);  // Chain ends at v4 now
+        
+        // Pop frame 3: v3 becomes unbound
+        t.pop();
+        assert(bm.bindings.size() == 2);
+        assert(bm.whnf(&v1) == &v3);  // Chain ends at v3 now
+        
+        // Pop frame 2: v2 becomes unbound
+        t.pop();
+        assert(bm.bindings.size() == 1);
+        assert(bm.whnf(&v1) == &v2);  // Chain ends at v2 now
+        
+        // Pop frame 1: v1 becomes unbound
+        t.pop();
+        assert(bm.bindings.size() == 0);
+        assert(bm.whnf(&v1) == &v1);  // v1 is unbound
+    }
+    
+    // Test 37: whnf with cons containing vars bound in frames
+    {
+        trail t;
+        bind_map bm(t);
+        
+        expr v1{expr::var{350}};
+        expr v2{expr::var{351}};
+        expr a1{expr::atom{"left"}};
+        expr a2{expr::atom{"right"}};
+        expr c1{expr::cons{&v1, &v2}};
+        
+        // Frame 1: bind v1 to a1
+        t.push();
+        bm.bind(350, &a1);
+        
+        // whnf of cons returns cons itself (weak head normal form)
+        const expr* result = bm.whnf(&c1);
+        assert(result == &c1);
+        
+        // But whnf of v1 returns a1
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v2) == &v2);  // v2 still unbound
+        
+        // Frame 2: bind v2 to a2
+        t.push();
+        bm.bind(351, &a2);
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v2) == &a2);
+        assert(bm.whnf(&c1) == &c1);  // cons still returns itself
+        
+        // Pop frame 2
+        t.pop();
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v2) == &v2);
+        assert(bm.bindings.size() == 1);
+        
+        // Pop frame 1
+        t.pop();
+        assert(bm.whnf(&v1) == &v1);
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 38: Multiple independent chains across frames
+    {
+        trail t;
+        bind_map bm(t);
+        
+        expr v1{expr::var{360}};
+        expr v2{expr::var{361}};
+        expr v3{expr::var{362}};
+        expr v4{expr::var{363}};
+        expr a1{expr::atom{"chain1"}};
+        expr a2{expr::atom{"chain2"}};
+        
+        // Frame 1: Start two chains
+        t.push();
+        bm.bind(360, &v2);  // Chain 1: v1 -> v2
+        bm.bind(362, &v4);  // Chain 2: v3 -> v4
+        assert(bm.bindings.size() == 2);
+        
+        // Frame 2: Complete both chains
+        t.push();
+        bm.bind(361, &a1);  // v2 -> a1
+        bm.bind(363, &a2);  // v4 -> a2
+        assert(bm.bindings.size() == 4);
+        
+        // Both chains resolve
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v3) == &a2);
+        
+        // Pop frame 2: chains end at v2 and v4
+        t.pop();
+        assert(bm.bindings.size() == 2);
+        assert(bm.whnf(&v1) == &v2);
+        assert(bm.whnf(&v3) == &v4);
+        
+        // Pop frame 1: all unbound
+        t.pop();
+        assert(bm.bindings.size() == 0);
+        assert(bm.whnf(&v1) == &v1);
+        assert(bm.whnf(&v3) == &v3);
+    }
+    
+    // Test 39: Very complex - multiple frames with overlapping updates and chains
+    {
+        trail t;
+        bind_map bm(t);
+        
+        expr v1{expr::var{370}};
+        expr v2{expr::var{371}};
+        expr v3{expr::var{372}};
+        expr a1{expr::atom{"a"}};
+        expr a2{expr::atom{"b"}};
+        expr a3{expr::atom{"c"}};
+        
+        // Frame 1: v1 -> a1
+        t.push();
+        bm.bind(370, &a1);
+        assert(bm.whnf(&v1) == &a1);
+        std::map<uint32_t, const expr*> checkpoint1 = bm.bindings;
+        
+        // Frame 2: v1 -> a2 (update v1's binding)
+        t.push();
+        bm.bind(370, &a2);
+        assert(bm.whnf(&v1) == &a2);
+        assert(bm.bindings.size() == 1);
+        std::map<uint32_t, const expr*> checkpoint2 = bm.bindings;
+        
+        // Frame 3: v1 -> a3 (update again), v2 -> a1
+        t.push();
+        bm.bind(370, &a3);
+        bm.bind(371, &a1);
+        assert(bm.whnf(&v1) == &a3);
+        assert(bm.whnf(&v2) == &a1);
+        assert(bm.bindings.size() == 2);
+        
+        // Pop frame 3: back to v1 -> a2
+        t.pop();
+        assert(bm.bindings == checkpoint2);
+        assert(bm.whnf(&v1) == &a2);
+        assert(bm.bindings.size() == 1);
+        
+        // Pop frame 2: back to v1 -> a1
+        t.pop();
+        assert(bm.bindings == checkpoint1);
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.bindings.size() == 1);
+        
+        // Pop frame 1: all unbound
+        t.pop();
+        assert(bm.bindings.size() == 0);
+        assert(bm.whnf(&v1) == &v1);
+    }
+    
+    // Test 40: Path compression with trail - verify compressed paths are restored
+    {
+        trail t;
+        bind_map bm(t);
+        
+        expr v1{expr::var{380}};
+        expr v2{expr::var{381}};
+        expr v3{expr::var{382}};
+        expr a1{expr::atom{"target"}};
+        
+        // Build chain in single frame: v1 -> v2 -> v3 -> a1
+        t.push();
+        bm.bind(380, &v2);
+        bm.bind(381, &v3);
+        bm.bind(382, &a1);
+        assert(bm.bindings.size() == 3);
+        
+        // Before whnf, v1 points to v2
+        assert(bm.bindings.at(380) == &v2);
+        
+        // whnf performs path compression
+        assert(bm.whnf(&v1) == &a1);
+        
+        // After whnf, v1 should point directly to a1 (path compression)
+        assert(bm.bindings.at(380) == &a1);
+        assert(bm.bindings.size() == 3);  // Count unchanged
+        
+        // Pop frame - should restore original v1 -> v2 binding
+        t.pop();
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 41: Deeply nested frames with cons structures
+    {
+        trail t;
+        bind_map bm(t);
+        
+        expr v1{expr::var{390}};
+        expr v2{expr::var{391}};
+        expr v3{expr::var{392}};
+        expr a1{expr::atom{"x"}};
+        expr a2{expr::atom{"y"}};
+        expr c1{expr::cons{&v2, &a1}};
+        expr c2{expr::cons{&v3, &a2}};
+        
+        // Frame 1: v1 -> c1
+        t.push();
+        bm.bind(390, &c1);
+        assert(bm.whnf(&v1) == &c1);
+        
+        // Frame 2: v2 -> a1 (bind var inside cons)
+        t.push();
+        bm.bind(391, &a1);
+        assert(bm.whnf(&v1) == &c1);  // Still returns c1 (WHNF)
+        assert(bm.whnf(&v2) == &a1);  // But v2 resolves to a1
+        
+        // Frame 3: v1 -> c2 (rebind v1)
+        t.push();
+        bm.bind(390, &c2);
+        assert(bm.whnf(&v1) == &c2);
+        assert(bm.whnf(&v3) == &v3);  // v3 unbound
+        
+        // Frame 4: v3 -> a2
+        t.push();
+        bm.bind(392, &a2);
+        assert(bm.whnf(&v1) == &c2);
+        assert(bm.whnf(&v3) == &a2);
+        
+        // Pop frame 4
+        t.pop();
+        assert(bm.whnf(&v1) == &c2);
+        assert(bm.whnf(&v3) == &v3);
+        
+        // Pop frame 3
+        t.pop();
+        assert(bm.whnf(&v1) == &c1);
+        assert(bm.whnf(&v2) == &a1);
+        
+        // Pop frame 2
+        t.pop();
+        assert(bm.whnf(&v1) == &c1);
+        assert(bm.whnf(&v2) == &v2);
+        
+        // Pop frame 1
+        t.pop();
+        assert(bm.bindings.size() == 0);
+        assert(bm.whnf(&v1) == &v1);
+    }
+    
+    // Test 42: Stress test - many frames with interleaved bindings
+    {
+        trail t;
+        bind_map bm(t);
+        
+        expr v1{expr::var{400}};
+        expr v2{expr::var{401}};
+        expr v3{expr::var{402}};
+        expr v4{expr::var{403}};
+        expr v5{expr::var{404}};
+        expr a1{expr::atom{"1"}};
+        expr a2{expr::atom{"2"}};
+        expr a3{expr::atom{"3"}};
+        
+        // Frame 1
+        t.push();
+        bm.bind(400, &v2);
+        bm.bind(401, &a1);
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.bindings.size() == 2);
+        
+        std::cout << "===================abc123" << std::endl;
+        // Frame 2
+        t.push();
+        bm.bind(402, &v3);
+        bm.bind(403, &a2);
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.whnf(&v3) == &a2);
+        assert(bm.bindings.size() == 4);
+        
+        // Frame 3
+        t.push();
+        bm.bind(401, &v4);  // Update v2's binding
+        bm.bind(404, &a3);
+        assert(bm.whnf(&v1) == &a3);  // v1 -> v2 -> v4 -> a3
+        assert(bm.bindings.size() == 5);
+        
+        // Frame 4
+        t.push();
+        bm.bind(400, &a1);  // Rebind v1 directly
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.bindings.size() == 5);
+        
+        // Pop all frames one by one
+        t.pop();  // Frame 4
+        assert(bm.whnf(&v1) == &a3);
+        assert(bm.bindings.size() == 5);
+        
+        t.pop();  // Frame 3
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.bindings.size() == 4);
+        
+        t.pop();  // Frame 2
+        assert(bm.whnf(&v1) == &a1);
+        assert(bm.bindings.size() == 2);
+        
+        t.pop();  // Frame 1
+        assert(bm.bindings.size() == 0);
+        assert(bm.whnf(&v1) == &v1);
+    }
+}
+
 void test_bind_map_occurs_check() {
     // occurs_check determines if a variable (by index) occurs anywhere in an expression,
     // even through indirection via bindings. It uses whnf to follow chains.
@@ -3059,703 +4246,6 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(602, &v0)); // v_left chains to cons (no var 602 in result)
         assert(!bm.occurs_check(603, &v0)); // v_right chains to cons (no var 603 in result)
         assert(bm.bindings.size() == 4);  // Path compression doesn't change count
-    }
-}
-
-void test_bind_map_whnf() {
-    trail t;
-    
-    // Test 1: whnf of atom returns itself
-    {
-        trail t;
-        bind_map bm(t);
-        expr a1{expr::atom{"test"}};
-        const expr* result = bm.whnf(&a1);
-        assert(result == &a1);
-        assert(bm.bindings.size() == 0);  // No bindings created for non-vars
-    }
-    
-    // Test 2: whnf of cons returns itself
-    {
-        trail t;
-        bind_map bm(t);
-        expr a1{expr::atom{"left"}};
-        expr a2{expr::atom{"right"}};
-        expr c1{expr::cons{&a1, &a2}};
-        const expr* result = bm.whnf(&c1);
-        assert(result == &c1);
-        assert(bm.bindings.size() == 0);
-    }
-    
-    // Test 3: whnf of unbound var returns itself (no entry created)
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{0}};
-        const expr* result = bm.whnf(&v1);
-        assert(result == &v1);
-        assert(bm.bindings.size() == 0);  // No default initialization
-    }
-    
-    // Test 4: whnf of bound var returns the binding
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{1}};
-        expr a1{expr::atom{"bound"}};
-        bm.bindings[1] = &a1;
-        
-        const expr* result = bm.whnf(&v1);
-        assert(result == &a1);
-        assert(bm.bindings.size() == 1);
-    }
-    
-    // Test 5: whnf with chain of var bindings (path compression)
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{10}};
-        expr v2{expr::var{11}};
-        expr v3{expr::var{12}};
-        expr a1{expr::atom{"end"}};
-        
-        // Create chain: v1 -> v2 -> v3 -> a1
-        bm.bindings[10] = &v2;
-        bm.bindings[11] = &v3;
-        bm.bindings[12] = &a1;
-        assert(bm.bindings.size() == 3);
-        
-        const expr* result = bm.whnf(&v1);
-        assert(result == &a1);
-        
-        // Verify path compression: v1 should now point directly to a1
-        assert(bm.bindings.at(10) == &a1);
-        // v2 should also be compressed to a1
-        assert(bm.bindings.at(11) == &a1);
-        assert(bm.bindings.size() == 3);
-    }
-    
-    // Test 6: whnf with long chain
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{20}};
-        expr v2{expr::var{21}};
-        expr v3{expr::var{22}};
-        expr v4{expr::var{23}};
-        expr v5{expr::var{24}};
-        expr a1{expr::atom{"final"}};
-        
-        // Create chain: v1 -> v2 -> v3 -> v4 -> v5 -> a1
-        bm.bindings[20] = &v2;
-        bm.bindings[21] = &v3;
-        bm.bindings[22] = &v4;
-        bm.bindings[23] = &v5;
-        bm.bindings[24] = &a1;
-        assert(bm.bindings.size() == 5);
-        
-        const expr* result = bm.whnf(&v1);
-        assert(result == &a1);
-        
-        // Verify all intermediate vars are compressed to a1
-        assert(bm.bindings.at(20) == &a1);
-        assert(bm.bindings.at(21) == &a1);
-        assert(bm.bindings.at(22) == &a1);
-        assert(bm.bindings.at(23) == &a1);
-        assert(bm.bindings.size() == 5);
-    }
-    
-    // Test 7: whnf with var bound to cons
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{30}};
-        expr a1{expr::atom{"x"}};
-        expr a2{expr::atom{"y"}};
-        expr c1{expr::cons{&a1, &a2}};
-        
-        bm.bindings[30] = &c1;
-        assert(bm.bindings.size() == 1);
-        
-        const expr* result = bm.whnf(&v1);
-        assert(result == &c1);
-        assert(std::holds_alternative<expr::cons>(result->content));
-        assert(bm.bindings.size() == 1);
-    }
-    
-    // Test 8: whnf with var bound to another var bound to cons
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{40}};
-        expr v2{expr::var{41}};
-        expr a1{expr::atom{"a"}};
-        expr a2{expr::atom{"b"}};
-        expr c1{expr::cons{&a1, &a2}};
-        
-        bm.bindings[40] = &v2;
-        bm.bindings[41] = &c1;
-        assert(bm.bindings.size() == 2);
-        
-        const expr* result = bm.whnf(&v1);
-        assert(result == &c1);
-        // Verify path compression
-        assert(bm.bindings.at(40) == &c1);
-        assert(bm.bindings.size() == 2);
-    }
-    
-    // Test 9: Multiple unbound vars remain unbound (no entries created)
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{50}};
-        expr v2{expr::var{51}};
-        expr v3{expr::var{52}};
-        
-        assert(bm.whnf(&v1) == &v1);
-        assert(bm.bindings.size() == 0);
-        
-        assert(bm.whnf(&v2) == &v2);
-        assert(bm.bindings.size() == 0);
-        
-        assert(bm.whnf(&v3) == &v3);
-        assert(bm.bindings.size() == 0);
-    }
-    
-    // Test 10: whnf called multiple times on same var with binding
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{60}};
-        expr a1{expr::atom{"repeated"}};
-        bm.bindings[60] = &a1;
-        assert(bm.bindings.size() == 1);
-        
-        const expr* r1 = bm.whnf(&v1);
-        const expr* r2 = bm.whnf(&v1);
-        const expr* r3 = bm.whnf(&v1);
-        
-        assert(r1 == &a1);
-        assert(r2 == &a1);
-        assert(r3 == &a1);
-        assert(bm.bindings.size() == 1);
-    }
-    
-    // Test 11: whnf with var bound to var bound to var (partial chain)
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{70}};
-        expr v2{expr::var{71}};
-        expr v3{expr::var{72}};
-        
-        // Chain: v1 -> v2 -> v3 (v3 is unbound - no entry for it)
-        bm.bindings[70] = &v2;
-        bm.bindings[71] = &v3;
-        assert(bm.bindings.size() == 2);
-        
-        const expr* result = bm.whnf(&v1);
-        assert(result == &v3);  // Should return v3, the unbound var
-        
-        // Verify path compression to v3
-        assert(bm.bindings.at(70) == &v3);
-        assert(bm.bindings.at(71) == &v3);
-        assert(bm.bindings.size() == 2);
-    }
-    
-    // Test 12: whnf with nested cons structures
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{80}};
-        expr a1{expr::atom{"inner"}};
-        expr a2{expr::atom{"outer"}};
-        expr inner_cons{expr::cons{&a1, &a2}};
-        expr a3{expr::atom{"wrap"}};
-        expr outer_cons{expr::cons{&inner_cons, &a3}};
-        
-        bm.bindings[80] = &outer_cons;
-        assert(bm.bindings.size() == 1);
-        
-        const expr* result = bm.whnf(&v1);
-        assert(result == &outer_cons);
-        assert(std::holds_alternative<expr::cons>(result->content));
-        assert(bm.bindings.size() == 1);
-    }
-    
-    // Test 13: whnf with different var indices
-    {
-        trail t;
-        bind_map bm(t);
-        expr v_small{expr::var{0}};
-        expr v_large{expr::var{UINT32_MAX}};
-        expr a1{expr::atom{"small"}};
-        expr a2{expr::atom{"large"}};
-        
-        bm.bindings[0] = &a1;
-        bm.bindings[UINT32_MAX] = &a2;
-        assert(bm.bindings.size() == 2);
-        
-        assert(bm.whnf(&v_small) == &a1);
-        assert(bm.whnf(&v_large) == &a2);
-        assert(bm.bindings.size() == 2);
-    }
-    
-    // Test 14: whnf preserves atom values
-    {
-        trail t;
-        bind_map bm(t);
-        expr a1{expr::atom{""}};
-        expr a2{expr::atom{"test123"}};
-        expr a3{expr::atom{"!@#$%"}};
-        
-        assert(bm.whnf(&a1) == &a1);
-        assert(bm.whnf(&a2) == &a2);
-        assert(bm.whnf(&a3) == &a3);
-        assert(bm.bindings.size() == 0);
-    }
-    
-    // Test 15: whnf with complex chain ending in cons
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{90}};
-        expr v2{expr::var{91}};
-        expr v3{expr::var{92}};
-        expr a1{expr::atom{"left"}};
-        expr a2{expr::atom{"right"}};
-        expr c1{expr::cons{&a1, &a2}};
-        
-        // Chain: v1 -> v2 -> v3 -> c1
-        bm.bindings[90] = &v2;
-        bm.bindings[91] = &v3;
-        bm.bindings[92] = &c1;
-        assert(bm.bindings.size() == 3);
-        
-        const expr* result = bm.whnf(&v1);
-        assert(result == &c1);
-        
-        // Verify all vars compressed to c1
-        assert(bm.bindings.at(90) == &c1);
-        assert(bm.bindings.at(91) == &c1);
-        assert(bm.bindings.size() == 3);
-    }
-    
-    // Test 16: WHNF does NOT reduce vars inside cons (WEAK head, not strong)
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{100}};
-        expr v2{expr::var{101}};
-        expr a1{expr::atom{"bound_atom"}};
-        
-        // Bind v2 to an atom
-        bm.bindings[101] = &a1;
-        
-        // Create cons with v1 and v2 as children
-        expr c1{expr::cons{&v1, &v2}};
-        
-        // whnf of the cons should return the cons itself, NOT reduce children
-        const expr* result = bm.whnf(&c1);
-        assert(result == &c1);
-        assert(std::holds_alternative<expr::cons>(result->content));
-        
-        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
-        // Children should still be the original var pointers, NOT reduced
-        assert(cons_ref.lhs == &v1);
-        assert(cons_ref.rhs == &v2);
-        assert(bm.bindings.size() == 1);
-    }
-    
-    // Test 17: Var bound to cons containing bound vars - children not reduced
-    {
-        trail t;
-        bind_map bm(t);
-        expr v_outer{expr::var{110}};
-        expr v_left{expr::var{111}};
-        expr v_right{expr::var{112}};
-        expr a1{expr::atom{"left_val"}};
-        expr a2{expr::atom{"right_val"}};
-        
-        // Bind the inner vars
-        bm.bindings[111] = &a1;
-        bm.bindings[112] = &a2;
-        
-        // Create cons with bound vars as children
-        expr c1{expr::cons{&v_left, &v_right}};
-        bm.bindings[110] = &c1;
-        assert(bm.bindings.size() == 3);
-        
-        const expr* result = bm.whnf(&v_outer);
-        assert(result == &c1);
-        
-        // The cons children should still point to vars, not atoms
-        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
-        assert(cons_ref.lhs == &v_left);
-        assert(cons_ref.rhs == &v_right);
-        assert(bm.bindings.size() == 3);
-    }
-    
-    // Test 18: Chain ending in cons with bound vars inside
-    {
-        trail t;
-        bind_map bm(t);
-        expr v_chain1{expr::var{120}};
-        expr v_chain2{expr::var{121}};
-        expr v_inner1{expr::var{122}};
-        expr v_inner2{expr::var{123}};
-        expr a1{expr::atom{"inner_bound"}};
-        
-        bm.bindings[122] = &a1;
-        
-        expr c1{expr::cons{&v_inner1, &v_inner2}};
-        bm.bindings[120] = &v_chain2;
-        bm.bindings[121] = &c1;
-        assert(bm.bindings.size() == 3);
-        
-        const expr* result = bm.whnf(&v_chain1);
-        assert(result == &c1);
-        
-        // Cons children should be unchanged
-        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
-        assert(cons_ref.lhs == &v_inner1);
-        assert(cons_ref.rhs == &v_inner2);
-        
-        // Path compression on outer chain
-        assert(bm.bindings.at(120) == &c1);
-        assert(bm.bindings.size() == 3);
-    }
-    
-    // Test 19: Deeply nested cons with vars at all levels
-    {
-        trail t;
-        bind_map bm(t);
-        expr v_outer{expr::var{130}};
-        expr v1{expr::var{131}};
-        expr v2{expr::var{132}};
-        expr v3{expr::var{133}};
-        expr v4{expr::var{134}};
-        
-        // Bind some inner vars
-        expr a1{expr::atom{"bound1"}};
-        expr a2{expr::atom{"bound2"}};
-        bm.bindings[131] = &a1;
-        bm.bindings[133] = &a2;
-        
-        // Create nested structure: cons(cons(v1, v2), cons(v3, v4))
-        expr inner_left{expr::cons{&v1, &v2}};
-        expr inner_right{expr::cons{&v3, &v4}};
-        expr outer{expr::cons{&inner_left, &inner_right}};
-        
-        bm.bindings[130] = &outer;
-        assert(bm.bindings.size() == 3);
-        
-        const expr* result = bm.whnf(&v_outer);
-        assert(result == &outer);
-        
-        // Verify structure is unchanged - vars inside cons are not reduced
-        const expr::cons& outer_cons = std::get<expr::cons>(result->content);
-        assert(outer_cons.lhs == &inner_left);
-        assert(outer_cons.rhs == &inner_right);
-        
-        const expr::cons& left_cons = std::get<expr::cons>(outer_cons.lhs->content);
-        assert(left_cons.lhs == &v1);  // Still points to var, not a1
-        assert(left_cons.rhs == &v2);
-        
-        const expr::cons& right_cons = std::get<expr::cons>(outer_cons.rhs->content);
-        assert(right_cons.lhs == &v3);  // Still points to var, not a2
-        assert(right_cons.rhs == &v4);
-        
-        assert(bm.bindings.size() == 3);
-    }
-    
-    // Test 20: Var bound to cons of vars, one of which chains to atom
-    {
-        trail t;
-        bind_map bm(t);
-        expr v_outer{expr::var{140}};
-        expr v_left{expr::var{141}};
-        expr v_right{expr::var{142}};
-        expr v_chain{expr::var{143}};
-        expr a1{expr::atom{"chained"}};
-        
-        // v_left chains to atom
-        bm.bindings[141] = &v_chain;
-        bm.bindings[143] = &a1;
-        
-        expr c1{expr::cons{&v_left, &v_right}};
-        bm.bindings[140] = &c1;
-        assert(bm.bindings.size() == 3);
-        
-        const expr* result = bm.whnf(&v_outer);
-        assert(result == &c1);
-        
-        // Cons children should be unchanged - v_left is NOT reduced to a1
-        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
-        assert(cons_ref.lhs == &v_left);
-        assert(cons_ref.rhs == &v_right);
-        assert(bm.bindings.size() == 3);
-    }
-    
-    // Test 21: Multiple vars bound to same atom
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{150}};
-        expr v2{expr::var{151}};
-        expr v3{expr::var{152}};
-        expr a1{expr::atom{"shared"}};
-        
-        bm.bindings[150] = &a1;
-        bm.bindings[151] = &a1;
-        bm.bindings[152] = &a1;
-        assert(bm.bindings.size() == 3);
-        
-        assert(bm.whnf(&v1) == &a1);
-        assert(bm.whnf(&v2) == &a1);
-        assert(bm.whnf(&v3) == &a1);
-        assert(bm.bindings.size() == 3);
-    }
-    
-    // Test 22: Multiple vars bound to same cons
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{160}};
-        expr v2{expr::var{161}};
-        expr a1{expr::atom{"x"}};
-        expr a2{expr::atom{"y"}};
-        expr c1{expr::cons{&a1, &a2}};
-        
-        bm.bindings[160] = &c1;
-        bm.bindings[161] = &c1;
-        assert(bm.bindings.size() == 2);
-        
-        assert(bm.whnf(&v1) == &c1);
-        assert(bm.whnf(&v2) == &c1);
-        assert(bm.bindings.size() == 2);
-    }
-    
-    // Test 23: Cons of unbound vars
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{170}};
-        expr v2{expr::var{171}};
-        expr c1{expr::cons{&v1, &v2}};
-        
-        const expr* result = bm.whnf(&c1);
-        assert(result == &c1);
-        
-        // Cons children remain as unbound vars
-        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
-        assert(cons_ref.lhs == &v1);
-        assert(cons_ref.rhs == &v2);
-        assert(bm.bindings.size() == 0);  // No bindings created
-    }
-    
-    // Test 24: Cons of mix (atom and var)
-    {
-        trail t;
-        bind_map bm(t);
-        expr a1{expr::atom{"atom"}};
-        expr v1{expr::var{180}};
-        expr c1{expr::cons{&a1, &v1}};
-        
-        const expr* result = bm.whnf(&c1);
-        assert(result == &c1);
-        
-        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
-        assert(cons_ref.lhs == &a1);
-        assert(cons_ref.rhs == &v1);  // Var not reduced
-        assert(bm.bindings.size() == 0);
-    }
-    
-    // Test 25: Cons of mix (var and cons)
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{190}};
-        expr a1{expr::atom{"inner"}};
-        expr a2{expr::atom{"inner2"}};
-        expr inner_cons{expr::cons{&a1, &a2}};
-        expr outer_cons{expr::cons{&v1, &inner_cons}};
-        
-        const expr* result = bm.whnf(&outer_cons);
-        assert(result == &outer_cons);
-        
-        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
-        assert(cons_ref.lhs == &v1);  // Var not reduced
-        assert(cons_ref.rhs == &inner_cons);
-        assert(bm.bindings.size() == 0);
-    }
-    
-    // Test 26: Var bound to cons of bound vars - only outer reduced
-    {
-        trail t;
-        bind_map bm(t);
-        expr v_outer{expr::var{200}};
-        expr v_inner1{expr::var{201}};
-        expr v_inner2{expr::var{202}};
-        expr a1{expr::atom{"val1"}};
-        expr a2{expr::atom{"val2"}};
-        
-        // Bind inner vars
-        bm.bindings[201] = &a1;
-        bm.bindings[202] = &a2;
-        
-        // Create cons with bound vars
-        expr c1{expr::cons{&v_inner1, &v_inner2}};
-        bm.bindings[200] = &c1;
-        assert(bm.bindings.size() == 3);
-        
-        const expr* result = bm.whnf(&v_outer);
-        assert(result == &c1);
-        
-        // Children should STILL be vars, not reduced to atoms
-        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
-        assert(cons_ref.lhs == &v_inner1);
-        assert(cons_ref.rhs == &v_inner2);
-        assert(std::holds_alternative<expr::var>(cons_ref.lhs->content));
-        assert(std::holds_alternative<expr::var>(cons_ref.rhs->content));
-        assert(bm.bindings.size() == 3);
-    }
-    
-    // Test 27: Chain to cons of chained vars
-    {
-        trail t;
-        bind_map bm(t);
-        expr v_outer{expr::var{210}};
-        expr v_mid{expr::var{211}};
-        expr v_left{expr::var{212}};
-        expr v_right{expr::var{213}};
-        expr v_left_chain{expr::var{214}};
-        expr a1{expr::atom{"left_end"}};
-        
-        // v_left chains to atom
-        bm.bindings[212] = &v_left_chain;
-        bm.bindings[214] = &a1;
-        
-        // Cons contains chained var and unbound var
-        expr c1{expr::cons{&v_left, &v_right}};
-        bm.bindings[210] = &v_mid;
-        bm.bindings[211] = &c1;
-        assert(bm.bindings.size() == 4);
-        
-        const expr* result = bm.whnf(&v_outer);
-        assert(result == &c1);
-        
-        // Cons children should be unchanged - not reduced
-        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
-        assert(cons_ref.lhs == &v_left);  // Still v_left, not a1
-        assert(cons_ref.rhs == &v_right);
-        
-        // Outer chain should be compressed
-        assert(bm.bindings.at(210) == &c1);
-        assert(bm.bindings.size() == 4);
-    }
-    
-    // Test 28: Deeply nested cons with vars everywhere
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{220}};
-        expr v2{expr::var{221}};
-        expr v3{expr::var{222}};
-        expr v4{expr::var{223}};
-        expr a1{expr::atom{"deep"}};
-        
-        // Bind v4
-        bm.bindings[223] = &a1;
-        
-        // Create: cons(cons(v1, v2), cons(v3, v4))
-        expr inner_left{expr::cons{&v1, &v2}};
-        expr inner_right{expr::cons{&v3, &v4}};
-        expr outer{expr::cons{&inner_left, &inner_right}};
-        
-        const expr* result = bm.whnf(&outer);
-        assert(result == &outer);
-        
-        // All structure should be preserved, vars not reduced
-        const expr::cons& outer_cons = std::get<expr::cons>(result->content);
-        assert(outer_cons.lhs == &inner_left);
-        assert(outer_cons.rhs == &inner_right);
-        
-        const expr::cons& left_cons = std::get<expr::cons>(outer_cons.lhs->content);
-        assert(left_cons.lhs == &v1);
-        assert(left_cons.rhs == &v2);
-        
-        const expr::cons& right_cons = std::get<expr::cons>(outer_cons.rhs->content);
-        assert(right_cons.lhs == &v3);
-        assert(right_cons.rhs == &v4);  // Still v4, not a1
-        
-        assert(bm.bindings.size() == 1);
-    }
-    
-    // Test 29: Var chain to cons of var chains
-    {
-        trail t;
-        bind_map bm(t);
-        expr v_outer{expr::var{230}};
-        expr v_outer_chain{expr::var{231}};
-        expr v_left{expr::var{232}};
-        expr v_left_chain{expr::var{233}};
-        expr v_right{expr::var{234}};
-        expr a_left{expr::atom{"left"}};
-        expr a_right{expr::atom{"right"}};
-        
-        // Setup chains
-        bm.bindings[232] = &v_left_chain;
-        bm.bindings[233] = &a_left;
-        bm.bindings[234] = &a_right;
-        
-        expr c1{expr::cons{&v_left, &v_right}};
-        bm.bindings[230] = &v_outer_chain;
-        bm.bindings[231] = &c1;
-        assert(bm.bindings.size() == 5);
-        
-        const expr* result = bm.whnf(&v_outer);
-        assert(result == &c1);
-        
-        // Cons children are still original vars, not reduced
-        const expr::cons& cons_ref = std::get<expr::cons>(result->content);
-        assert(cons_ref.lhs == &v_left);
-        assert(cons_ref.rhs == &v_right);
-        
-        // Outer chain compressed
-        assert(bm.bindings.at(230) == &c1);
-        assert(bm.bindings.size() == 5);
-    }
-    
-    // Test 30: Empty bindings map remains empty for unbound vars
-    {
-        trail t;
-        bind_map bm(t);
-        assert(bm.bindings.size() == 0);
-        
-        expr v1{expr::var{240}};
-        bm.whnf(&v1);
-        assert(bm.bindings.size() == 0);
-        
-        expr v2{expr::var{241}};
-        bm.whnf(&v2);
-        assert(bm.bindings.size() == 0);
-    }
-    
-    // Test 31: Same unbound var called multiple times creates no entries
-    {
-        trail t;
-        bind_map bm(t);
-        expr v1{expr::var{250}};
-        
-        bm.whnf(&v1);
-        assert(bm.bindings.size() == 0);
-        
-        bm.whnf(&v1);
-        assert(bm.bindings.size() == 0);
-        
-        bm.whnf(&v1);
-        assert(bm.bindings.size() == 0);
     }
 }
 
