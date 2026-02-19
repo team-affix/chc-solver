@@ -6,83 +6,136 @@ void test_trail_constructor() {
     // Basic construction - should not crash
     trail t1;
     assert(t1.depth() == 0);
+    assert(t1.undo_stack.size() == 0);
+    assert(t1.frame_boundary_stack.size() == 0);
     
     // Multiple trails can be constructed
     trail t2;
     trail t3;
     assert(t2.depth() == 0);
     assert(t3.depth() == 0);
+    assert(t2.undo_stack.size() == 0);
+    assert(t2.frame_boundary_stack.size() == 0);
+    assert(t3.undo_stack.size() == 0);
+    assert(t3.frame_boundary_stack.size() == 0);
     
     // Trail should be usable immediately after construction
     t1.push();
     assert(t1.depth() == 1);
+    assert(t1.frame_boundary_stack.size() == 1);
+    assert(t1.frame_boundary_stack.top() == 0);  // Boundary at position 0
+    assert(t1.undo_stack.size() == 0);  // No operations logged yet
     t1.pop();
     assert(t1.depth() == 0);
+    assert(t1.undo_stack.size() == 0);
+    assert(t1.frame_boundary_stack.size() == 0);
 }
 
 void test_trail_push_pop() {
     trail t;
     assert(t.depth() == 0);
+    assert(t.undo_stack.size() == 0);
+    assert(t.frame_boundary_stack.size() == 0);
     
     // Single push/pop with no logged operations
     t.push();
     assert(t.depth() == 1);
+    assert(t.frame_boundary_stack.size() == 1);
+    assert(t.frame_boundary_stack.top() == 0);
+    assert(t.undo_stack.size() == 0);
     t.pop();
     assert(t.depth() == 0);
+    assert(t.undo_stack.size() == 0);
+    assert(t.frame_boundary_stack.size() == 0);
     
     // Multiple push/pop pairs with no logged operations
     t.push();
     assert(t.depth() == 1);
+    assert(t.frame_boundary_stack.size() == 1);
+    assert(t.frame_boundary_stack.top() == 0);
     t.pop();
     assert(t.depth() == 0);
+    assert(t.frame_boundary_stack.size() == 0);
     
     t.push();
     assert(t.depth() == 1);
+    assert(t.frame_boundary_stack.size() == 1);
+    assert(t.frame_boundary_stack.top() == 0);
     t.pop();
     assert(t.depth() == 0);
+    assert(t.frame_boundary_stack.size() == 0);
     
     t.push();
     assert(t.depth() == 1);
+    assert(t.frame_boundary_stack.size() == 1);
+    assert(t.frame_boundary_stack.top() == 0);
     t.pop();
     assert(t.depth() == 0);
+    assert(t.frame_boundary_stack.size() == 0);
     
     // Nested push/pop
     t.push();
     assert(t.depth() == 1);
+    assert(t.frame_boundary_stack.size() == 1);
+    assert(t.frame_boundary_stack.top() == 0);
     t.push();
     assert(t.depth() == 2);
+    assert(t.frame_boundary_stack.size() == 2);
+    assert(t.frame_boundary_stack.top() == 0);  // Second frame also at position 0
     t.pop();
     assert(t.depth() == 1);
+    assert(t.frame_boundary_stack.size() == 1);
+    assert(t.frame_boundary_stack.top() == 0);
     t.pop();
     assert(t.depth() == 0);
+    assert(t.frame_boundary_stack.size() == 0);
     
     // Deeper nesting
     t.push();
     assert(t.depth() == 1);
+    assert(t.frame_boundary_stack.size() == 1);
+    assert(t.frame_boundary_stack.top() == 0);
     t.push();
     assert(t.depth() == 2);
+    assert(t.frame_boundary_stack.size() == 2);
+    assert(t.frame_boundary_stack.top() == 0);
     t.push();
     assert(t.depth() == 3);
+    assert(t.frame_boundary_stack.size() == 3);
+    assert(t.frame_boundary_stack.top() == 0);
     t.pop();
     assert(t.depth() == 2);
+    assert(t.frame_boundary_stack.size() == 2);
     t.pop();
     assert(t.depth() == 1);
+    assert(t.frame_boundary_stack.size() == 1);
     t.pop();
     assert(t.depth() == 0);
+    assert(t.frame_boundary_stack.size() == 0);
     
     // Mixed nesting
     t.push();
     assert(t.depth() == 1);
+    assert(t.frame_boundary_stack.size() == 1);
+    assert(t.frame_boundary_stack.top() == 0);
     t.push();
     assert(t.depth() == 2);
+    assert(t.frame_boundary_stack.size() == 2);
+    assert(t.frame_boundary_stack.top() == 0);
     t.pop();
     assert(t.depth() == 1);
+    assert(t.frame_boundary_stack.size() == 1);
+    assert(t.frame_boundary_stack.top() == 0);
     t.push();
     assert(t.depth() == 2);
+    assert(t.frame_boundary_stack.size() == 2);
+    assert(t.frame_boundary_stack.top() == 0);
     t.pop();
     assert(t.depth() == 1);
+    assert(t.frame_boundary_stack.size() == 1);
     t.pop();
     assert(t.depth() == 0);
+    assert(t.frame_boundary_stack.size() == 0);
 }
 
 void test_trail_log() {
@@ -90,12 +143,25 @@ void test_trail_log() {
     {
         trail t;
         int x = 5;
+        assert(t.undo_stack.size() == 0);
+        assert(t.frame_boundary_stack.size() == 0);
+        
         t.push();
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);
+        assert(t.undo_stack.size() == 0);
+        
         x = 10;
         t.log([&x]() { x = 5; });
         assert(x == 10);
+        assert(t.undo_stack.size() == 1);
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);
+        
         t.pop();
         assert(x == 5);
+        assert(t.undo_stack.size() == 0);
+        assert(t.frame_boundary_stack.size() == 0);
     }
     
     // Test 2: Multiple log operations in one frame
@@ -103,16 +169,29 @@ void test_trail_log() {
         trail t;
         int a = 1, b = 2, c = 3;
         t.push();
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);
+        assert(t.undo_stack.size() == 0);
+        
         a = 10;
         t.log([&a]() { a = 1; });
+        assert(t.undo_stack.size() == 1);
+        
         b = 20;
         t.log([&b]() { b = 2; });
+        assert(t.undo_stack.size() == 2);
+        
         c = 30;
         t.log([&c]() { c = 3; });
+        assert(t.undo_stack.size() == 3);
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);  // Boundary still at 0
         
         assert(a == 10 && b == 20 && c == 30);
         t.pop();
         assert(a == 1 && b == 2 && c == 3);
+        assert(t.undo_stack.size() == 0);
+        assert(t.frame_boundary_stack.size() == 0);
     }
     
     // Test 3: Nested frames with logs
@@ -122,18 +201,35 @@ void test_trail_log() {
         int x = 0;
         
         t.push();  // Frame 1
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);
+        
         x = 1;
         t.log([&x]() { x = 0; });
+        assert(t.undo_stack.size() == 1);
         
         t.push();  // Frame 2
+        assert(t.frame_boundary_stack.size() == 2);
+        assert(t.frame_boundary_stack.top() == 1);  // Boundary at position 1
+        assert(t.undo_stack.size() == 1);
+        
         x = 2;
         t.log([&x]() { x = 1; });
+        assert(t.undo_stack.size() == 2);
+        assert(t.frame_boundary_stack.size() == 2);
+        assert(t.frame_boundary_stack.top() == 1);
         
         assert(x == 2);
         t.pop();  // Pop frame 2
         assert(x == 1);
+        assert(t.undo_stack.size() == 1);  // One undo from frame 1 remains
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);
+        
         t.pop();  // Pop frame 1
         assert(x == 0);
+        assert(t.undo_stack.size() == 0);
+        assert(t.frame_boundary_stack.size() == 0);
     }
     
     // Test 4: Multiple operations per frame with nesting
@@ -143,31 +239,61 @@ void test_trail_log() {
         int a = 100, b = 200, c = 300;
         
         t.push();  // Frame 1
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);
+        
         a = 111;
         t.log([&a]() { a = 100; });
+        assert(t.undo_stack.size() == 1);
+        
         b = 222;
         t.log([&b]() { b = 200; });
+        assert(t.undo_stack.size() == 2);
+        assert(t.frame_boundary_stack.top() == 0);
         
         t.push();  // Frame 2
+        assert(t.frame_boundary_stack.size() == 2);
+        assert(t.frame_boundary_stack.top() == 2);  // Boundary at position 2
+        assert(t.undo_stack.size() == 2);
+        
         b = 333;
         t.log([&b]() { b = 222; });
+        assert(t.undo_stack.size() == 3);
+        
         c = 444;
         t.log([&c]() { c = 300; });
+        assert(t.undo_stack.size() == 4);
+        assert(t.frame_boundary_stack.top() == 2);
         
         t.push();  // Frame 3
+        assert(t.frame_boundary_stack.size() == 3);
+        assert(t.frame_boundary_stack.top() == 4);  // Boundary at position 4
+        assert(t.undo_stack.size() == 4);
+        
         a = 555;
         t.log([&a]() { a = 111; });
+        assert(t.undo_stack.size() == 5);
+        assert(t.frame_boundary_stack.size() == 3);
+        assert(t.frame_boundary_stack.top() == 4);
         
         assert(a == 555 && b == 333 && c == 444);
         
         t.pop();  // Pop frame 3
         assert(a == 111 && b == 333 && c == 444);
+        assert(t.undo_stack.size() == 4);  // Frame 3's undo removed
+        assert(t.frame_boundary_stack.size() == 2);
+        assert(t.frame_boundary_stack.top() == 2);
         
         t.pop();  // Pop frame 2
         assert(a == 111 && b == 222 && c == 300);
+        assert(t.undo_stack.size() == 2);  // Frame 2's undos removed
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);
         
         t.pop();  // Pop frame 1
         assert(a == 100 && b == 200 && c == 300);
+        assert(t.undo_stack.size() == 0);
+        assert(t.frame_boundary_stack.size() == 0);
     }
     
     // Test 5: Empty frame (push/pop with no logs)
@@ -176,11 +302,19 @@ void test_trail_log() {
 
         int x = 42;
         t.push();
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);
+        assert(t.undo_stack.size() == 0);
+        
         // No logs
         x = 99;
         assert(x == 99);
+        assert(t.undo_stack.size() == 0);  // Still no undos
+        
         t.pop();
         assert(x == 99);  // Should remain unchanged since no undo was logged
+        assert(t.undo_stack.size() == 0);
+        assert(t.frame_boundary_stack.size() == 0);
     }
     
     // Test 6: Complex nested scenario with partial pops
@@ -190,31 +324,54 @@ void test_trail_log() {
         int val = 0;
         
         t.push();  // Frame A
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);
+        
         val = 1;
         t.log([&val]() { val = 0; });
+        assert(t.undo_stack.size() == 1);
         
         t.push();  // Frame B
+        assert(t.frame_boundary_stack.size() == 2);
+        assert(t.frame_boundary_stack.top() == 1);  // Boundary at position 1
+        
         val = 2;
         t.log([&val]() { val = 1; });
+        assert(t.undo_stack.size() == 2);
         
         t.push();  // Frame C
+        assert(t.frame_boundary_stack.size() == 3);
+        assert(t.frame_boundary_stack.top() == 2);  // Boundary at position 2
+        
         val = 3;
         t.log([&val]() { val = 2; });
+        assert(t.undo_stack.size() == 3);
+        assert(t.frame_boundary_stack.top() == 2);
         
         assert(val == 3);
         t.pop();  // Pop C
         assert(val == 2);
+        assert(t.undo_stack.size() == 2);  // Frame C's undo removed
+        assert(t.frame_boundary_stack.size() == 2);
+        assert(t.frame_boundary_stack.top() == 1);
         
         // Add more to frame B
         val = 4;
         t.log([&val]() { val = 2; });
+        assert(t.undo_stack.size() == 3);  // New undo added to frame B
+        assert(t.frame_boundary_stack.top() == 1);  // Boundary unchanged
         
         assert(val == 4);
         t.pop();  // Pop B (should undo both operations in B)
         assert(val == 1);
+        assert(t.undo_stack.size() == 1);  // Frame B's undos removed, frame A's remains
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);
         
         t.pop();  // Pop A
         assert(val == 0);
+        assert(t.undo_stack.size() == 0);
+        assert(t.frame_boundary_stack.size() == 0);
     }
     
     // Test 7: Multiple variables with complex state changes
@@ -224,35 +381,55 @@ void test_trail_log() {
         int x = 10, y = 20, z = 30;
         
         t.push();  // Level 1
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);
+        
         x += 5;
         t.log([&x]() { x -= 5; });
         y *= 2;
         t.log([&y]() { y /= 2; });
+        assert(t.undo_stack.size() == 2);
         
         assert(x == 15 && y == 40 && z == 30);
         
         t.push();  // Level 2
+        assert(t.frame_boundary_stack.size() == 2);
+        assert(t.frame_boundary_stack.top() == 2);
+        
         z = x + y;  // z = 55
         t.log([&z]() { z = 30; });
         x = 0;
         t.log([&x]() { x = 15; });
+        assert(t.undo_stack.size() == 4);
         
         assert(x == 0 && y == 40 && z == 55);
         
         t.push();  // Level 3
+        assert(t.frame_boundary_stack.size() == 3);
+        assert(t.frame_boundary_stack.top() == 4);
+        
         y = 100;
         t.log([&y]() { y = 40; });
+        assert(t.undo_stack.size() == 5);
         
         assert(x == 0 && y == 100 && z == 55);
         
         t.pop();  // Pop level 3
         assert(x == 0 && y == 40 && z == 55);
+        assert(t.undo_stack.size() == 4);
+        assert(t.frame_boundary_stack.size() == 2);
+        assert(t.frame_boundary_stack.top() == 2);
         
         t.pop();  // Pop level 2
         assert(x == 15 && y == 40 && z == 30);
+        assert(t.undo_stack.size() == 2);
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);
         
         t.pop();  // Pop level 1
         assert(x == 10 && y == 20 && z == 30);
+        assert(t.undo_stack.size() == 0);
+        assert(t.frame_boundary_stack.size() == 0);
     }
     
     // Test 8: Deeply nested frames (5 levels)
@@ -262,36 +439,61 @@ void test_trail_log() {
         int depth = 0;
         
         t.push();
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);
         depth = 1;
         t.log([&depth]() { depth = 0; });
+        assert(t.undo_stack.size() == 1);
         
         t.push();
+        assert(t.frame_boundary_stack.size() == 2);
+        assert(t.frame_boundary_stack.top() == 1);
         depth = 2;
         t.log([&depth]() { depth = 1; });
+        assert(t.undo_stack.size() == 2);
         
         t.push();
+        assert(t.frame_boundary_stack.size() == 3);
+        assert(t.frame_boundary_stack.top() == 2);
         depth = 3;
         t.log([&depth]() { depth = 2; });
+        assert(t.undo_stack.size() == 3);
         
         t.push();
+        assert(t.frame_boundary_stack.size() == 4);
+        assert(t.frame_boundary_stack.top() == 3);
         depth = 4;
         t.log([&depth]() { depth = 3; });
+        assert(t.undo_stack.size() == 4);
         
         t.push();
+        assert(t.frame_boundary_stack.size() == 5);
+        assert(t.frame_boundary_stack.top() == 4);
         depth = 5;
         t.log([&depth]() { depth = 4; });
+        assert(t.undo_stack.size() == 5);
         
         assert(depth == 5);
         t.pop();
         assert(depth == 4);
+        assert(t.undo_stack.size() == 4);
+        assert(t.frame_boundary_stack.size() == 4);
         t.pop();
         assert(depth == 3);
+        assert(t.undo_stack.size() == 3);
+        assert(t.frame_boundary_stack.size() == 3);
         t.pop();
         assert(depth == 2);
+        assert(t.undo_stack.size() == 2);
+        assert(t.frame_boundary_stack.size() == 2);
         t.pop();
         assert(depth == 1);
+        assert(t.undo_stack.size() == 1);
+        assert(t.frame_boundary_stack.size() == 1);
         t.pop();
         assert(depth == 0);
+        assert(t.undo_stack.size() == 0);
+        assert(t.frame_boundary_stack.size() == 0);
     }
     
     // Test 9: Many operations in a single frame
@@ -301,16 +503,24 @@ void test_trail_log() {
         std::vector<int> values(10, 0);
         
         t.push();
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);
+        
         for (int i = 0; i < 10; i++) {
             values[i] = i + 1;
             t.log([&values, i]() { values[i] = 0; });
         }
+        assert(t.undo_stack.size() == 10);  // All 10 operations logged
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);  // Boundary unchanged
         
         for (int i = 0; i < 10; i++) {
             assert(values[i] == i + 1);
         }
         
         t.pop();
+        assert(t.undo_stack.size() == 0);  // All undos executed
+        assert(t.frame_boundary_stack.size() == 0);
         
         for (int i = 0; i < 10; i++) {
             assert(values[i] == 0);
@@ -324,31 +534,52 @@ void test_trail_log() {
         int state = 0;
         
         t.push();  // Frame 1
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);
         state = 1;
         t.log([&state]() { state = 0; });
+        assert(t.undo_stack.size() == 1);
         
         t.push();  // Frame 2
+        assert(t.frame_boundary_stack.size() == 2);
+        assert(t.frame_boundary_stack.top() == 1);
         state = 2;
         t.log([&state]() { state = 1; });
+        assert(t.undo_stack.size() == 2);
         
         t.pop();  // Pop frame 2
         assert(state == 1);
+        assert(t.undo_stack.size() == 1);
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);
         
         t.push();  // New frame 2
+        assert(t.frame_boundary_stack.size() == 2);
+        assert(t.frame_boundary_stack.top() == 1);
         state = 3;
         t.log([&state]() { state = 1; });
+        assert(t.undo_stack.size() == 2);
         
         t.push();  // Frame 3
+        assert(t.frame_boundary_stack.size() == 3);
+        assert(t.frame_boundary_stack.top() == 2);
         state = 4;
         t.log([&state]() { state = 3; });
+        assert(t.undo_stack.size() == 3);
         
         assert(state == 4);
         t.pop();  // Pop frame 3
         assert(state == 3);
+        assert(t.undo_stack.size() == 2);
+        assert(t.frame_boundary_stack.size() == 2);
         t.pop();  // Pop frame 2
         assert(state == 1);
+        assert(t.undo_stack.size() == 1);
+        assert(t.frame_boundary_stack.size() == 1);
         t.pop();  // Pop frame 1
         assert(state == 0);
+        assert(t.undo_stack.size() == 0);
+        assert(t.frame_boundary_stack.size() == 0);
     }
     
     // Test 11: String modifications
@@ -358,12 +589,17 @@ void test_trail_log() {
         std::string str = "original";
         
         t.push();
+        assert(t.frame_boundary_stack.size() == 1);
+        assert(t.frame_boundary_stack.top() == 0);
         str = "modified";
         t.log([&str]() { str = "original"; });
+        assert(t.undo_stack.size() == 1);
         
         assert(str == "modified");
         t.pop();
         assert(str == "original");
+        assert(t.undo_stack.size() == 0);
+        assert(t.frame_boundary_stack.size() == 0);
     }
     
     // Test 12: Multiple independent trails
@@ -372,20 +608,33 @@ void test_trail_log() {
         int x = 1, y = 2;
         
         t1.push();
+        assert(t1.frame_boundary_stack.size() == 1);
+        assert(t1.frame_boundary_stack.top() == 0);
+        assert(t2.frame_boundary_stack.size() == 0);  // t2 unaffected
         x = 10;
         t1.log([&x]() { x = 1; });
+        assert(t1.undo_stack.size() == 1);
         
         t2.push();
+        assert(t2.frame_boundary_stack.size() == 1);
+        assert(t2.frame_boundary_stack.top() == 0);
+        assert(t1.frame_boundary_stack.size() == 1);  // t1 unaffected
         y = 20;
         t2.log([&y]() { y = 2; });
+        assert(t2.undo_stack.size() == 1);
         
         assert(x == 10 && y == 20);
         
         t1.pop();
         assert(x == 1 && y == 20);
+        assert(t1.undo_stack.size() == 0);
+        assert(t1.frame_boundary_stack.size() == 0);
+        assert(t2.undo_stack.size() == 1);  // t2 unaffected
         
         t2.pop();
         assert(x == 1 && y == 2);
+        assert(t2.undo_stack.size() == 0);
+        assert(t2.frame_boundary_stack.size() == 0);
     }
     
     // Test 13: Complex multiple independent trails with nested frames
@@ -404,43 +653,63 @@ void test_trail_log() {
         // === Trail 1: Nested frames with data1 ===
         t1.push();  // Frame 1.1
         assert(t1.depth() == 1);
+        assert(t1.frame_boundary_stack.size() == 1);
+        assert(t1.frame_boundary_stack.top() == 0);
         data1 += 10;  // 110
         t1.log([&data1]() { data1 -= 10; });
+        assert(t1.undo_stack.size() == 1);
         
         t1.push();  // Frame 1.2
         assert(t1.depth() == 2);
+        assert(t1.frame_boundary_stack.size() == 2);
+        assert(t1.frame_boundary_stack.top() == 1);
         data1 *= 2;  // 220
         t1.log([&data1]() { data1 /= 2; });
+        assert(t1.undo_stack.size() == 2);
         
         t1.push();  // Frame 1.3
         assert(t1.depth() == 3);
+        assert(t1.frame_boundary_stack.size() == 3);
+        assert(t1.frame_boundary_stack.top() == 2);
         data1 += 80;  // 300
         t1.log([&data1]() { data1 -= 80; });
+        assert(t1.undo_stack.size() == 3);
         
         assert(data1 == 300);
         
         // === Trail 2: Nested frames with data2 ===
         t2.push();  // Frame 2.1
         assert(t2.depth() == 1);
+        assert(t2.frame_boundary_stack.size() == 1);
+        assert(t2.frame_boundary_stack.top() == 0);
         data2 -= 50;  // 150
         t2.log([&data2]() { data2 += 50; });
+        assert(t2.undo_stack.size() == 1);
         
         t2.push();  // Frame 2.2
         assert(t2.depth() == 2);
+        assert(t2.frame_boundary_stack.size() == 2);
+        assert(t2.frame_boundary_stack.top() == 1);
         data2 *= 3;  // 450
         t2.log([&data2]() { data2 /= 3; });
+        assert(t2.undo_stack.size() == 2);
         
         assert(data2 == 450);
         
         // === Trail 3: Single frame with multiple operations on data3 ===
         t3.push();  // Frame 3.1
         assert(t3.depth() == 1);
+        assert(t3.frame_boundary_stack.size() == 1);
+        assert(t3.frame_boundary_stack.top() == 0);
         data3 /= 3;  // 100
         t3.log([&data3]() { data3 *= 3; });
+        assert(t3.undo_stack.size() == 1);
         data3 += 50;  // 150
         t3.log([&data3]() { data3 -= 50; });
+        assert(t3.undo_stack.size() == 2);
         data3 *= 4;  // 600
         t3.log([&data3]() { data3 /= 4; });
+        assert(t3.undo_stack.size() == 3);
         
         assert(data3 == 600);
         
@@ -450,6 +719,8 @@ void test_trail_log() {
         // === Pop trail 1 innermost frame ===
         t1.pop();  // Pop frame 1.3
         assert(t1.depth() == 2);
+        assert(t1.undo_stack.size() == 2);
+        assert(t1.frame_boundary_stack.size() == 2);
         assert(data1 == 220);  // Restored from frame 1.3
         assert(data2 == 450);  // Unchanged
         assert(data3 == 600);  // Unchanged
@@ -457,14 +728,19 @@ void test_trail_log() {
         // === Add more to trail 2 ===
         t2.push();  // Frame 2.3
         assert(t2.depth() == 3);
+        assert(t2.frame_boundary_stack.size() == 3);
+        assert(t2.frame_boundary_stack.top() == 2);
         data2 += 50;  // 500
         t2.log([&data2]() { data2 -= 50; });
+        assert(t2.undo_stack.size() == 3);
         
         assert(data1 == 220 && data2 == 500 && data3 == 600);
         
         // === Pop trail 3 completely ===
         t3.pop();  // Pop frame 3.1
         assert(t3.depth() == 0);
+        assert(t3.undo_stack.size() == 0);
+        assert(t3.frame_boundary_stack.size() == 0);
         assert(data1 == 220);  // Unchanged
         assert(data2 == 500);  // Unchanged
         assert(data3 == 300);  // Restored to original
@@ -472,16 +748,22 @@ void test_trail_log() {
         // === Add new frame to trail 3 ===
         t3.push();  // New frame 3.1
         assert(t3.depth() == 1);
+        assert(t3.frame_boundary_stack.size() == 1);
+        assert(t3.frame_boundary_stack.top() == 0);
         data3 -= 100;  // 200
         t3.log([&data3]() { data3 += 100; });
+        assert(t3.undo_stack.size() == 1);
         data3 *= 5;  // 1000
         t3.log([&data3]() { data3 /= 5; });
+        assert(t3.undo_stack.size() == 2);
         
         assert(data1 == 220 && data2 == 500 && data3 == 1000);
         
         // === Pop trail 2 innermost frame ===
         t2.pop();  // Pop frame 2.3
         assert(t2.depth() == 2);
+        assert(t2.undo_stack.size() == 2);
+        assert(t2.frame_boundary_stack.size() == 2);
         assert(data1 == 220);  // Unchanged
         assert(data2 == 450);  // Restored from frame 2.3
         assert(data3 == 1000);  // Unchanged
@@ -496,10 +778,14 @@ void test_trail_log() {
         // === Pop trail 2 all remaining frames ===
         t2.pop();  // Pop frame 2.2
         assert(t2.depth() == 1);
+        assert(t2.undo_stack.size() == 1);
+        assert(t2.frame_boundary_stack.size() == 1);
         assert(data2 == 150);  // Restored from frame 2.2
         
         t2.pop();  // Pop frame 2.1
         assert(t2.depth() == 0);
+        assert(t2.undo_stack.size() == 0);
+        assert(t2.frame_boundary_stack.size() == 0);
         assert(data2 == 200);  // Restored to original
         
         assert(data1 == 110 && data2 == 200 && data3 == 1000);
@@ -507,6 +793,8 @@ void test_trail_log() {
         // === Pop trail 3 ===
         t3.pop();  // Pop frame 3.1
         assert(t3.depth() == 0);
+        assert(t3.undo_stack.size() == 0);
+        assert(t3.frame_boundary_stack.size() == 0);
         assert(data3 == 300);  // Restored to original
         
         assert(data1 == 110 && data2 == 200 && data3 == 300);
@@ -514,6 +802,8 @@ void test_trail_log() {
         // === Pop trail 1 last frame ===
         t1.pop();  // Pop frame 1.1
         assert(t1.depth() == 0);
+        assert(t1.undo_stack.size() == 0);
+        assert(t1.frame_boundary_stack.size() == 0);
         assert(data1 == 100);  // Restored to original
         
         // All data restored to original values
