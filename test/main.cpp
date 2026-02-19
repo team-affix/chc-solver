@@ -3637,35 +3637,49 @@ void test_bind_map_occurs_check() {
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr a1{expr::atom{"test"}};
         assert(!bm.occurs_check(0, &a1));
         assert(!bm.occurs_check(100, &a1));
         assert(bm.bindings.size() == 0);
+        
+        t.pop();
     }
     
     // Test 2: occurs_check on unbound var with same index - should return true
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{5}};
         assert(bm.occurs_check(5, &v1));
         assert(bm.bindings.size() == 0);  // whnf no longer creates entries
+        
+        t.pop();
     }
     
     // Test 3: occurs_check on unbound var with different index - should return false
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{10}};
         assert(!bm.occurs_check(5, &v1));
         assert(!bm.occurs_check(11, &v1));
         assert(bm.bindings.size() == 0);  // No entries created
+        
+        t.pop();
     }
     
     // Test 4: occurs_check on var bound to atom - should return false
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{15}};
         expr a1{expr::atom{"bound"}};
         bm.bindings[15] = &a1;
@@ -3673,6 +3687,8 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(15, &v1));  // v1 reduces to atom
         assert(!bm.occurs_check(20, &v1));
         assert(bm.bindings.size() == 1);
+        
+        t.pop();
     }
     
     // Test 5: occurs_check on var bound to same var - creates infinite loop, SKIP
@@ -3682,6 +3698,8 @@ void test_bind_map_occurs_check() {
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{30}};
         expr v2{expr::var{31}};
         expr v3{expr::var{32}};
@@ -3694,12 +3712,16 @@ void test_bind_map_occurs_check() {
         // v1 eventually points to v3 (var 32)
         assert(bm.occurs_check(32, &v1));
         assert(bm.bindings.size() == 2);  // Only the 2 explicit bindings
+        
+        t.pop();
     }
     
     // Test 7: occurs_check through chain ending in atom
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{40}};
         expr v2{expr::var{41}};
         expr a1{expr::atom{"end"}};
@@ -3712,12 +3734,16 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(41, &v1));
         assert(!bm.occurs_check(99, &v1));
         assert(bm.bindings.size() == 2);
+        
+        t.pop();
     }
     
     // Test 8: occurs_check on cons with no vars
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr a1{expr::atom{"left"}};
         expr a2{expr::atom{"right"}};
         expr c1{expr::cons{&a1, &a2}};
@@ -3725,12 +3751,16 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(0, &c1));
         assert(!bm.occurs_check(50, &c1));
         assert(bm.bindings.size() == 0);
+        
+        t.pop();
     }
     
     // Test 9: occurs_check on cons with matching var in lhs
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{55}};
         expr a1{expr::atom{"right"}};
         expr c1{expr::cons{&v1, &a1}};
@@ -3738,12 +3768,16 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(55, &c1));
         assert(!bm.occurs_check(56, &c1));
         assert(bm.bindings.size() == 0);  // No entries created
+        
+        t.pop();
     }
     
     // Test 10: occurs_check on cons with matching var in rhs
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr a1{expr::atom{"left"}};
         expr v1{expr::var{60}};
         expr c1{expr::cons{&a1, &v1}};
@@ -3751,24 +3785,32 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(60, &c1));
         assert(!bm.occurs_check(61, &c1));
         assert(bm.bindings.size() == 0);
+        
+        t.pop();
     }
     
     // Test 11: occurs_check on cons with matching var in both children
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{65}};
         expr v2{expr::var{65}};  // Same index
         expr c1{expr::cons{&v1, &v2}};
         
         assert(bm.occurs_check(65, &c1));
         assert(bm.bindings.size() == 0);
+        
+        t.pop();
     }
     
     // Test 12: occurs_check on cons with different vars
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{70}};
         expr v2{expr::var{71}};
         expr c1{expr::cons{&v1, &v2}};
@@ -3777,12 +3819,16 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(71, &c1));
         assert(!bm.occurs_check(72, &c1));
         assert(bm.bindings.size() == 0);
+        
+        t.pop();
     }
     
     // Test 13: occurs_check on nested cons
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{75}};
         expr a1{expr::atom{"inner"}};
         expr inner_cons{expr::cons{&v1, &a1}};
@@ -3792,12 +3838,16 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(75, &outer_cons));  // v1 is in nested cons
         assert(!bm.occurs_check(76, &outer_cons));
         assert(bm.bindings.size() == 0);
+        
+        t.pop();
     }
     
     // Test 14: occurs_check on deeply nested cons
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{80}};
         expr a1{expr::atom{"a"}};
         expr a2{expr::atom{"b"}};
@@ -3811,6 +3861,8 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(80, &outer));
         assert(!bm.occurs_check(81, &outer));
         assert(bm.bindings.size() == 0);
+        
+        t.pop();
     }
     
     // Test 15: occurs_check with var bound to cons containing same var (indirect cycle)
@@ -3833,6 +3885,8 @@ void test_bind_map_occurs_check() {
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{90}};
         expr v2{expr::var{91}};
         expr a1{expr::atom{"test"}};
@@ -3843,12 +3897,16 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(90, &v1));  // v1 -> c1, but c1 doesn't contain v1
         assert(bm.occurs_check(91, &v1));   // v1 -> c1 which contains v2
         assert(bm.bindings.size() == 1);  // Only the explicit binding
+        
+        t.pop();
     }
     
     // Test 17: occurs_check through chain to cons
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{95}};
         expr v2{expr::var{96}};
         expr v3{expr::var{97}};
@@ -3863,12 +3921,16 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(96, &v1));
         assert(bm.occurs_check(97, &v1));   // c1 contains v3
         assert(bm.bindings.size() == 2);  // Only the 2 explicit bindings
+        
+        t.pop();
     }
     
     // Test 18: occurs_check on cons with bound vars
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{100}};
         expr v2{expr::var{101}};
         expr a1{expr::atom{"bound"}};
@@ -3881,12 +3943,16 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(100, &c1));  // v1 is in cons
         assert(!bm.occurs_check(101, &c1)); // v2 reduces to atom
         assert(bm.bindings.size() == 1);  // Only v2's binding
+        
+        t.pop();
     }
     
     // Test 19: occurs_check with multiple levels of indirection
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{105}};
         expr v2{expr::var{106}};
         expr v3{expr::var{107}};
@@ -3900,12 +3966,16 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(108, &v1));  // Eventually points to v4
         assert(!bm.occurs_check(105, &v1)); // After path compression
         assert(bm.bindings.size() == 3);  // Only the 3 explicit bindings
+        
+        t.pop();
     }
     
     // Test 20: occurs_check on cons where both children are bound vars
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{110}};
         expr v2{expr::var{111}};
         expr a1{expr::atom{"left_bound"}};
@@ -3920,12 +3990,16 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(111, &c1));
         assert(!bm.occurs_check(112, &c1));
         assert(bm.bindings.size() == 2);  // The 2 explicit bindings
+        
+        t.pop();
     }
     
     // Test 21: occurs_check on cons with chain in lhs
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{115}};
         expr v2{expr::var{116}};
         expr v3{expr::var{117}};
@@ -3941,12 +4015,16 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(115, &c1)); // After compression
         assert(!bm.occurs_check(116, &c1));
         assert(bm.bindings.size() == 2);  // Only the 2 explicit bindings
+        
+        t.pop();
     }
     
     // Test 22: occurs_check with cons of cons, target var in nested structure
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{120}};
         expr v2{expr::var{121}};
         expr a1{expr::atom{"a"}};
@@ -3958,12 +4036,16 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(121, &outer));
         assert(!bm.occurs_check(122, &outer));
         assert(bm.bindings.size() == 0);  // No explicit bindings
+        
+        t.pop();
     }
     
     // Test 23: occurs_check on var bound to deeply nested structure
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v_outer{expr::var{125}};
         expr v_inner{expr::var{126}};
         expr a1{expr::atom{"deep"}};
@@ -3978,35 +4060,47 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(125, &v_outer));  // v_outer -> outer, doesn't contain itself
         assert(bm.occurs_check(126, &v_outer));   // outer contains v_inner
         assert(bm.bindings.size() == 1);  // Only v_outer's binding
+        
+        t.pop();
     }
     
     // Test 24: occurs_check with symmetric cons (same var on both sides)
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{130}};
         expr v2{expr::var{130}};  // Same var
         expr c1{expr::cons{&v1, &v2}};
         
         assert(bm.occurs_check(130, &c1));
         assert(bm.bindings.size() == 0);  // No explicit bindings
+        
+        t.pop();
     }
     
     // Test 25: occurs_check on empty bindings map
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{135}};
         
         assert(bm.bindings.size() == 0);
         assert(bm.occurs_check(135, &v1));
         assert(bm.bindings.size() == 0);  // whnf no longer creates entries
+        
+        t.pop();
     }
     
     // Test 26: occurs_check with var bound through multiple cons layers
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{140}};
         expr v2{expr::var{141}};
         expr a1{expr::atom{"base"}};
@@ -4020,12 +4114,16 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(140, &v1));  // v1 -> outer, doesn't contain itself
         assert(bm.occurs_check(141, &v1));   // outer contains v2
         assert(bm.bindings.size() == 1);  // Only v1's binding
+        
+        t.pop();
     }
     
     // Test 27: occurs_check with all atoms (no vars anywhere)
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr a1{expr::atom{"a"}};
         expr a2{expr::atom{"b"}};
         expr a3{expr::atom{"c"}};
@@ -4036,12 +4134,16 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(0, &c2));
         assert(!bm.occurs_check(999, &c2));
         assert(bm.bindings.size() == 0);
+        
+        t.pop();
     }
     
     // Test 28: occurs_check with var bound to var bound to cons containing target
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{145}};
         expr v2{expr::var{146}};
         expr v3{expr::var{147}};
@@ -4055,12 +4157,16 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(146, &v1));
         assert(bm.occurs_check(147, &v1));   // c1 contains v3
         assert(bm.bindings.size() == 2);  // Only the 2 explicit bindings
+        
+        t.pop();
     }
     
     // Test 29: Very long chain (10 levels) ending in unbound var
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v0{expr::var{200}};
         expr v1{expr::var{201}};
         expr v2{expr::var{202}};
@@ -4087,12 +4193,16 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(200, &v0)); // After path compression
         assert(!bm.occurs_check(205, &v0)); // Middle of chain
         assert(bm.bindings.size() == 9);  // Only the 9 explicit bindings
+        
+        t.pop();
     }
     
     // Test 30: Very long chain ending in atom
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v0{expr::var{210}};
         expr v1{expr::var{211}};
         expr v2{expr::var{212}};
@@ -4116,12 +4226,16 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(217, &v0));
         assert(!bm.occurs_check(999, &v0));
         assert(bm.bindings.size() == 8);
+        
+        t.pop();
     }
     
     // Test 31: Deeply nested cons (5 levels) with var at bottom
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{220}};
         expr a1{expr::atom{"a"}};
         expr a2{expr::atom{"b"}};
@@ -4138,12 +4252,16 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(220, &level5));
         assert(!bm.occurs_check(221, &level5));
         assert(bm.bindings.size() == 0);  // No explicit bindings
+        
+        t.pop();
     }
     
     // Test 32: Deeply nested cons with var at different positions
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{225}};
         expr v2{expr::var{226}};
         expr v3{expr::var{227}};
@@ -4159,12 +4277,16 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(227, &outer));  // v3 in right subtree
         assert(!bm.occurs_check(228, &outer));
         assert(bm.bindings.size() == 0);  // No explicit bindings
+        
+        t.pop();
     }
     
     // Test 33: Var bound to deeply nested cons containing bound vars
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v_outer{expr::var{230}};
         expr v1{expr::var{231}};
         expr v2{expr::var{232}};
@@ -4189,12 +4311,16 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(232, &v_outer));  // v2 reduces to atom
         assert(bm.occurs_check(233, &v_outer));   // v3 is unbound in outer
         assert(bm.bindings.size() == 3);  // Only the 3 explicit bindings
+        
+        t.pop();
     }
     
     // Test 34: Long chain to deeply nested cons with target var deep inside
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v_chain1{expr::var{240}};
         expr v_chain2{expr::var{241}};
         expr v_chain3{expr::var{242}};
@@ -4217,12 +4343,16 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(241, &v_chain1));
         assert(!bm.occurs_check(242, &v_chain1));
         assert(bm.bindings.size() == 3);  // Only the 3 explicit bindings
+        
+        t.pop();
     }
     
     // Test 35: Cons with chains in both children
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v_left1{expr::var{250}};
         expr v_left2{expr::var{251}};
         expr v_left3{expr::var{252}};
@@ -4245,12 +4375,16 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(250, &c1)); // After path compression
         assert(!bm.occurs_check(253, &c1)); // After path compression
         assert(bm.bindings.size() == 4);  // Only the 4 explicit bindings
+        
+        t.pop();
     }
     
     // Test 36: Very complex nested structure with multiple vars at different depths
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{260}};
         expr v2{expr::var{261}};
         expr v3{expr::var{262}};
@@ -4272,12 +4406,16 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(264, &outer));  // v5 in right subtree, nested
         assert(!bm.occurs_check(265, &outer));
         assert(bm.bindings.size() == 0);  // No explicit bindings
+        
+        t.pop();
     }
     
     // Test 37: Chain to cons, where cons children are also chains
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v_outer{expr::var{270}};
         expr v_mid{expr::var{271}};
         
@@ -4312,12 +4450,16 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(274, &v_outer));  // v_right1 reduces to atom
         assert(!bm.occurs_check(275, &v_outer));  // v_right2 reduces to atom
         assert(bm.bindings.size() == 6);  // All 6 explicit bindings
+        
+        t.pop();
     }
     
     // Test 38: Cons with one child being a long chain ending in target var
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{280}};
         expr v2{expr::var{281}};
         expr v3{expr::var{282}};
@@ -4336,12 +4478,16 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(284, &c1));  // v5 is at end of chain in lhs
         assert(!bm.occurs_check(280, &c1)); // After path compression
         assert(bm.bindings.size() == 4);  // Only the 4 explicit bindings
+        
+        t.pop();
     }
     
     // Test 39: Multiple nested cons with same var appearing in different positions
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{290}};
         expr v2{expr::var{290}};  // Same index as v1
         expr v3{expr::var{290}};  // Same index as v1
@@ -4354,12 +4500,16 @@ void test_bind_map_occurs_check() {
         
         assert(bm.occurs_check(290, &outer));  // Var 290 appears 3 times
         assert(bm.bindings.size() == 0);  // No explicit bindings
+        
+        t.pop();
     }
     
     // Test 40: Stress test - very deep nesting (10 levels) with var at bottom
     {
         trail t;
         bind_map bm(t);
+        t.push();
+        
         expr v1{expr::var{300}};
         expr a1{expr::atom{"a"}};
         
@@ -4379,12 +4529,15 @@ void test_bind_map_occurs_check() {
         assert(bm.occurs_check(300, &level10));  // Should find v1 at the bottom
         assert(!bm.occurs_check(301, &level10));
         assert(bm.bindings.size() == 0);  // No explicit bindings
+        
+        t.pop();
     }
     
     // Test 41: ULTIMATE STRESS TEST - Long chain to deeply nested cons with chains inside
     {
         trail t;
         bind_map bm(t);
+        t.push();
         
         // Outer chain (5 levels): v0 -> v1 -> v2 -> v3 -> v4 -> nested_cons
         expr v0{expr::var{400}};
@@ -4430,12 +4583,15 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(405, &v0)); // v_left1 chains to v_left3
         assert(!bm.occurs_check(408, &v0)); // v_right1 chains to v_right3
         assert(bm.bindings.size() == 9);  // Only the 9 explicit bindings
+        
+        t.pop();
     }
     
     // Test 42: Nested cons where EVERY node has a chain
     {
         trail t;
         bind_map bm(t);
+        t.push();
         
         // Build: cons(cons(chain_a, chain_b), cons(chain_c, chain_d))
         // where each chain is 2 levels deep
@@ -4478,12 +4634,15 @@ void test_bind_map_occurs_check() {
         
         // Path compression updates values but doesn't change count
         assert(bm.bindings.size() == 4);  // Still 4 entries
+        
+        t.pop();
     }
     
     // Test 43: Chain to nested cons, where nested cons contains chains to more nested cons
     {
         trail t;
         bind_map bm(t);
+        t.push();
         
         // Outer chain: v0 -> v1 -> outer_cons
         expr v0{expr::var{600}};
@@ -4521,6 +4680,8 @@ void test_bind_map_occurs_check() {
         assert(!bm.occurs_check(602, &v0)); // v_left chains to cons (no var 602 in result)
         assert(!bm.occurs_check(603, &v0)); // v_right chains to cons (no var 603 in result)
         assert(bm.bindings.size() == 4);  // Path compression doesn't change count
+        
+        t.pop();
     }
 }
 
