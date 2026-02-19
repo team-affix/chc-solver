@@ -24,6 +24,19 @@ const expr* bind_map::whnf(const expr* key) {
     return reduced = whnf(reduced);
 }
 
+bool bind_map::occurs_check(uint32_t index, const expr* key) {
+    key = whnf(key);
+
+    if (const expr::var* var = std::get_if<expr::var>(&key->content))
+        return var->index == index;
+
+    if (const expr::cons* cons = std::get_if<expr::cons>(&key->content)) {
+        return occurs_check(index, cons->lhs) || occurs_check(index, cons->rhs);
+    }
+
+    return false;
+}
+
 bool bind_map::unify(const expr* lhs, const expr* rhs) {
     // WHNF the lhs and rhs
     lhs = whnf(lhs);
@@ -35,13 +48,17 @@ bool bind_map::unify(const expr* lhs, const expr* rhs) {
     
     // If the lhs is a variable, add a binding to the whnf of the rhs
     if (const expr::var* var = std::get_if<expr::var>(&lhs->content)) {
-        bindings[var->index] = whnf(rhs);
+        if (occurs_check(var->index, rhs))
+            return false;
+        bindings[var->index] = rhs;
         return true;
     }
 
     // If the rhs is a variable, add a binding to the whnf of the lhs
     if (const expr::var* var = std::get_if<expr::var>(&rhs->content)) {
-        bindings[var->index] = whnf(lhs);
+        if (occurs_check(var->index, lhs))
+            return false;
+        bindings[var->index] = lhs;
         return true;
     }
 

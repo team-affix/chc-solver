@@ -4,9 +4,11 @@
 #include <map>
 #include "expr.hpp"
 
+
 struct bind_map {
     bind_map(trail&);
     const expr* whnf(const expr*);
+    bool occurs_check(uint32_t, const expr*);
     bool unify(const expr*, const expr*);
 #ifndef DEBUG
 private:
