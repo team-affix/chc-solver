@@ -22,8 +22,13 @@ const expr* bind_map::whnf(const expr* key) {
     // Get the bound value
     const expr* bound_value = it->second;
         
+    // WHNF the bound value
+    const expr* whnf_bound_value = whnf(bound_value);
+
     // Collapse the binding
-    return bind(var.index, whnf(bound_value));
+    bind(var.index, whnf_bound_value);
+
+    return whnf_bound_value;
 }
 
 bool bind_map::occurs_check(uint32_t index, const expr* key) {
@@ -86,7 +91,7 @@ bool bind_map::unify(const expr* lhs, const expr* rhs) {
 
 }
 
-const expr* bind_map::bind(uint32_t index, const expr* value) {
+void bind_map::bind(uint32_t index, const expr* value) {
     // look up the entry for the index
     auto it = bindings.find(index);
 
@@ -101,7 +106,7 @@ const expr* bind_map::bind(uint32_t index, const expr* value) {
         
         // If the new value is the same as the old value, do nothing
         if (old_value == value)
-            return value;
+            return;
 
         // If the new value is different from the old value, insert it
         trail_ref.log([it, old_value]{it->second = old_value;});
@@ -110,7 +115,7 @@ const expr* bind_map::bind(uint32_t index, const expr* value) {
         it->second = value;
     }
     
-    return value;
+    return;
 }
 
 

@@ -12,7 +12,7 @@ struct bind_map {
 #ifndef DEBUG
 private:
 #endif
-    const expr* bind(uint32_t, const expr*);
+    void bind(uint32_t, const expr*);
     std::map<uint32_t, const expr*> bindings;
     trail& trail_ref;
 };
