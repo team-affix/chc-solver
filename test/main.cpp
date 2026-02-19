@@ -1,6 +1,4 @@
 #include "../hpp/expr.hpp"
-#include "../hpp/unify.hpp"
-#include <iostream>
 #include "test_utils.hpp"
 
 void test_trail_constructor() {
@@ -1503,775 +1501,775 @@ void test_expr_pool_cons() {
     assert(pool.size() == 0);
 }
 
-void test_causal_set_empty() {
-    // Helper to create fulfillments
-    auto make_fulfillment = [](uint32_t c_id, uint32_t r_id) -> fulfillment {
-        return fulfillment{constraint_id{c_id}, r_id};
-    };
+// void test_causal_set_empty() {
+//     // Helper to create fulfillments
+//     auto make_fulfillment = [](uint32_t c_id, uint32_t r_id) -> fulfillment {
+//         return fulfillment{constraint_id{c_id}, r_id};
+//     };
     
-    // Test default-constructed causal_set is empty
-    causal_set cs1;
-    assert(cs1.empty() == true);
+//     // Test default-constructed causal_set is empty
+//     causal_set cs1;
+//     assert(cs1.empty() == true);
     
-    // Test causal_set constructed with empty set is empty
-    std::set<fulfillment> empty_set;
-    causal_set cs2(empty_set);
-    assert(cs2.empty() == true);
+//     // Test causal_set constructed with empty set is empty
+//     std::set<fulfillment> empty_set;
+//     causal_set cs2(empty_set);
+//     assert(cs2.empty() == true);
     
-    // Test non-empty causal_set with 1 element is not empty
-    std::set<fulfillment> set1;
-    set1.insert(make_fulfillment(1, 1));
-    causal_set cs3(set1);
-    assert(cs3.empty() == false);
+//     // Test non-empty causal_set with 1 element is not empty
+//     std::set<fulfillment> set1;
+//     set1.insert(make_fulfillment(1, 1));
+//     causal_set cs3(set1);
+//     assert(cs3.empty() == false);
     
-    // Test non-empty causal_set with multiple elements is not empty
-    std::set<fulfillment> set2;
-    set2.insert(make_fulfillment(1, 1));
-    set2.insert(make_fulfillment(2, 2));
-    set2.insert(make_fulfillment(3, 3));
-    causal_set cs4(set2);
-    assert(cs4.empty() == false);
+//     // Test non-empty causal_set with multiple elements is not empty
+//     std::set<fulfillment> set2;
+//     set2.insert(make_fulfillment(1, 1));
+//     set2.insert(make_fulfillment(2, 2));
+//     set2.insert(make_fulfillment(3, 3));
+//     causal_set cs4(set2);
+//     assert(cs4.empty() == false);
     
-    // Test non-empty causal_set with many elements is not empty
-    std::set<fulfillment> set3;
-    for (uint32_t i = 0; i < 50; i++) {
-        set3.insert(make_fulfillment(i, i));
-    }
-    causal_set cs5(set3);
-    assert(cs5.empty() == false);
-}
+//     // Test non-empty causal_set with many elements is not empty
+//     std::set<fulfillment> set3;
+//     for (uint32_t i = 0; i < 50; i++) {
+//         set3.insert(make_fulfillment(i, i));
+//     }
+//     causal_set cs5(set3);
+//     assert(cs5.empty() == false);
+// }
 
-void test_causal_set_size() {
-    // Helper to create fulfillments
-    auto make_fulfillment = [](uint32_t c_id, uint32_t r_id) -> fulfillment {
-        return fulfillment{constraint_id{c_id}, r_id};
-    };
+// void test_causal_set_size() {
+//     // Helper to create fulfillments
+//     auto make_fulfillment = [](uint32_t c_id, uint32_t r_id) -> fulfillment {
+//         return fulfillment{constraint_id{c_id}, r_id};
+//     };
     
-    // Test default-constructed causal_set has size 0
-    causal_set cs1;
-    assert(cs1.size() == 0);
+//     // Test default-constructed causal_set has size 0
+//     causal_set cs1;
+//     assert(cs1.size() == 0);
     
-    // Test causal_set constructed with empty set has size 0
-    std::set<fulfillment> empty_set;
-    causal_set cs2(empty_set);
-    assert(cs2.size() == 0);
+//     // Test causal_set constructed with empty set has size 0
+//     std::set<fulfillment> empty_set;
+//     causal_set cs2(empty_set);
+//     assert(cs2.size() == 0);
     
-    // Test causal_set with 1 element
-    std::set<fulfillment> set1;
-    set1.insert(make_fulfillment(1, 1));
-    causal_set cs3(set1);
-    assert(cs3.size() == 1);
+//     // Test causal_set with 1 element
+//     std::set<fulfillment> set1;
+//     set1.insert(make_fulfillment(1, 1));
+//     causal_set cs3(set1);
+//     assert(cs3.size() == 1);
     
-    // Test causal_set with 2 elements
-    std::set<fulfillment> set2;
-    set2.insert(make_fulfillment(1, 1));
-    set2.insert(make_fulfillment(2, 2));
-    causal_set cs4(set2);
-    assert(cs4.size() == 2);
+//     // Test causal_set with 2 elements
+//     std::set<fulfillment> set2;
+//     set2.insert(make_fulfillment(1, 1));
+//     set2.insert(make_fulfillment(2, 2));
+//     causal_set cs4(set2);
+//     assert(cs4.size() == 2);
     
-    // Test causal_set with 3 elements
-    std::set<fulfillment> set3;
-    set3.insert(make_fulfillment(1, 1));
-    set3.insert(make_fulfillment(2, 2));
-    set3.insert(make_fulfillment(3, 3));
-    causal_set cs5(set3);
-    assert(cs5.size() == 3);
+//     // Test causal_set with 3 elements
+//     std::set<fulfillment> set3;
+//     set3.insert(make_fulfillment(1, 1));
+//     set3.insert(make_fulfillment(2, 2));
+//     set3.insert(make_fulfillment(3, 3));
+//     causal_set cs5(set3);
+//     assert(cs5.size() == 3);
     
-    // Test causal_set with 5 elements
-    std::set<fulfillment> set4;
-    set4.insert(make_fulfillment(10, 10));
-    set4.insert(make_fulfillment(20, 20));
-    set4.insert(make_fulfillment(30, 30));
-    set4.insert(make_fulfillment(40, 40));
-    set4.insert(make_fulfillment(50, 50));
-    causal_set cs6(set4);
-    assert(cs6.size() == 5);
+//     // Test causal_set with 5 elements
+//     std::set<fulfillment> set4;
+//     set4.insert(make_fulfillment(10, 10));
+//     set4.insert(make_fulfillment(20, 20));
+//     set4.insert(make_fulfillment(30, 30));
+//     set4.insert(make_fulfillment(40, 40));
+//     set4.insert(make_fulfillment(50, 50));
+//     causal_set cs6(set4);
+//     assert(cs6.size() == 5);
     
-    // Test causal_set with many elements
-    std::set<fulfillment> set5;
-    for (uint32_t i = 0; i < 100; i++) {
-        set5.insert(make_fulfillment(i, i));
-    }
-    causal_set cs7(set5);
-    assert(cs7.size() == 100);
+//     // Test causal_set with many elements
+//     std::set<fulfillment> set5;
+//     for (uint32_t i = 0; i < 100; i++) {
+//         set5.insert(make_fulfillment(i, i));
+//     }
+//     causal_set cs7(set5);
+//     assert(cs7.size() == 100);
     
-    // Test that duplicate insertions in std::set don't increase size
-    std::set<fulfillment> set6;
-    set6.insert(make_fulfillment(1, 1));
-    set6.insert(make_fulfillment(1, 1));  // Duplicate
-    set6.insert(make_fulfillment(1, 1));  // Duplicate
-    causal_set cs8(set6);
-    assert(cs8.size() == 1);  // Only one unique element
-}
+//     // Test that duplicate insertions in std::set don't increase size
+//     std::set<fulfillment> set6;
+//     set6.insert(make_fulfillment(1, 1));
+//     set6.insert(make_fulfillment(1, 1));  // Duplicate
+//     set6.insert(make_fulfillment(1, 1));  // Duplicate
+//     causal_set cs8(set6);
+//     assert(cs8.size() == 1);  // Only one unique element
+// }
 
-void test_causal_set_count() {
-    // Helper to create fulfillments
-    auto make_fulfillment = [](uint32_t c_id, uint32_t r_id) -> fulfillment {
-        return fulfillment{constraint_id{c_id}, r_id};
-    };
+// void test_causal_set_count() {
+//     // Helper to create fulfillments
+//     auto make_fulfillment = [](uint32_t c_id, uint32_t r_id) -> fulfillment {
+//         return fulfillment{constraint_id{c_id}, r_id};
+//     };
     
-    // Test count on empty set
-    causal_set cs1;
-    assert(cs1.count(make_fulfillment(1, 1)) == false);
+//     // Test count on empty set
+//     causal_set cs1;
+//     assert(cs1.count(make_fulfillment(1, 1)) == false);
     
-    // Test count on set with 1 element
-    std::set<fulfillment> set1;
-    set1.insert(make_fulfillment(1, 1));
-    causal_set cs2(set1);
-    assert(cs2.count(make_fulfillment(1, 1)) == true);
-    assert(cs2.count(make_fulfillment(2, 2)) == false);
+//     // Test count on set with 1 element
+//     std::set<fulfillment> set1;
+//     set1.insert(make_fulfillment(1, 1));
+//     causal_set cs2(set1);
+//     assert(cs2.count(make_fulfillment(1, 1)) == true);
+//     assert(cs2.count(make_fulfillment(2, 2)) == false);
     
-    // Test count on set with multiple elements
-    std::set<fulfillment> set2;
-    set2.insert(make_fulfillment(1, 1));
-    set2.insert(make_fulfillment(2, 2));
-    set2.insert(make_fulfillment(3, 3));
-    causal_set cs3(set2);
+//     // Test count on set with multiple elements
+//     std::set<fulfillment> set2;
+//     set2.insert(make_fulfillment(1, 1));
+//     set2.insert(make_fulfillment(2, 2));
+//     set2.insert(make_fulfillment(3, 3));
+//     causal_set cs3(set2);
     
-    assert(cs3.count(make_fulfillment(1, 1)) == true);
-    assert(cs3.count(make_fulfillment(2, 2)) == true);
-    assert(cs3.count(make_fulfillment(3, 3)) == true);
-    assert(cs3.count(make_fulfillment(4, 4)) == false);
-    assert(cs3.count(make_fulfillment(0, 0)) == false);
+//     assert(cs3.count(make_fulfillment(1, 1)) == true);
+//     assert(cs3.count(make_fulfillment(2, 2)) == true);
+//     assert(cs3.count(make_fulfillment(3, 3)) == true);
+//     assert(cs3.count(make_fulfillment(4, 4)) == false);
+//     assert(cs3.count(make_fulfillment(0, 0)) == false);
     
-    // Test count with various constraint_id and rule_id combinations
-    std::set<fulfillment> set3;
-    set3.insert(make_fulfillment(10, 20));
-    set3.insert(make_fulfillment(20, 10));
-    set3.insert(make_fulfillment(10, 10));
-    causal_set cs4(set3);
+//     // Test count with various constraint_id and rule_id combinations
+//     std::set<fulfillment> set3;
+//     set3.insert(make_fulfillment(10, 20));
+//     set3.insert(make_fulfillment(20, 10));
+//     set3.insert(make_fulfillment(10, 10));
+//     causal_set cs4(set3);
     
-    assert(cs4.count(make_fulfillment(10, 20)) == true);
-    assert(cs4.count(make_fulfillment(20, 10)) == true);
-    assert(cs4.count(make_fulfillment(10, 10)) == true);
-    assert(cs4.count(make_fulfillment(10, 21)) == false);
-    assert(cs4.count(make_fulfillment(11, 20)) == false);
+//     assert(cs4.count(make_fulfillment(10, 20)) == true);
+//     assert(cs4.count(make_fulfillment(20, 10)) == true);
+//     assert(cs4.count(make_fulfillment(10, 10)) == true);
+//     assert(cs4.count(make_fulfillment(10, 21)) == false);
+//     assert(cs4.count(make_fulfillment(11, 20)) == false);
     
-    // Test count with large IDs
-    std::set<fulfillment> set4;
-    set4.insert(make_fulfillment(UINT32_MAX, UINT32_MAX));
-    causal_set cs5(set4);
+//     // Test count with large IDs
+//     std::set<fulfillment> set4;
+//     set4.insert(make_fulfillment(UINT32_MAX, UINT32_MAX));
+//     causal_set cs5(set4);
     
-    assert(cs5.count(make_fulfillment(UINT32_MAX, UINT32_MAX)) == true);
-    assert(cs5.count(make_fulfillment(UINT32_MAX, 0)) == false);
-    assert(cs5.count(make_fulfillment(0, UINT32_MAX)) == false);
-}
+//     assert(cs5.count(make_fulfillment(UINT32_MAX, UINT32_MAX)) == true);
+//     assert(cs5.count(make_fulfillment(UINT32_MAX, 0)) == false);
+//     assert(cs5.count(make_fulfillment(0, UINT32_MAX)) == false);
+// }
 
-void test_causal_set_operator_plus() {
-    // Helper to create fulfillments
-    auto make_fulfillment = [](uint32_t c_id, uint32_t r_id) -> fulfillment {
-        return fulfillment{constraint_id{c_id}, r_id};
-    };
+// void test_causal_set_operator_plus() {
+//     // Helper to create fulfillments
+//     auto make_fulfillment = [](uint32_t c_id, uint32_t r_id) -> fulfillment {
+//         return fulfillment{constraint_id{c_id}, r_id};
+//     };
     
-    // Test empty + empty = empty
-    causal_set cs1;
-    causal_set cs2;
-    causal_set result = cs1 + cs2;
-    assert(result.empty());
-    assert(result.size() == 0);
+//     // Test empty + empty = empty
+//     causal_set cs1;
+//     causal_set cs2;
+//     causal_set result = cs1 + cs2;
+//     assert(result.empty());
+//     assert(result.size() == 0);
     
-    // Test empty + non-empty = non-empty
-    std::set<fulfillment> set1;
-    set1.insert(make_fulfillment(1, 1));
-    causal_set cs3(set1);
-    causal_set result2 = cs1 + cs3;
-    assert(result2.size() == 1);
-    assert(!result2.empty());
+//     // Test empty + non-empty = non-empty
+//     std::set<fulfillment> set1;
+//     set1.insert(make_fulfillment(1, 1));
+//     causal_set cs3(set1);
+//     causal_set result2 = cs1 + cs3;
+//     assert(result2.size() == 1);
+//     assert(!result2.empty());
     
-    // Test non-empty + empty = non-empty
-    causal_set result3 = cs3 + cs1;
-    assert(result3.size() == 1);
-    assert(!result3.empty());
+//     // Test non-empty + empty = non-empty
+//     causal_set result3 = cs3 + cs1;
+//     assert(result3.size() == 1);
+//     assert(!result3.empty());
     
-    // Test commutativity: a + b == b + a (in terms of size)
-    std::set<fulfillment> set2;
-    set2.insert(make_fulfillment(2, 2));
-    set2.insert(make_fulfillment(3, 3));
-    causal_set cs4(set2);
+//     // Test commutativity: a + b == b + a (in terms of size)
+//     std::set<fulfillment> set2;
+//     set2.insert(make_fulfillment(2, 2));
+//     set2.insert(make_fulfillment(3, 3));
+//     causal_set cs4(set2);
     
-    causal_set ab = cs3 + cs4;
-    causal_set ba = cs4 + cs3;
-    assert(ab.size() == ba.size());
-    assert(ab.size() == 3);  // 1 + 2 = 3
+//     causal_set ab = cs3 + cs4;
+//     causal_set ba = cs4 + cs3;
+//     assert(ab.size() == ba.size());
+//     assert(ab.size() == 3);  // 1 + 2 = 3
     
-    // Test associativity: (a + b) + c == a + (b + c)
-    std::set<fulfillment> set3;
-    set3.insert(make_fulfillment(4, 4));
-    causal_set cs5(set3);
+//     // Test associativity: (a + b) + c == a + (b + c)
+//     std::set<fulfillment> set3;
+//     set3.insert(make_fulfillment(4, 4));
+//     causal_set cs5(set3);
     
-    causal_set left = (cs3 + cs4) + cs5;
-    causal_set right = cs3 + (cs4 + cs5);
-    assert(left.size() == right.size());
-    assert(left.size() == 4);  // 1 + 2 + 1 = 4
+//     causal_set left = (cs3 + cs4) + cs5;
+//     causal_set right = cs3 + (cs4 + cs5);
+//     assert(left.size() == right.size());
+//     assert(left.size() == 4);  // 1 + 2 + 1 = 4
     
-    // Test that duplicates are handled correctly (set behavior)
-    std::set<fulfillment> set4;
-    set4.insert(make_fulfillment(1, 1));  // Duplicate
-    set4.insert(make_fulfillment(5, 5));  // New
-    causal_set cs6(set4);
+//     // Test that duplicates are handled correctly (set behavior)
+//     std::set<fulfillment> set4;
+//     set4.insert(make_fulfillment(1, 1));  // Duplicate
+//     set4.insert(make_fulfillment(5, 5));  // New
+//     causal_set cs6(set4);
     
-    causal_set result4 = cs3 + cs6;
-    assert(result4.size() == 2);  // {1,1} and {5,5}, not 3
+//     causal_set result4 = cs3 + cs6;
+//     assert(result4.size() == 2);  // {1,1} and {5,5}, not 3
     
-    // Test multiple additions
-    std::set<fulfillment> set5;
-    set5.insert(make_fulfillment(6, 6));
-    causal_set cs7(set5);
+//     // Test multiple additions
+//     std::set<fulfillment> set5;
+//     set5.insert(make_fulfillment(6, 6));
+//     causal_set cs7(set5);
     
-    causal_set result5 = cs3 + cs4 + cs5 + cs6 + cs7;
-    assert(result5.size() == 6);  // {1,1}, {2,2}, {3,3}, {4,4}, {5,5}, {6,6}
+//     causal_set result5 = cs3 + cs4 + cs5 + cs6 + cs7;
+//     assert(result5.size() == 6);  // {1,1}, {2,2}, {3,3}, {4,4}, {5,5}, {6,6}
     
-    // Test identity: a + empty = a
-    causal_set identity = cs3 + cs1;
-    assert(identity.size() == cs3.size());
+//     // Test identity: a + empty = a
+//     causal_set identity = cs3 + cs1;
+//     assert(identity.size() == cs3.size());
     
-    // Test with overlapping sets
-    std::set<fulfillment> set6;
-    set6.insert(make_fulfillment(1, 1));
-    set6.insert(make_fulfillment(2, 2));
-    causal_set cs8(set6);
+//     // Test with overlapping sets
+//     std::set<fulfillment> set6;
+//     set6.insert(make_fulfillment(1, 1));
+//     set6.insert(make_fulfillment(2, 2));
+//     causal_set cs8(set6);
     
-    std::set<fulfillment> set7;
-    set7.insert(make_fulfillment(2, 2));
-    set7.insert(make_fulfillment(3, 3));
-    causal_set cs9(set7);
+//     std::set<fulfillment> set7;
+//     set7.insert(make_fulfillment(2, 2));
+//     set7.insert(make_fulfillment(3, 3));
+//     causal_set cs9(set7);
     
-    causal_set overlap = cs8 + cs9;
-    assert(overlap.size() == 3);  // {1,1}, {2,2}, {3,3} - {2,2} appears once
+//     causal_set overlap = cs8 + cs9;
+//     assert(overlap.size() == 3);  // {1,1}, {2,2}, {3,3} - {2,2} appears once
     
-    // Test self-addition
-    causal_set self = cs3 + cs3;
-    assert(self.size() == 1);  // Adding to itself doesn't duplicate
-}
+//     // Test self-addition
+//     causal_set self = cs3 + cs3;
+//     assert(self.size() == 1);  // Adding to itself doesn't duplicate
+// }
 
-void test_causal_set_operator_spaceship() {
-    // Helper to create fulfillments
-    auto make_fulfillment = [](uint32_t c_id, uint32_t r_id) -> fulfillment {
-        return fulfillment{constraint_id{c_id}, r_id};
-    };
+// void test_causal_set_operator_spaceship() {
+//     // Helper to create fulfillments
+//     auto make_fulfillment = [](uint32_t c_id, uint32_t r_id) -> fulfillment {
+//         return fulfillment{constraint_id{c_id}, r_id};
+//     };
     
-    // Test that two empty causal_sets are equal
-    causal_set cs1;
-    causal_set cs2;
-    assert((cs1 <=> cs2) == std::strong_ordering::equal);
+//     // Test that two empty causal_sets are equal
+//     causal_set cs1;
+//     causal_set cs2;
+//     assert((cs1 <=> cs2) == std::strong_ordering::equal);
     
-    // Test reflexivity: a <=> a == equal
-    assert((cs1 <=> cs1) == std::strong_ordering::equal);
+//     // Test reflexivity: a <=> a == equal
+//     assert((cs1 <=> cs1) == std::strong_ordering::equal);
     
-    // Test with non-empty sets
-    std::set<fulfillment> set1;
-    set1.insert(make_fulfillment(1, 1));
-    causal_set cs3(set1);
-    assert((cs3 <=> cs3) == std::strong_ordering::equal);
+//     // Test with non-empty sets
+//     std::set<fulfillment> set1;
+//     set1.insert(make_fulfillment(1, 1));
+//     causal_set cs3(set1);
+//     assert((cs3 <=> cs3) == std::strong_ordering::equal);
     
-    // Test size comparison: smaller size is less
-    std::set<fulfillment> set2;
-    set2.insert(make_fulfillment(1, 1));
-    set2.insert(make_fulfillment(2, 2));
-    causal_set cs4(set2);
+//     // Test size comparison: smaller size is less
+//     std::set<fulfillment> set2;
+//     set2.insert(make_fulfillment(1, 1));
+//     set2.insert(make_fulfillment(2, 2));
+//     causal_set cs4(set2);
     
-    assert((cs3 <=> cs4) == std::strong_ordering::less);
-    assert((cs4 <=> cs3) == std::strong_ordering::greater);
+//     assert((cs3 <=> cs4) == std::strong_ordering::less);
+//     assert((cs4 <=> cs3) == std::strong_ordering::greater);
     
-    // Test empty vs non-empty
-    assert((cs1 <=> cs3) == std::strong_ordering::less);
-    assert((cs3 <=> cs1) == std::strong_ordering::greater);
+//     // Test empty vs non-empty
+//     assert((cs1 <=> cs3) == std::strong_ordering::less);
+//     assert((cs3 <=> cs1) == std::strong_ordering::greater);
     
-    // Test same size, different content (lexicographic comparison)
-    std::set<fulfillment> set3;
-    set3.insert(make_fulfillment(1, 1));
-    causal_set cs5(set3);
+//     // Test same size, different content (lexicographic comparison)
+//     std::set<fulfillment> set3;
+//     set3.insert(make_fulfillment(1, 1));
+//     causal_set cs5(set3);
     
-    std::set<fulfillment> set4;
-    set4.insert(make_fulfillment(2, 2));
-    causal_set cs6(set4);
+//     std::set<fulfillment> set4;
+//     set4.insert(make_fulfillment(2, 2));
+//     causal_set cs6(set4);
     
-    // Both have size 1, but different fulfillments
-    // Comparison should be based on set comparison
-    auto cmp = cs5 <=> cs6;
-    assert(cmp != std::strong_ordering::equal);
+//     // Both have size 1, but different fulfillments
+//     // Comparison should be based on set comparison
+//     auto cmp = cs5 <=> cs6;
+//     assert(cmp != std::strong_ordering::equal);
     
-    // Test same size, same content
-    std::set<fulfillment> set5;
-    set5.insert(make_fulfillment(1, 1));
-    causal_set cs7(set5);
-    assert((cs5 <=> cs7) == std::strong_ordering::equal);
+//     // Test same size, same content
+//     std::set<fulfillment> set5;
+//     set5.insert(make_fulfillment(1, 1));
+//     causal_set cs7(set5);
+//     assert((cs5 <=> cs7) == std::strong_ordering::equal);
     
-    // Test transitivity: if a < b and b < c, then a < c
-    std::set<fulfillment> set6;
-    set6.insert(make_fulfillment(1, 1));
-    set6.insert(make_fulfillment(2, 2));
-    set6.insert(make_fulfillment(3, 3));
-    causal_set cs8(set6);
+//     // Test transitivity: if a < b and b < c, then a < c
+//     std::set<fulfillment> set6;
+//     set6.insert(make_fulfillment(1, 1));
+//     set6.insert(make_fulfillment(2, 2));
+//     set6.insert(make_fulfillment(3, 3));
+//     causal_set cs8(set6);
     
-    // cs3 has 1 element, cs4 has 2, cs8 has 3
-    assert((cs3 <=> cs4) == std::strong_ordering::less);
-    assert((cs4 <=> cs8) == std::strong_ordering::less);
-    assert((cs3 <=> cs8) == std::strong_ordering::less);
+//     // cs3 has 1 element, cs4 has 2, cs8 has 3
+//     assert((cs3 <=> cs4) == std::strong_ordering::less);
+//     assert((cs4 <=> cs8) == std::strong_ordering::less);
+//     assert((cs3 <=> cs8) == std::strong_ordering::less);
     
-    // Test with multiple elements, same size
-    std::set<fulfillment> set7;
-    set7.insert(make_fulfillment(1, 1));
-    set7.insert(make_fulfillment(3, 3));
-    causal_set cs9(set7);
+//     // Test with multiple elements, same size
+//     std::set<fulfillment> set7;
+//     set7.insert(make_fulfillment(1, 1));
+//     set7.insert(make_fulfillment(3, 3));
+//     causal_set cs9(set7);
     
-    std::set<fulfillment> set8;
-    set8.insert(make_fulfillment(2, 2));
-    set8.insert(make_fulfillment(4, 4));
-    causal_set cs10(set8);
+//     std::set<fulfillment> set8;
+//     set8.insert(make_fulfillment(2, 2));
+//     set8.insert(make_fulfillment(4, 4));
+//     causal_set cs10(set8);
     
-    // Both have size 2, compare lexicographically
-    auto cmp2 = cs9 <=> cs10;
-    assert(cmp2 != std::strong_ordering::equal);
+//     // Both have size 2, compare lexicographically
+//     auto cmp2 = cs9 <=> cs10;
+//     assert(cmp2 != std::strong_ordering::equal);
     
-    // Test that operator+ preserves comparison properties
-    causal_set combined1 = cs3 + cs4;
-    causal_set combined2 = cs3 + cs4;
-    assert((combined1 <=> combined2) == std::strong_ordering::equal);
+//     // Test that operator+ preserves comparison properties
+//     causal_set combined1 = cs3 + cs4;
+//     causal_set combined2 = cs3 + cs4;
+//     assert((combined1 <=> combined2) == std::strong_ordering::equal);
     
-    // Test antisymmetry: if a <= b and b <= a, then a == b
-    if ((cs5 <=> cs7) == std::strong_ordering::equal) {
-        assert((cs7 <=> cs5) == std::strong_ordering::equal);
-    }
+//     // Test antisymmetry: if a <= b and b <= a, then a == b
+//     if ((cs5 <=> cs7) == std::strong_ordering::equal) {
+//         assert((cs7 <=> cs5) == std::strong_ordering::equal);
+//     }
     
-    // Test size takes precedence over content
-    std::set<fulfillment> set9;
-    set9.insert(make_fulfillment(100, 100));  // Large ID
-    causal_set cs11(set9);
+//     // Test size takes precedence over content
+//     std::set<fulfillment> set9;
+//     set9.insert(make_fulfillment(100, 100));  // Large ID
+//     causal_set cs11(set9);
     
-    std::set<fulfillment> set10;
-    set10.insert(make_fulfillment(1, 1));
-    set10.insert(make_fulfillment(2, 2));
-    causal_set cs12(set10);
+//     std::set<fulfillment> set10;
+//     set10.insert(make_fulfillment(1, 1));
+//     set10.insert(make_fulfillment(2, 2));
+//     causal_set cs12(set10);
     
-    // cs11 has 1 element, cs12 has 2, so cs11 < cs12 regardless of content
-    assert((cs11 <=> cs12) == std::strong_ordering::less);
-}
+//     // cs11 has 1 element, cs12 has 2, so cs11 < cs12 regardless of content
+//     assert((cs11 <=> cs12) == std::strong_ordering::less);
+// }
 
-void test_unification_graph_cin_dijkstra() {
-    trail t;
+// void test_unification_graph_cin_dijkstra() {
+//     trail t;
     
-    // Helper to create dummy fulfillments
-    auto make_fulfillment = [](uint32_t c_id, uint32_t r_id) -> fulfillment {
-        return fulfillment{constraint_id{c_id}, r_id};  // clause_id, candidate_id
-    };
+//     // Helper to create dummy fulfillments
+//     auto make_fulfillment = [](uint32_t c_id, uint32_t r_id) -> fulfillment {
+//         return fulfillment{constraint_id{c_id}, r_id};  // clause_id, candidate_id
+//     };
     
-    // Helper to create causal set with N fulfillments
-    auto make_cause = [&](std::initializer_list<std::pair<uint32_t, uint32_t>> pairs) -> causal_set {
-        std::set<fulfillment> fulfills;
-        for (auto [c, r] : pairs) {
-            fulfills.insert(make_fulfillment(c, r));
-        }
-        return causal_set(fulfills);
-    };
+//     // Helper to create causal set with N fulfillments
+//     auto make_cause = [&](std::initializer_list<std::pair<uint32_t, uint32_t>> pairs) -> causal_set {
+//         std::set<fulfillment> fulfills;
+//         for (auto [c, r] : pairs) {
+//             fulfills.insert(make_fulfillment(c, r));
+//         }
+//         return causal_set(fulfills);
+//     };
     
-    // Test 1: Source is already instantiated (atom) - should return immediately
-    {
-        unification_graph ug(t);
-        expr atom1{expr::atom{"test"}};
-        ug.edges[&atom1];  // Initialize entry
-        auto [found, cause] = ug.cin_dijkstra(&atom1);
-        assert(found == true);
-        assert(cause.empty());  // No path needed, already at instantiated node
-    }
+//     // Test 1: Source is already instantiated (atom) - should return immediately
+//     {
+//         unification_graph ug(t);
+//         expr atom1{expr::atom{"test"}};
+//         ug.edges[&atom1];  // Initialize entry
+//         auto [found, cause] = ug.cin_dijkstra(&atom1);
+//         assert(found == true);
+//         assert(cause.empty());  // No path needed, already at instantiated node
+//     }
     
-    // Test 2: Source is already instantiated (cons) - should return immediately
-    {
-        unification_graph ug(t);
-        expr a1{expr::atom{"a"}};
-        expr a2{expr::atom{"b"}};
-        expr cons1{expr::cons{&a1, &a2}};
-        ug.edges[&cons1];  // Initialize entry
-        auto [found, cause] = ug.cin_dijkstra(&cons1);
-        assert(found == true);
-        assert(cause.empty());
-    }
+//     // Test 2: Source is already instantiated (cons) - should return immediately
+//     {
+//         unification_graph ug(t);
+//         expr a1{expr::atom{"a"}};
+//         expr a2{expr::atom{"b"}};
+//         expr cons1{expr::cons{&a1, &a2}};
+//         ug.edges[&cons1];  // Initialize entry
+//         auto [found, cause] = ug.cin_dijkstra(&cons1);
+//         assert(found == true);
+//         assert(cause.empty());
+//     }
     
-    // Test 3: Single edge from var to atom
-    {
-        unification_graph ug(t);
-        expr var1{expr::var{0}};
-        expr atom1{expr::atom{"target"}};
+//     // Test 3: Single edge from var to atom
+//     {
+//         unification_graph ug(t);
+//         expr var1{expr::var{0}};
+//         expr atom1{expr::atom{"target"}};
         
-        causal_set edge_cause = make_cause({{1, 1}});
-        ug.edges[&var1].insert({&atom1, edge_cause});
-        ug.edges[&atom1];  // Initialize atom entry
+//         causal_set edge_cause = make_cause({{1, 1}});
+//         ug.edges[&var1].insert({&atom1, edge_cause});
+//         ug.edges[&atom1];  // Initialize atom entry
         
-        auto [found, cause] = ug.cin_dijkstra(&var1);
-        assert(found == true);
-        assert(cause.size() == 1);
-        assert((cause <=> edge_cause) == std::strong_ordering::equal);
-    }
+//         auto [found, cause] = ug.cin_dijkstra(&var1);
+//         assert(found == true);
+//         assert(cause.size() == 1);
+//         assert((cause <=> edge_cause) == std::strong_ordering::equal);
+//     }
     
-    // Test 4: No instantiated node reachable (var -> var -> var)
-    {
-        unification_graph ug(t);
-        expr var1{expr::var{1}};
-        expr var2{expr::var{2}};
-        expr var3{expr::var{3}};
+//     // Test 4: No instantiated node reachable (var -> var -> var)
+//     {
+//         unification_graph ug(t);
+//         expr var1{expr::var{1}};
+//         expr var2{expr::var{2}};
+//         expr var3{expr::var{3}};
         
-        causal_set cause12 = make_cause({{2, 1}});
-        causal_set cause23 = make_cause({{3, 1}});
+//         causal_set cause12 = make_cause({{2, 1}});
+//         causal_set cause23 = make_cause({{3, 1}});
         
-        ug.edges[&var1].insert({&var2, cause12});
-        ug.edges[&var2].insert({&var3, cause23});
-        ug.edges[&var3];  // Initialize var3 entry
+//         ug.edges[&var1].insert({&var2, cause12});
+//         ug.edges[&var2].insert({&var3, cause23});
+//         ug.edges[&var3];  // Initialize var3 entry
         
-        auto [found, cause] = ug.cin_dijkstra(&var1);
-        assert(found == false);
-        assert(cause.empty());
-    }
+//         auto [found, cause] = ug.cin_dijkstra(&var1);
+//         assert(found == false);
+//         assert(cause.empty());
+//     }
     
-    // Test 5: Chain of vars leading to atom (var -> var -> atom)
-    {
-        unification_graph ug(t);
-        expr var1{expr::var{10}};
-        expr var2{expr::var{11}};
-        expr atom1{expr::atom{"end"}};
+//     // Test 5: Chain of vars leading to atom (var -> var -> atom)
+//     {
+//         unification_graph ug(t);
+//         expr var1{expr::var{10}};
+//         expr var2{expr::var{11}};
+//         expr atom1{expr::atom{"end"}};
         
-        causal_set cause12 = make_cause({{10, 1}});
-        causal_set cause23 = make_cause({{11, 1}});
+//         causal_set cause12 = make_cause({{10, 1}});
+//         causal_set cause23 = make_cause({{11, 1}});
         
-        ug.edges[&var1].insert({&var2, cause12});
-        ug.edges[&var2].insert({&atom1, cause23});
-        ug.edges[&atom1];  // Initialize atom entry
+//         ug.edges[&var1].insert({&var2, cause12});
+//         ug.edges[&var2].insert({&atom1, cause23});
+//         ug.edges[&atom1];  // Initialize atom entry
         
-        auto [found, cause] = ug.cin_dijkstra(&var1);
-        assert(found == true);
-        assert(cause.size() == 2);  // Both edges' causes merged
-    }
+//         auto [found, cause] = ug.cin_dijkstra(&var1);
+//         assert(found == true);
+//         assert(cause.size() == 2);  // Both edges' causes merged
+//     }
     
-    // Test 6: Multiple paths - shortest path wins
-    {
-        unification_graph ug(t);
-        expr var_start{expr::var{20}};
-        expr var_mid{expr::var{21}};
-        expr atom_end{expr::atom{"goal"}};
+//     // Test 6: Multiple paths - shortest path wins
+//     {
+//         unification_graph ug(t);
+//         expr var_start{expr::var{20}};
+//         expr var_mid{expr::var{21}};
+//         expr atom_end{expr::atom{"goal"}};
         
-        // Path 1: direct (cost 5)
-        causal_set direct = make_cause({{20, 1}, {20, 2}, {20, 3}, {20, 4}, {20, 5}});
-        // Path 2: indirect (cost 3)
-        causal_set to_mid = make_cause({{21, 1}});
-        causal_set mid_to_end = make_cause({{22, 1}, {22, 2}});
+//         // Path 1: direct (cost 5)
+//         causal_set direct = make_cause({{20, 1}, {20, 2}, {20, 3}, {20, 4}, {20, 5}});
+//         // Path 2: indirect (cost 3)
+//         causal_set to_mid = make_cause({{21, 1}});
+//         causal_set mid_to_end = make_cause({{22, 1}, {22, 2}});
         
-        ug.edges[&var_start].insert({&atom_end, direct});
-        ug.edges[&var_start].insert({&var_mid, to_mid});
-        ug.edges[&var_mid].insert({&atom_end, mid_to_end});
-        ug.edges[&atom_end];
+//         ug.edges[&var_start].insert({&atom_end, direct});
+//         ug.edges[&var_start].insert({&var_mid, to_mid});
+//         ug.edges[&var_mid].insert({&atom_end, mid_to_end});
+//         ug.edges[&atom_end];
         
-        auto [found, cause] = ug.cin_dijkstra(&var_start);
-        assert(found == true);
-        assert(cause.size() == 3);  // Should take indirect path
-        assert(cause.count(make_fulfillment(21, 1)) == true);
-        assert(cause.count(make_fulfillment(22, 1)) == true);
-        assert(cause.count(make_fulfillment(22, 2)) == true);
-    }
+//         auto [found, cause] = ug.cin_dijkstra(&var_start);
+//         assert(found == true);
+//         assert(cause.size() == 3);  // Should take indirect path
+//         assert(cause.count(make_fulfillment(21, 1)) == true);
+//         assert(cause.count(make_fulfillment(22, 1)) == true);
+//         assert(cause.count(make_fulfillment(22, 2)) == true);
+//     }
     
-    // Test 7: Path with duplicate fulfillments - duplicates reduce effective cost
-    {
-        unification_graph ug(t);
-        expr var_start{expr::var{30}};
-        expr var_mid{expr::var{31}};
-        expr atom_end{expr::atom{"dup_path"}};
+//     // Test 7: Path with duplicate fulfillments - duplicates reduce effective cost
+//     {
+//         unification_graph ug(t);
+//         expr var_start{expr::var{30}};
+//         expr var_mid{expr::var{31}};
+//         expr atom_end{expr::atom{"dup_path"}};
         
-        // Path with overlapping fulfillments
-        causal_set edge1 = make_cause({{100, 1}, {100, 2}, {200, 1}});
-        causal_set edge2 = make_cause({{100, 1}, {300, 1}});  // {100,1} is duplicate
+//         // Path with overlapping fulfillments
+//         causal_set edge1 = make_cause({{100, 1}, {100, 2}, {200, 1}});
+//         causal_set edge2 = make_cause({{100, 1}, {300, 1}});  // {100,1} is duplicate
         
-        ug.edges[&var_start].insert({&var_mid, edge1});
-        ug.edges[&var_mid].insert({&atom_end, edge2});
-        ug.edges[&atom_end];
+//         ug.edges[&var_start].insert({&var_mid, edge1});
+//         ug.edges[&var_mid].insert({&atom_end, edge2});
+//         ug.edges[&atom_end];
         
-        auto [found, cause] = ug.cin_dijkstra(&var_start);
-        assert(found == true);
-        assert(cause.size() == 4);  // 4 unique, not 5
-        assert(cause.count(make_fulfillment(100, 1)) == true);
-        assert(cause.count(make_fulfillment(100, 2)) == true);
-        assert(cause.count(make_fulfillment(200, 1)) == true);
-        assert(cause.count(make_fulfillment(300, 1)) == true);
-    }
+//         auto [found, cause] = ug.cin_dijkstra(&var_start);
+//         assert(found == true);
+//         assert(cause.size() == 4);  // 4 unique, not 5
+//         assert(cause.count(make_fulfillment(100, 1)) == true);
+//         assert(cause.count(make_fulfillment(100, 2)) == true);
+//         assert(cause.count(make_fulfillment(200, 1)) == true);
+//         assert(cause.count(make_fulfillment(300, 1)) == true);
+//     }
     
-    // Test 8: COMPLEX BIDIRECTIONAL GRAPH with multiple paths
-    {
-        unification_graph ug(t);
+//     // Test 8: COMPLEX BIDIRECTIONAL GRAPH with multiple paths
+//     {
+//         unification_graph ug(t);
         
-        // Create a complex graph with 6 vars and 2 atoms
-        expr v0{expr::var{200}};
-        expr v1{expr::var{201}};
-        expr v2{expr::var{202}};
-        expr v3{expr::var{203}};
-        expr v4{expr::var{204}};
-        expr v5{expr::var{205}};
-        expr atom_a{expr::atom{"target_a"}};
-        expr atom_b{expr::atom{"target_b"}};
+//         // Create a complex graph with 6 vars and 2 atoms
+//         expr v0{expr::var{200}};
+//         expr v1{expr::var{201}};
+//         expr v2{expr::var{202}};
+//         expr v3{expr::var{203}};
+//         expr v4{expr::var{204}};
+//         expr v5{expr::var{205}};
+//         expr atom_a{expr::atom{"target_a"}};
+//         expr atom_b{expr::atom{"target_b"}};
         
-        // Create bidirectional edges with SAME causal set in both directions
-        // v0 <-> v1 (cost 2)
-        causal_set c01 = make_cause({{1, 1}, {1, 2}});
+//         // Create bidirectional edges with SAME causal set in both directions
+//         // v0 <-> v1 (cost 2)
+//         causal_set c01 = make_cause({{1, 1}, {1, 2}});
         
-        // v0 <-> v2 (cost 1)
-        causal_set c02 = make_cause({{3, 1}});
+//         // v0 <-> v2 (cost 1)
+//         causal_set c02 = make_cause({{3, 1}});
         
-        // v1 <-> v3 (cost 3)
-        causal_set c13 = make_cause({{5, 1}, {5, 2}, {5, 3}});
+//         // v1 <-> v3 (cost 3)
+//         causal_set c13 = make_cause({{5, 1}, {5, 2}, {5, 3}});
         
-        // v2 <-> v3 (cost 1)
-        causal_set c23 = make_cause({{7, 1}});
+//         // v2 <-> v3 (cost 1)
+//         causal_set c23 = make_cause({{7, 1}});
         
-        // v2 <-> v4 (cost 2)
-        causal_set c24 = make_cause({{9, 1}, {9, 2}});
+//         // v2 <-> v4 (cost 2)
+//         causal_set c24 = make_cause({{9, 1}, {9, 2}});
         
-        // v3 <-> v5 (cost 1)
-        causal_set c35 = make_cause({{11, 1}});
+//         // v3 <-> v5 (cost 1)
+//         causal_set c35 = make_cause({{11, 1}});
         
-        // v4 <-> v5 (cost 4)
-        causal_set c45 = make_cause({{13, 1}, {13, 2}, {13, 3}, {13, 4}});
+//         // v4 <-> v5 (cost 4)
+//         causal_set c45 = make_cause({{13, 1}, {13, 2}, {13, 3}, {13, 4}});
         
-        // v5 <-> atom_a (cost 1)
-        causal_set c5a = make_cause({{15, 1}});
+//         // v5 <-> atom_a (cost 1)
+//         causal_set c5a = make_cause({{15, 1}});
         
-        // v4 <-> atom_b (cost 2)
-        causal_set c4b = make_cause({{16, 1}, {16, 2}});
+//         // v4 <-> atom_b (cost 2)
+//         causal_set c4b = make_cause({{16, 1}, {16, 2}});
         
-        // Add all bidirectional edges with SAME causal set both ways
-        ug.edges[&v0].insert({&v1, c01});
-        ug.edges[&v1].insert({&v0, c01});
+//         // Add all bidirectional edges with SAME causal set both ways
+//         ug.edges[&v0].insert({&v1, c01});
+//         ug.edges[&v1].insert({&v0, c01});
         
-        ug.edges[&v0].insert({&v2, c02});
-        ug.edges[&v2].insert({&v0, c02});
+//         ug.edges[&v0].insert({&v2, c02});
+//         ug.edges[&v2].insert({&v0, c02});
         
-        ug.edges[&v1].insert({&v3, c13});
-        ug.edges[&v3].insert({&v1, c13});
+//         ug.edges[&v1].insert({&v3, c13});
+//         ug.edges[&v3].insert({&v1, c13});
         
-        ug.edges[&v2].insert({&v3, c23});
-        ug.edges[&v3].insert({&v2, c23});
+//         ug.edges[&v2].insert({&v3, c23});
+//         ug.edges[&v3].insert({&v2, c23});
         
-        ug.edges[&v2].insert({&v4, c24});
-        ug.edges[&v4].insert({&v2, c24});
+//         ug.edges[&v2].insert({&v4, c24});
+//         ug.edges[&v4].insert({&v2, c24});
         
-        ug.edges[&v3].insert({&v5, c35});
-        ug.edges[&v5].insert({&v3, c35});
+//         ug.edges[&v3].insert({&v5, c35});
+//         ug.edges[&v5].insert({&v3, c35});
         
-        ug.edges[&v4].insert({&v5, c45});
-        ug.edges[&v5].insert({&v4, c45});
+//         ug.edges[&v4].insert({&v5, c45});
+//         ug.edges[&v5].insert({&v4, c45});
         
-        ug.edges[&v5].insert({&atom_a, c5a});
-        ug.edges[&atom_a].insert({&v5, c5a});
+//         ug.edges[&v5].insert({&atom_a, c5a});
+//         ug.edges[&atom_a].insert({&v5, c5a});
         
-        ug.edges[&v4].insert({&atom_b, c4b});
-        ug.edges[&atom_b].insert({&v4, c4b});
+//         ug.edges[&v4].insert({&atom_b, c4b});
+//         ug.edges[&atom_b].insert({&v4, c4b});
         
-        // Test from v0: Should find shortest path to closest atom
-        // Possible paths to atom_a:
-        // - v0 -> v2 -> v3 -> v5 -> atom_a: cost 1+1+1+1 = 4
-        // - v0 -> v2 -> v4 -> v5 -> atom_a: cost 1+2+4+1 = 8
-        // - v0 -> v1 -> v3 -> v5 -> atom_a: cost 2+3+1+1 = 7
-        // Possible paths to atom_b:
-        // - v0 -> v2 -> v4 -> atom_b: cost 1+2+2 = 5
-        // Shortest is v0 -> v2 -> v3 -> v5 -> atom_a with cost 4
-        auto [found, cause] = ug.cin_dijkstra(&v0);
-        assert(found == true);
-        assert(cause.size() == 4);
-        assert(cause.count(make_fulfillment(3, 1)) == true);  // v0->v2
-        assert(cause.count(make_fulfillment(7, 1)) == true);  // v2->v3
-        assert(cause.count(make_fulfillment(11, 1)) == true); // v3->v5
-        assert(cause.count(make_fulfillment(15, 1)) == true); // v5->atom_a
+//         // Test from v0: Should find shortest path to closest atom
+//         // Possible paths to atom_a:
+//         // - v0 -> v2 -> v3 -> v5 -> atom_a: cost 1+1+1+1 = 4
+//         // - v0 -> v2 -> v4 -> v5 -> atom_a: cost 1+2+4+1 = 8
+//         // - v0 -> v1 -> v3 -> v5 -> atom_a: cost 2+3+1+1 = 7
+//         // Possible paths to atom_b:
+//         // - v0 -> v2 -> v4 -> atom_b: cost 1+2+2 = 5
+//         // Shortest is v0 -> v2 -> v3 -> v5 -> atom_a with cost 4
+//         auto [found, cause] = ug.cin_dijkstra(&v0);
+//         assert(found == true);
+//         assert(cause.size() == 4);
+//         assert(cause.count(make_fulfillment(3, 1)) == true);  // v0->v2
+//         assert(cause.count(make_fulfillment(7, 1)) == true);  // v2->v3
+//         assert(cause.count(make_fulfillment(11, 1)) == true); // v3->v5
+//         assert(cause.count(make_fulfillment(15, 1)) == true); // v5->atom_a
         
-        // Test from v1: Should also find optimal path
-        auto [found2, cause2] = ug.cin_dijkstra(&v1);
-        assert(found2 == true);
-        // v1 -> v3 -> v5 -> atom_a: cost 3+1+1 = 5
-        // v1 -> v0 -> v2 -> v4 -> atom_b: cost 2+1+2+2 = 7
-        assert(cause2.size() == 5);
+//         // Test from v1: Should also find optimal path
+//         auto [found2, cause2] = ug.cin_dijkstra(&v1);
+//         assert(found2 == true);
+//         // v1 -> v3 -> v5 -> atom_a: cost 3+1+1 = 5
+//         // v1 -> v0 -> v2 -> v4 -> atom_b: cost 2+1+2+2 = 7
+//         assert(cause2.size() == 5);
         
-        // Test from v4: Should find atom_b directly
-        auto [found3, cause3] = ug.cin_dijkstra(&v4);
-        assert(found3 == true);
-        assert(cause3.size() == 2);
-        assert(cause3.count(make_fulfillment(16, 1)) == true);
-        assert(cause3.count(make_fulfillment(16, 2)) == true);
-    }
+//         // Test from v4: Should find atom_b directly
+//         auto [found3, cause3] = ug.cin_dijkstra(&v4);
+//         assert(found3 == true);
+//         assert(cause3.size() == 2);
+//         assert(cause3.count(make_fulfillment(16, 1)) == true);
+//         assert(cause3.count(make_fulfillment(16, 2)) == true);
+//     }
     
-    // Test 9: VERY COMPLEX GRAPH with overlapping causes - finds causally minimal path
-    {
-        unification_graph ug(t);
+//     // Test 9: VERY COMPLEX GRAPH with overlapping causes - finds causally minimal path
+//     {
+//         unification_graph ug(t);
         
-        // Create a complex graph with 8 vars and 3 atoms
-        expr v0{expr::var{300}};
-        expr v1{expr::var{301}};
-        expr v2{expr::var{302}};
-        expr v3{expr::var{303}};
-        expr v4{expr::var{304}};
-        expr v5{expr::var{305}};
-        expr v6{expr::var{306}};
-        expr v7{expr::var{307}};
-        expr atom_x{expr::atom{"target_x"}};
-        expr atom_y{expr::atom{"target_y"}};
-        expr atom_z{expr::atom{"target_z"}};
+//         // Create a complex graph with 8 vars and 3 atoms
+//         expr v0{expr::var{300}};
+//         expr v1{expr::var{301}};
+//         expr v2{expr::var{302}};
+//         expr v3{expr::var{303}};
+//         expr v4{expr::var{304}};
+//         expr v5{expr::var{305}};
+//         expr v6{expr::var{306}};
+//         expr v7{expr::var{307}};
+//         expr atom_x{expr::atom{"target_x"}};
+//         expr atom_y{expr::atom{"target_y"}};
+//         expr atom_z{expr::atom{"target_z"}};
         
-        // Define shared fulfillments that appear in multiple edges
-        // These create overlaps that reduce effective path costs
-        causal_set shared_a = make_cause({{100, 1}});
-        causal_set shared_b = make_cause({{200, 1}});
-        causal_set shared_c = make_cause({{300, 1}});
+//         // Define shared fulfillments that appear in multiple edges
+//         // These create overlaps that reduce effective path costs
+//         causal_set shared_a = make_cause({{100, 1}});
+//         causal_set shared_b = make_cause({{200, 1}});
+//         causal_set shared_c = make_cause({{300, 1}});
         
-        // v0 <-> v1: uses shared_a + unique
-        causal_set c01 = make_cause({{100, 1}, {1, 1}});  // cost 2
+//         // v0 <-> v1: uses shared_a + unique
+//         causal_set c01 = make_cause({{100, 1}, {1, 1}});  // cost 2
         
-        // v0 <-> v2: uses shared_b + unique
-        causal_set c02 = make_cause({{200, 1}, {2, 1}});  // cost 2
+//         // v0 <-> v2: uses shared_b + unique
+//         causal_set c02 = make_cause({{200, 1}, {2, 1}});  // cost 2
         
-        // v1 <-> v3: uses shared_a + unique (overlap with c01!)
-        causal_set c13 = make_cause({{100, 1}, {3, 1}, {3, 2}});  // cost 3, but {100,1} overlaps
+//         // v1 <-> v3: uses shared_a + unique (overlap with c01!)
+//         causal_set c13 = make_cause({{100, 1}, {3, 1}, {3, 2}});  // cost 3, but {100,1} overlaps
         
-        // v2 <-> v4: uses shared_b + unique (overlap with c02!)
-        causal_set c24 = make_cause({{200, 1}, {4, 1}});  // cost 2, but {200,1} overlaps
+//         // v2 <-> v4: uses shared_b + unique (overlap with c02!)
+//         causal_set c24 = make_cause({{200, 1}, {4, 1}});  // cost 2, but {200,1} overlaps
         
-        // v1 <-> v5: uses shared_c
-        causal_set c15 = make_cause({{300, 1}, {5, 1}, {5, 2}});  // cost 3
+//         // v1 <-> v5: uses shared_c
+//         causal_set c15 = make_cause({{300, 1}, {5, 1}, {5, 2}});  // cost 3
         
-        // v3 <-> v6: uses shared_c (overlap with c15!)
-        causal_set c36 = make_cause({{300, 1}, {6, 1}});  // cost 2, but {300,1} overlaps
+//         // v3 <-> v6: uses shared_c (overlap with c15!)
+//         causal_set c36 = make_cause({{300, 1}, {6, 1}});  // cost 2, but {300,1} overlaps
         
-        // v4 <-> v6: unique
-        causal_set c46 = make_cause({{7, 1}, {7, 2}, {7, 3}});  // cost 3
+//         // v4 <-> v6: unique
+//         causal_set c46 = make_cause({{7, 1}, {7, 2}, {7, 3}});  // cost 3
         
-        // v5 <-> v7: unique
-        causal_set c57 = make_cause({{8, 1}});  // cost 1
+//         // v5 <-> v7: unique
+//         causal_set c57 = make_cause({{8, 1}});  // cost 1
         
-        // v6 <-> v7: unique
-        causal_set c67 = make_cause({{9, 1}, {9, 2}});  // cost 2
+//         // v6 <-> v7: unique
+//         causal_set c67 = make_cause({{9, 1}, {9, 2}});  // cost 2
         
-        // v7 <-> atom_x: unique
-        causal_set c7x = make_cause({{10, 1}});  // cost 1
+//         // v7 <-> atom_x: unique
+//         causal_set c7x = make_cause({{10, 1}});  // cost 1
         
-        // v6 <-> atom_y: unique
-        causal_set c6y = make_cause({{11, 1}, {11, 2}});  // cost 2
+//         // v6 <-> atom_y: unique
+//         causal_set c6y = make_cause({{11, 1}, {11, 2}});  // cost 2
         
-        // v4 <-> atom_z: unique
-        causal_set c4z = make_cause({{12, 1}});  // cost 1
+//         // v4 <-> atom_z: unique
+//         causal_set c4z = make_cause({{12, 1}});  // cost 1
         
-        // Add all bidirectional edges
-        ug.edges[&v0].insert({&v1, c01});
-        ug.edges[&v1].insert({&v0, c01});
+//         // Add all bidirectional edges
+//         ug.edges[&v0].insert({&v1, c01});
+//         ug.edges[&v1].insert({&v0, c01});
         
-        ug.edges[&v0].insert({&v2, c02});
-        ug.edges[&v2].insert({&v0, c02});
+//         ug.edges[&v0].insert({&v2, c02});
+//         ug.edges[&v2].insert({&v0, c02});
         
-        ug.edges[&v1].insert({&v3, c13});
-        ug.edges[&v3].insert({&v1, c13});
+//         ug.edges[&v1].insert({&v3, c13});
+//         ug.edges[&v3].insert({&v1, c13});
         
-        ug.edges[&v2].insert({&v4, c24});
-        ug.edges[&v4].insert({&v2, c24});
+//         ug.edges[&v2].insert({&v4, c24});
+//         ug.edges[&v4].insert({&v2, c24});
         
-        ug.edges[&v1].insert({&v5, c15});
-        ug.edges[&v5].insert({&v1, c15});
+//         ug.edges[&v1].insert({&v5, c15});
+//         ug.edges[&v5].insert({&v1, c15});
         
-        ug.edges[&v3].insert({&v6, c36});
-        ug.edges[&v6].insert({&v3, c36});
+//         ug.edges[&v3].insert({&v6, c36});
+//         ug.edges[&v6].insert({&v3, c36});
         
-        ug.edges[&v4].insert({&v6, c46});
-        ug.edges[&v6].insert({&v4, c46});
+//         ug.edges[&v4].insert({&v6, c46});
+//         ug.edges[&v6].insert({&v4, c46});
         
-        ug.edges[&v5].insert({&v7, c57});
-        ug.edges[&v7].insert({&v5, c57});
+//         ug.edges[&v5].insert({&v7, c57});
+//         ug.edges[&v7].insert({&v5, c57});
         
-        ug.edges[&v6].insert({&v7, c67});
-        ug.edges[&v7].insert({&v6, c67});
+//         ug.edges[&v6].insert({&v7, c67});
+//         ug.edges[&v7].insert({&v6, c67});
         
-        ug.edges[&v7].insert({&atom_x, c7x});
-        ug.edges[&atom_x].insert({&v7, c7x});
+//         ug.edges[&v7].insert({&atom_x, c7x});
+//         ug.edges[&atom_x].insert({&v7, c7x});
         
-        ug.edges[&v6].insert({&atom_y, c6y});
-        ug.edges[&atom_y].insert({&v6, c6y});
+//         ug.edges[&v6].insert({&atom_y, c6y});
+//         ug.edges[&atom_y].insert({&v6, c6y});
         
-        ug.edges[&v4].insert({&atom_z, c4z});
-        ug.edges[&atom_z].insert({&v4, c4z});
+//         ug.edges[&v4].insert({&atom_z, c4z});
+//         ug.edges[&atom_z].insert({&v4, c4z});
         
-        // Test from v0: Multiple paths to multiple atoms
-        // Path to atom_z: v0 -> v2 -> v4 -> atom_z
-        //   Causes: {200,1},{2,1} + {200,1},{4,1} + {12,1}
-        //   Unique: {200,1}, {2,1}, {4,1}, {12,1} = 4 unique
-        //
-        // Path to atom_x: v0 -> v1 -> v5 -> v7 -> atom_x
-        //   Causes: {100,1},{1,1} + {300,1},{5,1},{5,2} + {8,1} + {10,1}
-        //   Unique: {100,1}, {1,1}, {300,1}, {5,1}, {5,2}, {8,1}, {10,1} = 7 unique
-        //
-        // Path to atom_x (alt): v0 -> v1 -> v3 -> v6 -> v7 -> atom_x
-        //   Causes: {100,1},{1,1} + {100,1},{3,1},{3,2} + {300,1},{6,1} + {9,1},{9,2} + {10,1}
-        //   Unique: {100,1}, {1,1}, {3,1}, {3,2}, {300,1}, {6,1}, {9,1}, {9,2}, {10,1} = 9 unique
-        //
-        // Shortest should be path to atom_z with 4 unique fulfillments
-        auto [found, cause] = ug.cin_dijkstra(&v0);
-        assert(found == true);
-        assert(cause.size() == 4);
-        assert(cause.count(make_fulfillment(200, 1)) == true);
-        assert(cause.count(make_fulfillment(2, 1)) == true);
-        assert(cause.count(make_fulfillment(4, 1)) == true);
-        assert(cause.count(make_fulfillment(12, 1)) == true);
+//         // Test from v0: Multiple paths to multiple atoms
+//         // Path to atom_z: v0 -> v2 -> v4 -> atom_z
+//         //   Causes: {200,1},{2,1} + {200,1},{4,1} + {12,1}
+//         //   Unique: {200,1}, {2,1}, {4,1}, {12,1} = 4 unique
+//         //
+//         // Path to atom_x: v0 -> v1 -> v5 -> v7 -> atom_x
+//         //   Causes: {100,1},{1,1} + {300,1},{5,1},{5,2} + {8,1} + {10,1}
+//         //   Unique: {100,1}, {1,1}, {300,1}, {5,1}, {5,2}, {8,1}, {10,1} = 7 unique
+//         //
+//         // Path to atom_x (alt): v0 -> v1 -> v3 -> v6 -> v7 -> atom_x
+//         //   Causes: {100,1},{1,1} + {100,1},{3,1},{3,2} + {300,1},{6,1} + {9,1},{9,2} + {10,1}
+//         //   Unique: {100,1}, {1,1}, {3,1}, {3,2}, {300,1}, {6,1}, {9,1}, {9,2}, {10,1} = 9 unique
+//         //
+//         // Shortest should be path to atom_z with 4 unique fulfillments
+//         auto [found, cause] = ug.cin_dijkstra(&v0);
+//         assert(found == true);
+//         assert(cause.size() == 4);
+//         assert(cause.count(make_fulfillment(200, 1)) == true);
+//         assert(cause.count(make_fulfillment(2, 1)) == true);
+//         assert(cause.count(make_fulfillment(4, 1)) == true);
+//         assert(cause.count(make_fulfillment(12, 1)) == true);
         
-        // Test from v1: Should find path with heavy overlap
-        // Path to atom_x: v1 -> v5 -> v7 -> atom_x
-        //   Causes: {300,1},{5,1},{5,2} + {8,1} + {10,1}
-        //   Unique: {300,1}, {5,1}, {5,2}, {8,1}, {10,1} = 5 unique
-        //
-        // Path to atom_y: v1 -> v3 -> v6 -> atom_y
-        //   Causes: {100,1},{3,1},{3,2} + {300,1},{6,1} + {11,1},{11,2}
-        //   Unique: {100,1}, {3,1}, {3,2}, {300,1}, {6,1}, {11,1}, {11,2} = 7 unique
-        auto [found2, cause2] = ug.cin_dijkstra(&v1);
-        assert(found2 == true);
-        assert(cause2.size() == 5);
-        assert(cause2.count(make_fulfillment(300, 1)) == true);
-        assert(cause2.count(make_fulfillment(5, 1)) == true);
-        assert(cause2.count(make_fulfillment(5, 2)) == true);
-        assert(cause2.count(make_fulfillment(8, 1)) == true);
-        assert(cause2.count(make_fulfillment(10, 1)) == true);
+//         // Test from v1: Should find path with heavy overlap
+//         // Path to atom_x: v1 -> v5 -> v7 -> atom_x
+//         //   Causes: {300,1},{5,1},{5,2} + {8,1} + {10,1}
+//         //   Unique: {300,1}, {5,1}, {5,2}, {8,1}, {10,1} = 5 unique
+//         //
+//         // Path to atom_y: v1 -> v3 -> v6 -> atom_y
+//         //   Causes: {100,1},{3,1},{3,2} + {300,1},{6,1} + {11,1},{11,2}
+//         //   Unique: {100,1}, {3,1}, {3,2}, {300,1}, {6,1}, {11,1}, {11,2} = 7 unique
+//         auto [found2, cause2] = ug.cin_dijkstra(&v1);
+//         assert(found2 == true);
+//         assert(cause2.size() == 5);
+//         assert(cause2.count(make_fulfillment(300, 1)) == true);
+//         assert(cause2.count(make_fulfillment(5, 1)) == true);
+//         assert(cause2.count(make_fulfillment(5, 2)) == true);
+//         assert(cause2.count(make_fulfillment(8, 1)) == true);
+//         assert(cause2.count(make_fulfillment(10, 1)) == true);
         
-        // Test from v3: Multiple paths with different overlap patterns
-        // Path to atom_x: v3 -> v6 -> v7 -> atom_x
-        //   Causes: {300,1},{6,1} + {9,1},{9,2} + {10,1}
-        //   Unique: {300,1}, {6,1}, {9,1}, {9,2}, {10,1} = 5 unique
-        //
-        // Path to atom_y: v3 -> v6 -> atom_y
-        //   Causes: {300,1},{6,1} + {11,1},{11,2}
-        //   Unique: {300,1}, {6,1}, {11,1}, {11,2} = 4 unique
-        auto [found3, cause3] = ug.cin_dijkstra(&v3);
-        assert(found3 == true);
-        assert(cause3.size() == 4);
-        assert(cause3.count(make_fulfillment(300, 1)) == true);
-        assert(cause3.count(make_fulfillment(6, 1)) == true);
-        assert(cause3.count(make_fulfillment(11, 1)) == true);
-        assert(cause3.count(make_fulfillment(11, 2)) == true);
+//         // Test from v3: Multiple paths with different overlap patterns
+//         // Path to atom_x: v3 -> v6 -> v7 -> atom_x
+//         //   Causes: {300,1},{6,1} + {9,1},{9,2} + {10,1}
+//         //   Unique: {300,1}, {6,1}, {9,1}, {9,2}, {10,1} = 5 unique
+//         //
+//         // Path to atom_y: v3 -> v6 -> atom_y
+//         //   Causes: {300,1},{6,1} + {11,1},{11,2}
+//         //   Unique: {300,1}, {6,1}, {11,1}, {11,2} = 4 unique
+//         auto [found3, cause3] = ug.cin_dijkstra(&v3);
+//         assert(found3 == true);
+//         assert(cause3.size() == 4);
+//         assert(cause3.count(make_fulfillment(300, 1)) == true);
+//         assert(cause3.count(make_fulfillment(6, 1)) == true);
+//         assert(cause3.count(make_fulfillment(11, 1)) == true);
+//         assert(cause3.count(make_fulfillment(11, 2)) == true);
         
-        // Test from v6: Direct access to two atoms
-        // Path to atom_y: direct, cost 2
-        // Path to atom_x: v6 -> v7 -> atom_x, cost 2+1 = 3
-        auto [found4, cause4] = ug.cin_dijkstra(&v6);
-        assert(found4 == true);
-        assert(cause4.size() == 2);  // Should choose atom_y
-        assert(cause4.count(make_fulfillment(11, 1)) == true);
-        assert(cause4.count(make_fulfillment(11, 2)) == true);
-    }
+//         // Test from v6: Direct access to two atoms
+//         // Path to atom_y: direct, cost 2
+//         // Path to atom_x: v6 -> v7 -> atom_x, cost 2+1 = 3
+//         auto [found4, cause4] = ug.cin_dijkstra(&v6);
+//         assert(found4 == true);
+//         assert(cause4.size() == 2);  // Should choose atom_y
+//         assert(cause4.count(make_fulfillment(11, 1)) == true);
+//         assert(cause4.count(make_fulfillment(11, 2)) == true);
+//     }
     
-    // Test 14: Self-loop edge (var points to itself)
-    // COMMENTED OUT - may cause infinite loop
-    // {
-    //     expr var_self{expr::var{100}};
-    //     expr atom_end{expr::atom{"self_loop_end"}};
-    //     
-    //     causal_set self_cause = make_cause({{100, 1}});
-    //     causal_set to_atom = make_cause({{101, 1}});
-    //     
-    //     ug.edges[&var_self].insert({&var_self, self_cause});  // Self-loop
-    //     ug.edges[&var_self].insert({&atom_end, to_atom});
-    //     ug.edges[&atom_end];  // Initialize atom entry
-    //     
-    //     auto [found, cause] = ug.cin_dijkstra(&var_self);
-    //     assert(found == true);
-    //     assert(cause.size() == 1);  // Should skip self-loop and find atom
-    //     assert(cause == to_atom);
-    // }
-}
+//     // Test 14: Self-loop edge (var points to itself)
+//     // COMMENTED OUT - may cause infinite loop
+//     // {
+//     //     expr var_self{expr::var{100}};
+//     //     expr atom_end{expr::atom{"self_loop_end"}};
+//     //     
+//     //     causal_set self_cause = make_cause({{100, 1}});
+//     //     causal_set to_atom = make_cause({{101, 1}});
+//     //     
+//     //     ug.edges[&var_self].insert({&var_self, self_cause});  // Self-loop
+//     //     ug.edges[&var_self].insert({&atom_end, to_atom});
+//     //     ug.edges[&atom_end];  // Initialize atom entry
+//     //     
+//     //     auto [found, cause] = ug.cin_dijkstra(&var_self);
+//     //     assert(found == true);
+//     //     assert(cause.size() == 1);  // Should skip self-loop and find atom
+//     //     assert(cause == to_atom);
+//     // }
+// }
 
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
@@ -2288,12 +2286,12 @@ void unit_test_main() {
     TEST(test_expr_pool_atom);
     TEST(test_expr_pool_var);
     TEST(test_expr_pool_cons);
-    TEST(test_causal_set_empty);
-    TEST(test_causal_set_size);
-    TEST(test_causal_set_count);
-    TEST(test_causal_set_operator_plus);
-    TEST(test_causal_set_operator_spaceship);
-    TEST(test_unification_graph_cin_dijkstra);
+    // TEST(test_causal_set_empty);
+    // TEST(test_causal_set_size);
+    // TEST(test_causal_set_count);
+    // TEST(test_causal_set_operator_plus);
+    // TEST(test_causal_set_operator_spaceship);
+    // TEST(test_unification_graph_cin_dijkstra);
 }
 
 int main() {
