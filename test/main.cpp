@@ -4683,6 +4683,184 @@ void test_bind_map_occurs_check() {
         
         t.pop();
     }
+    
+    // Test 44: Cons where both children are bound to the SAME atom
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        
+        expr v1{expr::var{700}};
+        expr v2{expr::var{701}};
+        expr a1{expr::atom{"shared"}};
+        
+        // Both vars bound to the same atom
+        bm.bindings[700] = &a1;
+        bm.bindings[701] = &a1;
+        
+        expr c1{expr::cons{&v1, &v2}};
+        
+        // Both children reduce to the same atom, so no vars should be found
+        assert(!bm.occurs_check(700, &c1));  // v1 reduces to atom
+        assert(!bm.occurs_check(701, &c1));  // v2 reduces to atom
+        assert(!bm.occurs_check(702, &c1));  // Unrelated var
+        assert(bm.bindings.size() == 2);
+        
+        t.pop();
+    }
+    
+    // Test 45: Cons where both children are bound to the SAME var
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        
+        expr v1{expr::var{710}};
+        expr v2{expr::var{711}};
+        expr v_target{expr::var{712}};
+        
+        // Both vars bound to the same target var (unbound)
+        bm.bindings[710] = &v_target;
+        bm.bindings[711] = &v_target;
+        
+        expr c1{expr::cons{&v1, &v2}};
+        
+        // Both children reduce to v_target, so searching for v_target should find it
+        assert(bm.occurs_check(712, &c1));   // v_target found in both children
+        assert(!bm.occurs_check(710, &c1));  // v1 reduces to v_target
+        assert(!bm.occurs_check(711, &c1));  // v2 reduces to v_target
+        assert(bm.bindings.size() == 2);
+        
+        t.pop();
+    }
+    
+    // Test 46: Cons where both children are bound to the SAME cons
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        
+        expr v1{expr::var{720}};
+        expr v2{expr::var{721}};
+        expr v_inner{expr::var{722}};
+        expr a1{expr::atom{"x"}};
+        expr shared_cons{expr::cons{&v_inner, &a1}};
+        
+        // Both vars bound to the same cons
+        bm.bindings[720] = &shared_cons;
+        bm.bindings[721] = &shared_cons;
+        
+        expr c1{expr::cons{&v1, &v2}};
+        
+        // Both children reduce to shared_cons which contains v_inner
+        assert(bm.occurs_check(722, &c1));   // v_inner found in shared_cons
+        assert(!bm.occurs_check(720, &c1));  // v1 reduces to cons
+        assert(!bm.occurs_check(721, &c1));  // v2 reduces to cons
+        assert(bm.bindings.size() == 2);
+        
+        t.pop();
+    }
+    
+    // Test 47: Cons where both children are chains that converge to the SAME var
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        
+        expr v_left1{expr::var{730}};
+        expr v_left2{expr::var{731}};
+        expr v_right1{expr::var{732}};
+        expr v_right2{expr::var{733}};
+        expr v_target{expr::var{734}};
+        
+        // Left chain: v_left1 -> v_left2 -> v_target
+        bm.bindings[730] = &v_left2;
+        bm.bindings[731] = &v_target;
+        
+        // Right chain: v_right1 -> v_right2 -> v_target (same target!)
+        bm.bindings[732] = &v_right2;
+        bm.bindings[733] = &v_target;
+        
+        expr c1{expr::cons{&v_left1, &v_right1}};
+        
+        // Both chains converge to v_target
+        assert(bm.occurs_check(734, &c1));    // v_target found via both chains
+        assert(!bm.occurs_check(730, &c1));   // v_left1 compressed away
+        assert(!bm.occurs_check(731, &c1));   // v_left2 compressed away
+        assert(!bm.occurs_check(732, &c1));   // v_right1 compressed away
+        assert(!bm.occurs_check(733, &c1));   // v_right2 compressed away
+        assert(bm.bindings.size() == 4);
+        
+        t.pop();
+    }
+    
+    // Test 48: Cons where both children are chains that converge to the SAME atom
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        
+        expr v_left1{expr::var{740}};
+        expr v_left2{expr::var{741}};
+        expr v_right1{expr::var{742}};
+        expr v_right2{expr::var{743}};
+        expr a_target{expr::atom{"convergence"}};
+        
+        // Left chain: v_left1 -> v_left2 -> a_target
+        bm.bindings[740] = &v_left2;
+        bm.bindings[741] = &a_target;
+        
+        // Right chain: v_right1 -> v_right2 -> a_target (same target!)
+        bm.bindings[742] = &v_right2;
+        bm.bindings[743] = &a_target;
+        
+        expr c1{expr::cons{&v_left1, &v_right1}};
+        
+        // Both chains converge to atom, so no vars should be found
+        assert(!bm.occurs_check(740, &c1));   // v_left1 compressed away
+        assert(!bm.occurs_check(741, &c1));   // v_left2 compressed away
+        assert(!bm.occurs_check(742, &c1));   // v_right1 compressed away
+        assert(!bm.occurs_check(743, &c1));   // v_right2 compressed away
+        assert(!bm.occurs_check(999, &c1));   // No vars in result
+        assert(bm.bindings.size() == 4);
+        
+        t.pop();
+    }
+    
+    // Test 49: Cons where both children are chains that converge to the SAME cons
+    {
+        trail t;
+        bind_map bm(t);
+        t.push();
+        
+        expr v_left1{expr::var{750}};
+        expr v_left2{expr::var{751}};
+        expr v_right1{expr::var{752}};
+        expr v_right2{expr::var{753}};
+        expr v_inner{expr::var{754}};
+        expr a1{expr::atom{"y"}};
+        expr target_cons{expr::cons{&v_inner, &a1}};
+        
+        // Left chain: v_left1 -> v_left2 -> target_cons
+        bm.bindings[750] = &v_left2;
+        bm.bindings[751] = &target_cons;
+        
+        // Right chain: v_right1 -> v_right2 -> target_cons (same target!)
+        bm.bindings[752] = &v_right2;
+        bm.bindings[753] = &target_cons;
+        
+        expr c1{expr::cons{&v_left1, &v_right1}};
+        
+        // Both chains converge to target_cons which contains v_inner
+        assert(bm.occurs_check(754, &c1));    // v_inner found in target_cons
+        assert(!bm.occurs_check(750, &c1));   // v_left1 compressed away
+        assert(!bm.occurs_check(751, &c1));   // v_left2 compressed away
+        assert(!bm.occurs_check(752, &c1));   // v_right1 compressed away
+        assert(!bm.occurs_check(753, &c1));   // v_right2 compressed away
+        assert(bm.bindings.size() == 4);
+        
+        t.pop();
+    }
 }
 
 void test_bind_map_unify() {
