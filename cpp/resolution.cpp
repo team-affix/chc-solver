@@ -16,7 +16,7 @@ void resolution_pool::pin(const resolution* r) {
 
 void resolution_pool::trim() {
     for (auto it = resolutions.begin(); it != resolutions.end();) {
-        if (it->second) continue;
+        if (it->second) { ++it; continue; }
         resolutions.erase(it++); // remove unpinned resolutions
     }
 }
