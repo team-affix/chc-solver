@@ -11,12 +11,7 @@ const expr* program_expr_context::next_variable() {
     return expr_pool_ref.var(variable_count++);
 }
 
-const expr* program_expr_context::copy_expr(const expr* e) {
-    std::map<uint32_t, const expr*> variable_map;
-    return copy_expr_impl(e, variable_map);
-}
-
-const expr* program_expr_context::copy_expr_impl(const expr* e, std::map<uint32_t, const expr*>& variable_map) {
+const expr* program_expr_context::copy_expr(const expr* e, std::map<uint32_t, const expr*>& variable_map) {
     // If the expression is an atom, return the atom unchanged
     if (std::holds_alternative<expr::atom>(e->content))
         return e;
@@ -37,8 +32,8 @@ const expr* program_expr_context::copy_expr_impl(const expr* e, std::map<uint32_
     // If the expression is a cons cell, copy the car and cdr
     if (const expr::cons* c = std::get_if<expr::cons>(&e->content)) {
         return expr_pool_ref.cons(
-            copy_expr_impl(c->lhs, variable_map),
-            copy_expr_impl(c->rhs, variable_map));
+            copy_expr(c->lhs, variable_map),
+            copy_expr(c->rhs, variable_map));
     }
 
     throw std::runtime_error("Unsupported expression type");
