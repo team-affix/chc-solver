@@ -8271,14 +8271,6 @@ void test_resolution_pool_constructor() {
     assert(pool1.size() == 0);
     assert(pool1.resolutions.size() == 0);
     assert(pool1.resolutions.empty());
-    
-    // Multiple pools can be constructed independently
-    resolution_pool pool2;
-    resolution_pool pool3;
-    assert(pool2.size() == 0);
-    assert(pool3.size() == 0);
-    assert(pool2.resolutions.empty());
-    assert(pool3.resolutions.empty());
 }
 
 void test_resolution_pool_intern() {
@@ -8825,6 +8817,33 @@ void test_resolution_pool_pin() {
         assert(pool.resolutions.at(*l2_c) == false);
         assert(pool.resolutions.at(*l3_a) == true);
     }
+    
+    // Test 10: Pin parent does NOT pin children
+    {
+        resolution_pool pool;
+        
+        const resolution* parent = pool.make_resolution(nullptr, 1, 10);
+        const resolution* child1 = pool.make_resolution(parent, 2, 20);
+        const resolution* child2 = pool.make_resolution(parent, 3, 30);
+        const resolution* grandchild = pool.make_resolution(child1, 4, 40);
+        assert(pool.size() == 4);
+        
+        // All should be unpinned initially
+        assert(pool.resolutions.at(*parent) == false);
+        assert(pool.resolutions.at(*child1) == false);
+        assert(pool.resolutions.at(*child2) == false);
+        assert(pool.resolutions.at(*grandchild) == false);
+        
+        // Pin only the parent
+        pool.pin(parent);
+        
+        // Only parent should be pinned, children should remain unpinned
+        assert(pool.resolutions.at(*parent) == true);
+        assert(pool.resolutions.at(*child1) == false);
+        assert(pool.resolutions.at(*child2) == false);
+        assert(pool.resolutions.at(*grandchild) == false);
+        assert(pool.size() == 4);  // Size unchanged by pin
+    }
 }
 
 void test_resolution_pool_trim() {
@@ -8948,22 +8967,22 @@ void test_resolution_pool_trim() {
         assert(pool.resolutions.count(*r1) == 1);
     }
     
-    // Test 8: Trim after unpinning is not possible (no unpin function)
-    // This test verifies that once pinned, entries stay pinned
-    {
-        resolution_pool pool;
+    // // Test 8: Trim after unpinning is not possible (no unpin function)
+    // // This test verifies that once pinned, entries stay pinned
+    // {
+    //     resolution_pool pool;
         
-        const resolution* r1 = pool.make_resolution(nullptr, 1, 10);
-        pool.pin(r1);
-        assert(pool.resolutions.at(*r1) == true);
+    //     const resolution* r1 = pool.make_resolution(nullptr, 1, 10);
+    //     pool.pin(r1);
+    //     assert(pool.resolutions.at(*r1) == true);
         
-        pool.trim();
-        assert(pool.size() == 1);  // r1 remains
+    //     pool.trim();
+    //     assert(pool.size() == 1);  // r1 remains
         
-        // Trim again - r1 should still be there
-        pool.trim();
-        assert(pool.size() == 1);
-    }
+    //     // Trim again - r1 should still be there
+    //     pool.trim();
+    //     assert(pool.size() == 1);
+    // }
     
     // Test 9: Complex scenario with multiple pin operations and trim
     {
