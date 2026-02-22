@@ -10038,19 +10038,21 @@ void test_expr_context_copy() {
         assert(std::holds_alternative<expr::cons>(copied->content));
         
         const expr::cons& copied_cons = std::get<expr::cons>(copied->content);
-        uint32_t lhs_idx = std::get<expr::var>(copied_cons.lhs->content).index;
-        uint32_t rhs_idx = std::get<expr::var>(copied_cons.rhs->content).index;
-        
-        // Due to unspecified evaluation order, we just verify both are fresh and distinct
-        assert(lhs_idx != rhs_idx);
-        assert((lhs_idx == 0 && rhs_idx == 1) || (lhs_idx == 1 && rhs_idx == 0));
+        assert(std::get<expr::var>(copied_cons.lhs->content).index == 0);
+        assert(std::get<expr::var>(copied_cons.rhs->content).index == 1);
         
         assert(var_map.size() == 2);
-        assert(var_map.count(10) == 1);
-        assert(var_map.count(20) == 1);
-        assert(var_map.at(10) != var_map.at(20));  // Should be distinct
+        assert(var_map.at(10) == 0);
+        assert(var_map.at(20) == 1);
         assert(var_ctx.variable_count == 2);
-        assert(pool.size() == 5);  // v1, v2, original cons, v0, v1, new cons
+        
+        // Pool should contain: var(10), var(20), original cons, var(0), var(1), new cons
+        size_t actual_size = pool.size();
+        if (actual_size != 6) {
+            printf("ERROR: Expected pool.size() == 6, got %zu\n", actual_size);
+            fflush(stdout);
+        }
+        assert(pool.size() == 6);
         
         t.pop();
     }
@@ -10178,10 +10180,8 @@ void test_expr_context_copy() {
         assert(var_map.at(10) == 0);  // Fresh variable
         
         const expr::cons& copied_cons = std::get<expr::cons>(copied->content);
-        // Due to unspecified evaluation order, we verify the mapping is correct
-        uint32_t lhs_idx = std::get<expr::var>(copied_cons.lhs->content).index;
-        uint32_t rhs_idx = std::get<expr::var>(copied_cons.rhs->content).index;
-        assert((lhs_idx == 100 && rhs_idx == 0) || (lhs_idx == 0 && rhs_idx == 100));
+        assert(std::get<expr::var>(copied_cons.lhs->content).index == 100);
+        assert(std::get<expr::var>(copied_cons.rhs->content).index == 0);
         
         assert(var_ctx.variable_count == 1);  // Only one fresh var created
         
@@ -10308,11 +10308,11 @@ void test_expr_context_copy() {
         std::map<uint32_t, uint32_t> var_map;
         const expr* copied = ctx.copy(original, var_map);
         assert(var_ctx.variable_count == 1);
-        assert(pool.size() == 4);  // v(5), atom("x"), original cons, v(0), new cons
+        assert(pool.size() == 5);  // v(5), atom("x"), original cons, v(0), new cons
         
         t.pop();
         assert(var_ctx.variable_count == 0);
-        assert(pool.size() == 3);  // Back to original three
+        assert(pool.size() == 3);  // Back to v(5), atom("x"), original cons
         
         t.pop();
     }
@@ -10490,13 +10490,15 @@ void test_expr_context_copy() {
         const expr* copied1 = ctx.copy(original, var_map);
         size_t pool_size_after_first = pool.size();
         
-        // Copy again with same map - should reuse interned expressions
+        // Copy again with cleared map - creates fresh var(1) which already exists!
         var_map.clear();
         const expr* copied2 = ctx.copy(original, var_map);
         
-        // Should create new fresh variable but structure might be interned
+        // Fresh variable is var(1), which already exists, so gets interned
+        // cons(var(1), atom("a")) also already exists, so also interned
         assert(var_ctx.variable_count == 2);
-        assert(pool.exprs.size() == pool_size_after_first + 2);  // New var(1) and possibly new cons
+        assert(pool.exprs.size() == pool_size_after_first);  // No new entries due to interning
+        assert(copied2 == original);  // Should be same as original due to interning!
         
         t.pop();
     }
