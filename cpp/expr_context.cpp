@@ -30,9 +30,14 @@ const expr* expr_context::copy(const expr* e, std::map<uint32_t, uint32_t>& vari
 
     // If the expression is a cons cell, copy the car and cdr
     if (const expr::cons* c = std::get_if<expr::cons>(&e->content)) {
-        return expr_pool_ref.cons(
-            copy(c->lhs, variable_map),
-            copy(c->rhs, variable_map));
+        // Copy lhs
+        const expr* copied_lhs = copy(c->lhs, variable_map);
+        
+        // Copy rhs
+        const expr* copied_rhs = copy(c->rhs, variable_map);
+        
+        // Return the copied cons cell
+        return expr_pool_ref.cons(copied_lhs, copied_rhs);
     }
 
     throw std::runtime_error("Unsupported expression type");

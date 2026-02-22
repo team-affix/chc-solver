@@ -2,6 +2,7 @@
 #include "../hpp/bind_map.hpp"
 #include "../hpp/resolution.hpp"
 #include "../hpp/var_context.hpp"
+#include "../hpp/expr_context.hpp"
 #include "test_utils.hpp"
 
 void test_trail_constructor() {
@@ -9750,6 +9751,780 @@ void test_var_context_next() {
     }
 }
 
+void test_expr_context_constructor() {
+    trail t;
+    var_context var_ctx(t);
+    expr_pool pool(t);
+    
+    // Basic construction
+    expr_context ctx1(var_ctx, pool);
+    assert(&ctx1.var_context_ref == &var_ctx);
+    assert(&ctx1.expr_pool_ref == &pool);
+    
+    // Multiple expr_contexts can share same dependencies
+    expr_context ctx2(var_ctx, pool);
+    assert(&ctx2.var_context_ref == &var_ctx);
+    assert(&ctx2.expr_pool_ref == &pool);
+    
+    // Different dependencies
+    trail t2;
+    var_context var_ctx2(t2);
+    expr_pool pool2(t2);
+    expr_context ctx3(var_ctx2, pool2);
+    assert(&ctx3.var_context_ref == &var_ctx2);
+    assert(&ctx3.expr_pool_ref == &pool2);
+}
+
+void test_expr_context_fresh() {
+    // Test 1: Basic fresh() call
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* v0 = ctx.fresh();
+        assert(v0 != nullptr);
+        assert(std::holds_alternative<expr::var>(v0->content));
+        assert(std::get<expr::var>(v0->content).index == 0);
+        assert(var_ctx.variable_count == 1);
+        assert(pool.size() == 1);
+        assert(pool.exprs.count(*v0) == 1);
+        
+        t.pop();
+        assert(var_ctx.variable_count == 0);
+        assert(pool.size() == 0);
+    }
+    
+    // Test 2: Multiple fresh() calls produce sequential variables
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* v0 = ctx.fresh();
+        const expr* v1 = ctx.fresh();
+        const expr* v2 = ctx.fresh();
+        
+        assert(std::get<expr::var>(v0->content).index == 0);
+        assert(std::get<expr::var>(v1->content).index == 1);
+        assert(std::get<expr::var>(v2->content).index == 2);
+        assert(var_ctx.variable_count == 3);
+        assert(pool.size() == 3);
+        assert(pool.exprs.size() == 3);
+        
+        // All should be distinct
+        assert(v0 != v1);
+        assert(v1 != v2);
+        assert(v0 != v2);
+        
+        t.pop();
+    }
+    
+    // Test 3: Fresh variables are interned
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* v0_first = ctx.fresh();
+        assert(var_ctx.variable_count == 1);
+        assert(pool.size() == 1);
+        
+        // Manually create same variable - should be interned
+        const expr* v0_manual = pool.var(0);
+        assert(v0_first == v0_manual);
+        assert(pool.size() == 1);  // No new entry
+        
+        t.pop();
+    }
+    
+    // Test 4: Fresh with backtracking
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        ctx.fresh();
+        ctx.fresh();
+        assert(var_ctx.variable_count == 2);
+        assert(pool.size() == 2);
+        
+        t.push();
+        ctx.fresh();
+        ctx.fresh();
+        assert(var_ctx.variable_count == 4);
+        assert(pool.size() == 4);
+        
+        t.pop();
+        assert(var_ctx.variable_count == 2);
+        assert(pool.size() == 2);
+        
+        t.pop();
+        assert(var_ctx.variable_count == 0);
+        assert(pool.size() == 0);
+    }
+    
+    // Test 5: Many fresh variables
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        std::set<const expr*> vars;
+        for (int i = 0; i < 100; ++i) {
+            const expr* v = ctx.fresh();
+            assert(std::get<expr::var>(v->content).index == static_cast<uint32_t>(i));
+            assert(vars.count(v) == 0);  // Should be unique
+            vars.insert(v);
+            assert(var_ctx.variable_count == static_cast<uint32_t>(i + 1));
+            assert(pool.size() == static_cast<uint32_t>(i + 1));
+        }
+        assert(vars.size() == 100);
+        
+        t.pop();
+    }
+    
+    // Test 6: Multiple expr_contexts sharing dependencies
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx1(var_ctx, pool);
+        expr_context ctx2(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* v0_from_ctx1 = ctx1.fresh();
+        assert(std::get<expr::var>(v0_from_ctx1->content).index == 0);
+        assert(var_ctx.variable_count == 1);
+        
+        const expr* v1_from_ctx2 = ctx2.fresh();
+        assert(std::get<expr::var>(v1_from_ctx2->content).index == 1);
+        assert(var_ctx.variable_count == 2);
+        
+        // Both use same pool, so should be interned
+        assert(pool.size() == 2);
+        
+        t.pop();
+    }
+}
+
+void test_expr_context_copy() {
+    // Test 1: Copy atom - should return same pointer (atoms are immutable)
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* original = pool.atom("test");
+        std::map<uint32_t, uint32_t> var_map;
+        
+        const expr* copied = ctx.copy(original, var_map);
+        
+        assert(copied == original);  // Same atom
+        assert(var_map.empty());  // No variables mapped
+        assert(var_ctx.variable_count == 0);  // No fresh vars created
+        
+        t.pop();
+    }
+    
+    // Test 2: Copy single variable - creates fresh variable
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* original = pool.var(5);
+        std::map<uint32_t, uint32_t> var_map;
+        
+        const expr* copied = ctx.copy(original, var_map);
+        
+        assert(copied != original);  // Different variable
+        assert(std::holds_alternative<expr::var>(copied->content));
+        assert(std::get<expr::var>(copied->content).index == 0);  // Fresh var starts at 0
+        assert(var_map.size() == 1);
+        assert(var_map.at(5) == 0);  // Original index 5 mapped to 0
+        assert(var_ctx.variable_count == 1);
+        assert(pool.size() == 2);  // Original var(5) and new var(0)
+        
+        t.pop();
+    }
+    
+    // Test 3: Copy same variable twice - should use same mapping
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* original = pool.var(10);
+        std::map<uint32_t, uint32_t> var_map;
+        
+        const expr* copied1 = ctx.copy(original, var_map);
+        assert(std::get<expr::var>(copied1->content).index == 0);
+        assert(var_map.size() == 1);
+        assert(var_ctx.variable_count == 1);
+        
+        const expr* copied2 = ctx.copy(original, var_map);
+        assert(copied2 == copied1);  // Should be same pointer (interned)
+        assert(var_map.size() == 1);  // No new mapping
+        assert(var_ctx.variable_count == 1);  // No new variable
+        
+        t.pop();
+    }
+    
+    // Test 4: Copy cons with atoms
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* a = pool.atom("a");
+        const expr* b = pool.atom("b");
+        const expr* original = pool.cons(a, b);
+        std::map<uint32_t, uint32_t> var_map;
+        
+        const expr* copied = ctx.copy(original, var_map);
+        
+        assert(copied == original);  // Same cons since atoms unchanged
+        assert(var_map.empty());  // No variables
+        assert(var_ctx.variable_count == 0);
+        
+        t.pop();
+    }
+    
+    // Test 5: Copy cons with variables
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* v1 = pool.var(10);
+        const expr* v2 = pool.var(20);
+        const expr* original = pool.cons(v1, v2);
+        std::map<uint32_t, uint32_t> var_map;
+        
+        const expr* copied = ctx.copy(original, var_map);
+        
+        assert(copied != original);  // Different cons (different vars)
+        assert(std::holds_alternative<expr::cons>(copied->content));
+        
+        const expr::cons& copied_cons = std::get<expr::cons>(copied->content);
+        uint32_t lhs_idx = std::get<expr::var>(copied_cons.lhs->content).index;
+        uint32_t rhs_idx = std::get<expr::var>(copied_cons.rhs->content).index;
+        
+        // Due to unspecified evaluation order, we just verify both are fresh and distinct
+        assert(lhs_idx != rhs_idx);
+        assert((lhs_idx == 0 && rhs_idx == 1) || (lhs_idx == 1 && rhs_idx == 0));
+        
+        assert(var_map.size() == 2);
+        assert(var_map.count(10) == 1);
+        assert(var_map.count(20) == 1);
+        assert(var_map.at(10) != var_map.at(20));  // Should be distinct
+        assert(var_ctx.variable_count == 2);
+        assert(pool.size() == 5);  // v1, v2, original cons, v0, v1, new cons
+        
+        t.pop();
+    }
+    
+    // Test 6: Copy cons with same variable in both positions
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* v = pool.var(5);
+        const expr* original = pool.cons(v, v);
+        std::map<uint32_t, uint32_t> var_map;
+        
+        const expr* copied = ctx.copy(original, var_map);
+        
+        const expr::cons& copied_cons = std::get<expr::cons>(copied->content);
+        assert(std::get<expr::var>(copied_cons.lhs->content).index == 0);
+        assert(std::get<expr::var>(copied_cons.rhs->content).index == 0);
+        assert(copied_cons.lhs == copied_cons.rhs);  // Same variable
+        
+        assert(var_map.size() == 1);
+        assert(var_map.at(5) == 0);
+        assert(var_ctx.variable_count == 1);  // Only one fresh variable created
+        
+        t.pop();
+    }
+    
+    // Test 7: Copy nested cons with mixed content
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* a = pool.atom("atom");
+        const expr* v = pool.var(7);
+        const expr* inner = pool.cons(a, v);
+        const expr* original = pool.cons(inner, a);
+        std::map<uint32_t, uint32_t> var_map;
+        
+        const expr* copied = ctx.copy(original, var_map);
+        
+        assert(copied != original);
+        const expr::cons& outer_cons = std::get<expr::cons>(copied->content);
+        assert(outer_cons.rhs == a);  // Atom unchanged
+        
+        const expr::cons& inner_cons = std::get<expr::cons>(outer_cons.lhs->content);
+        assert(inner_cons.lhs == a);  // Atom unchanged
+        assert(std::get<expr::var>(inner_cons.rhs->content).index == 0);
+        
+        assert(var_map.size() == 1);
+        assert(var_map.at(7) == 0);
+        assert(var_ctx.variable_count == 1);
+        
+        t.pop();
+    }
+    
+    // Test 8: Copy deeply nested cons
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* v1 = pool.var(10);
+        const expr* v2 = pool.var(20);
+        const expr* v3 = pool.var(30);
+        const expr* c1 = pool.cons(v1, v2);
+        const expr* c2 = pool.cons(c1, v3);
+        const expr* original = pool.cons(c2, v1);  // v1 appears twice
+        
+        std::map<uint32_t, uint32_t> var_map;
+        const expr* copied = ctx.copy(original, var_map);
+        
+        assert(var_map.size() == 3);
+        assert(var_map.at(10) == 0);
+        assert(var_map.at(20) == 1);
+        assert(var_map.at(30) == 2);
+        assert(var_ctx.variable_count == 3);
+        
+        // Verify structure
+        const expr::cons& top = std::get<expr::cons>(copied->content);
+        assert(std::get<expr::var>(top.rhs->content).index == 0);  // v1 mapped to 0
+        
+        const expr::cons& middle = std::get<expr::cons>(top.lhs->content);
+        assert(std::get<expr::var>(middle.rhs->content).index == 2);  // v3 mapped to 2
+        
+        const expr::cons& bottom = std::get<expr::cons>(middle.lhs->content);
+        assert(std::get<expr::var>(bottom.lhs->content).index == 0);  // v1 mapped to 0
+        assert(std::get<expr::var>(bottom.rhs->content).index == 1);  // v2 mapped to 1
+        
+        t.pop();
+    }
+    
+    // Test 9: Copy with pre-populated variable map
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* v5 = pool.var(5);
+        const expr* v10 = pool.var(10);
+        const expr* original = pool.cons(v5, v10);
+        
+        // Pre-populate map
+        std::map<uint32_t, uint32_t> var_map;
+        var_map[5] = 100;  // Map 5 to 100
+        
+        const expr* copied = ctx.copy(original, var_map);
+        
+        // v5 should use existing mapping, v10 should get fresh
+        assert(var_map.size() == 2);
+        assert(var_map.at(5) == 100);  // Unchanged
+        assert(var_map.at(10) == 0);  // Fresh variable
+        
+        const expr::cons& copied_cons = std::get<expr::cons>(copied->content);
+        // Due to unspecified evaluation order, we verify the mapping is correct
+        uint32_t lhs_idx = std::get<expr::var>(copied_cons.lhs->content).index;
+        uint32_t rhs_idx = std::get<expr::var>(copied_cons.rhs->content).index;
+        assert((lhs_idx == 100 && rhs_idx == 0) || (lhs_idx == 0 && rhs_idx == 100));
+        
+        assert(var_ctx.variable_count == 1);  // Only one fresh var created
+        
+        t.pop();
+    }
+    
+    // Test 10: Copy multiple expressions with shared variable map
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* v1 = pool.var(1);
+        const expr* v2 = pool.var(2);
+        const expr* expr1 = pool.cons(v1, v2);
+        const expr* expr2 = pool.cons(v2, v1);  // Swapped
+        
+        std::map<uint32_t, uint32_t> var_map;
+        
+        const expr* copied1 = ctx.copy(expr1, var_map);
+        assert(var_map.size() == 2);
+        assert(var_map.at(1) == 0);
+        assert(var_map.at(2) == 1);
+        assert(var_ctx.variable_count == 2);
+        
+        const expr* copied2 = ctx.copy(expr2, var_map);
+        assert(var_map.size() == 2);  // No new mappings
+        assert(var_ctx.variable_count == 2);  // No new variables
+        
+        // Verify both use same variable mapping
+        const expr::cons& cons1 = std::get<expr::cons>(copied1->content);
+        const expr::cons& cons2 = std::get<expr::cons>(copied2->content);
+        assert(std::get<expr::var>(cons1.lhs->content).index == 0);
+        assert(std::get<expr::var>(cons1.rhs->content).index == 1);
+        assert(std::get<expr::var>(cons2.lhs->content).index == 1);
+        assert(std::get<expr::var>(cons2.rhs->content).index == 0);
+        
+        t.pop();
+    }
+    
+    // Test 11: Copy empty variable map vs populated
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* v = pool.var(42);
+        
+        std::map<uint32_t, uint32_t> map1;
+        const expr* copy1 = ctx.copy(v, map1);
+        assert(std::get<expr::var>(copy1->content).index == 0);
+        assert(map1.at(42) == 0);
+        
+        std::map<uint32_t, uint32_t> map2;
+        const expr* copy2 = ctx.copy(v, map2);
+        assert(std::get<expr::var>(copy2->content).index == 1);
+        assert(map2.at(42) == 1);
+        
+        // Different maps, different fresh variables
+        assert(copy1 != copy2);
+        assert(var_ctx.variable_count == 2);
+        
+        t.pop();
+    }
+    
+    // Test 12: Copy complex nested structure
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        // Build: cons(cons(var(1), atom("a")), cons(var(2), var(1)))
+        const expr* v1 = pool.var(1);
+        const expr* v2 = pool.var(2);
+        const expr* a = pool.atom("a");
+        const expr* left = pool.cons(v1, a);
+        const expr* right = pool.cons(v2, v1);
+        const expr* original = pool.cons(left, right);
+        
+        std::map<uint32_t, uint32_t> var_map;
+        const expr* copied = ctx.copy(original, var_map);
+        
+        assert(var_map.size() == 2);
+        assert(var_map.at(1) == 0);
+        assert(var_map.at(2) == 1);
+        assert(var_ctx.variable_count == 2);
+        
+        // Verify structure: cons(cons(var(0), atom("a")), cons(var(1), var(0)))
+        const expr::cons& top = std::get<expr::cons>(copied->content);
+        
+        const expr::cons& left_cons = std::get<expr::cons>(top.lhs->content);
+        assert(std::get<expr::var>(left_cons.lhs->content).index == 0);
+        assert(left_cons.rhs == a);
+        
+        const expr::cons& right_cons = std::get<expr::cons>(top.rhs->content);
+        assert(std::get<expr::var>(right_cons.lhs->content).index == 1);
+        assert(std::get<expr::var>(right_cons.rhs->content).index == 0);
+        
+        t.pop();
+    }
+    
+    // Test 13: Copy with backtracking
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* v = pool.var(5);
+        const expr* original = pool.cons(v, pool.atom("x"));
+        
+        t.push();
+        std::map<uint32_t, uint32_t> var_map;
+        const expr* copied = ctx.copy(original, var_map);
+        assert(var_ctx.variable_count == 1);
+        assert(pool.size() == 4);  // v(5), atom("x"), original cons, v(0), new cons
+        
+        t.pop();
+        assert(var_ctx.variable_count == 0);
+        assert(pool.size() == 3);  // Back to original three
+        
+        t.pop();
+    }
+    
+    // Test 14: Multiple variables in sequence
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        std::map<uint32_t, uint32_t> var_map;
+        
+        // Copy variables in order
+        const expr* v10 = pool.var(10);
+        const expr* copy10 = ctx.copy(v10, var_map);
+        assert(std::get<expr::var>(copy10->content).index == 0);
+        assert(var_ctx.variable_count == 1);
+        
+        const expr* v20 = pool.var(20);
+        const expr* copy20 = ctx.copy(v20, var_map);
+        assert(std::get<expr::var>(copy20->content).index == 1);
+        assert(var_ctx.variable_count == 2);
+        
+        const expr* v30 = pool.var(30);
+        const expr* copy30 = ctx.copy(v30, var_map);
+        assert(std::get<expr::var>(copy30->content).index == 2);
+        assert(var_ctx.variable_count == 3);
+        
+        assert(var_map.size() == 3);
+        
+        t.pop();
+    }
+    
+    // Test 15: Copy expression with all three types
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        // Build: cons(atom("a"), cons(var(5), atom("b")))
+        const expr* a = pool.atom("a");
+        const expr* b = pool.atom("b");
+        const expr* v5 = pool.var(5);
+        const expr* inner = pool.cons(v5, b);
+        const expr* original = pool.cons(a, inner);
+        
+        std::map<uint32_t, uint32_t> var_map;
+        const expr* copied = ctx.copy(original, var_map);
+        
+        assert(var_map.size() == 1);
+        assert(var_map.at(5) == 0);
+        assert(var_ctx.variable_count == 1);
+        
+        // Verify structure
+        const expr::cons& top = std::get<expr::cons>(copied->content);
+        assert(top.lhs == a);  // Atom unchanged
+        
+        const expr::cons& inner_cons = std::get<expr::cons>(top.rhs->content);
+        assert(std::get<expr::var>(inner_cons.lhs->content).index == 0);
+        assert(inner_cons.rhs == b);  // Atom unchanged
+        
+        t.pop();
+    }
+    
+    // Test 16: Copy with variable appearing multiple times in deep structure
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* v1 = pool.var(1);
+        const expr* v2 = pool.var(2);
+        // Build: cons(cons(v1, v2), cons(v2, v1))
+        const expr* left = pool.cons(v1, v2);
+        const expr* right = pool.cons(v2, v1);
+        const expr* original = pool.cons(left, right);
+        
+        std::map<uint32_t, uint32_t> var_map;
+        const expr* copied = ctx.copy(original, var_map);
+        
+        assert(var_map.size() == 2);
+        assert(var_map.at(1) == 0);
+        assert(var_map.at(2) == 1);
+        assert(var_ctx.variable_count == 2);
+        
+        // Verify all occurrences use consistent mapping
+        const expr::cons& top = std::get<expr::cons>(copied->content);
+        const expr::cons& left_cons = std::get<expr::cons>(top.lhs->content);
+        const expr::cons& right_cons = std::get<expr::cons>(top.rhs->content);
+        
+        assert(std::get<expr::var>(left_cons.lhs->content).index == 0);  // v1
+        assert(std::get<expr::var>(left_cons.rhs->content).index == 1);  // v2
+        assert(std::get<expr::var>(right_cons.lhs->content).index == 1);  // v2
+        assert(std::get<expr::var>(right_cons.rhs->content).index == 0);  // v1
+        
+        t.pop();
+    }
+    
+    // Test 17: Copy atom-only structure
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* a1 = pool.atom("a1");
+        const expr* a2 = pool.atom("a2");
+        const expr* a3 = pool.atom("a3");
+        const expr* c1 = pool.cons(a1, a2);
+        const expr* original = pool.cons(c1, a3);
+        
+        std::map<uint32_t, uint32_t> var_map;
+        const expr* copied = ctx.copy(original, var_map);
+        
+        assert(copied == original);  // No variables, so same structure
+        assert(var_map.empty());
+        assert(var_ctx.variable_count == 0);
+        
+        t.pop();
+    }
+    
+    // Test 18: Copy with interleaved fresh() calls
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* v10 = pool.var(10);
+        std::map<uint32_t, uint32_t> var_map;
+        
+        ctx.copy(v10, var_map);
+        assert(var_ctx.variable_count == 1);
+        assert(var_map.at(10) == 0);
+        
+        const expr* fresh_var = ctx.fresh();
+        assert(std::get<expr::var>(fresh_var->content).index == 1);
+        assert(var_ctx.variable_count == 2);
+        
+        const expr* v20 = pool.var(20);
+        ctx.copy(v20, var_map);
+        assert(var_ctx.variable_count == 3);
+        assert(var_map.at(20) == 2);
+        
+        t.pop();
+    }
+    
+    // Test 19: Verify pool interning during copy
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* v1 = pool.var(1);
+        const expr* a = pool.atom("a");
+        const expr* original = pool.cons(v1, a);
+        
+        std::map<uint32_t, uint32_t> var_map;
+        const expr* copied1 = ctx.copy(original, var_map);
+        size_t pool_size_after_first = pool.size();
+        
+        // Copy again with same map - should reuse interned expressions
+        var_map.clear();
+        const expr* copied2 = ctx.copy(original, var_map);
+        
+        // Should create new fresh variable but structure might be interned
+        assert(var_ctx.variable_count == 2);
+        assert(pool.exprs.size() == pool_size_after_first + 2);  // New var(1) and possibly new cons
+        
+        t.pop();
+    }
+    
+    // Test 20: Copy with zero-indexed variables
+    {
+        trail t;
+        var_context var_ctx(t);
+        expr_pool pool(t);
+        expr_context ctx(var_ctx, pool);
+        
+        t.push();
+        
+        const expr* v0 = pool.var(0);
+        const expr* v1 = pool.var(1);
+        const expr* original = pool.cons(v0, v1);
+        
+        std::map<uint32_t, uint32_t> var_map;
+        const expr* copied = ctx.copy(original, var_map);
+        
+        assert(var_map.at(0) == 0);  // 0 maps to fresh 0
+        assert(var_map.at(1) == 1);  // 1 maps to fresh 1
+        assert(var_ctx.variable_count == 2);
+        
+        t.pop();
+    }
+}
+
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
 
@@ -9777,6 +10552,9 @@ void unit_test_main() {
     TEST(test_resolution_pool_size);
     TEST(test_var_context_constructor);
     TEST(test_var_context_next);
+    TEST(test_expr_context_constructor);
+    TEST(test_expr_context_fresh);
+    TEST(test_expr_context_copy);
 }
 
 int main() {
