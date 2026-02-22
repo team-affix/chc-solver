@@ -2,7 +2,7 @@
 #include "../hpp/bind_map.hpp"
 #include "../hpp/resolution.hpp"
 #include "../hpp/var_context.hpp"
-#include "../hpp/expr_context.hpp"
+#include "../hpp/copier.hpp"
 #include "../hpp/normalizer.hpp"
 #include "test_utils.hpp"
 
@@ -9752,223 +9752,37 @@ void test_var_context_next() {
     }
 }
 
-void test_expr_context_constructor() {
+void test_copier_constructor() {
     trail t;
     var_context var_ctx(t);
     expr_pool pool(t);
     
     // Basic construction
-    expr_context ctx1(var_ctx, pool);
-    assert(&ctx1.var_context_ref == &var_ctx);
-    assert(&ctx1.expr_pool_ref == &pool);
+    copier copy1(var_ctx, pool);
+    assert(&copy1.var_context_ref == &var_ctx);
+    assert(&copy1.expr_pool_ref == &pool);
     
-    // Multiple expr_contexts can share same dependencies
-    expr_context ctx2(var_ctx, pool);
-    assert(&ctx2.var_context_ref == &var_ctx);
-    assert(&ctx2.expr_pool_ref == &pool);
+    // Multiple copiers can share same dependencies
+    copier copy2(var_ctx, pool);
+    assert(&copy2.var_context_ref == &var_ctx);
+    assert(&copy2.expr_pool_ref == &pool);
     
     // Different dependencies
     trail t2;
     var_context var_ctx2(t2);
     expr_pool pool2(t2);
-    expr_context ctx3(var_ctx2, pool2);
-    assert(&ctx3.var_context_ref == &var_ctx2);
-    assert(&ctx3.expr_pool_ref == &pool2);
+    copier copy3(var_ctx2, pool2);
+    assert(&copy3.var_context_ref == &var_ctx2);
+    assert(&copy3.expr_pool_ref == &pool2);
 }
 
-void test_expr_context_fresh() {
-    // Test 1: Basic fresh() call
-    {
-        trail t;
-        var_context var_ctx(t);
-        expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
-        
-        t.push();
-        
-        const expr* v0 = ctx.fresh();
-        assert(v0 != nullptr);
-        assert(std::holds_alternative<expr::var>(v0->content));
-        assert(std::get<expr::var>(v0->content).index == 0);
-        assert(var_ctx.variable_count == 1);
-        assert(pool.size() == 1);
-        assert(pool.exprs.count(*v0) == 1);
-        
-        t.pop();
-        assert(var_ctx.variable_count == 0);
-        assert(pool.size() == 0);
-    }
-    
-    // Test 2: Multiple fresh() calls produce sequential variables
-    {
-        trail t;
-        var_context var_ctx(t);
-        expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
-        
-        t.push();
-        
-        const expr* v0 = ctx.fresh();
-        const expr* v1 = ctx.fresh();
-        const expr* v2 = ctx.fresh();
-        
-        assert(std::get<expr::var>(v0->content).index == 0);
-        assert(std::get<expr::var>(v1->content).index == 1);
-        assert(std::get<expr::var>(v2->content).index == 2);
-        assert(var_ctx.variable_count == 3);
-        assert(pool.size() == 3);
-        assert(pool.exprs.size() == 3);
-        assert(pool.exprs.count(*v0) == 1);
-        assert(pool.exprs.count(*v1) == 1);
-        assert(pool.exprs.count(*v2) == 1);
-        
-        // All should be distinct
-        assert(v0 != v1);
-        assert(v1 != v2);
-        assert(v0 != v2);
-        
-        t.pop();
-        assert(var_ctx.variable_count == 0);
-        assert(pool.size() == 0);
-        assert(pool.exprs.size() == 0);
-    }
-    
-    // Test 3: Fresh variables are interned
-    {
-        trail t;
-        var_context var_ctx(t);
-        expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
-        
-        t.push();
-        
-        const expr* v0_first = ctx.fresh();
-        assert(var_ctx.variable_count == 1);
-        assert(pool.size() == 1);
-        assert(pool.exprs.size() == 1);
-        assert(pool.exprs.count(*v0_first) == 1);
-        
-        // Manually create same variable - should be interned
-        const expr* v0_manual = pool.var(0);
-        assert(v0_first == v0_manual);
-        assert(pool.size() == 1);  // No new entry
-        assert(pool.exprs.size() == 1);
-        assert(pool.exprs.count(*v0_manual) == 1);
-        
-        t.pop();
-        assert(var_ctx.variable_count == 0);
-        assert(pool.size() == 0);
-    }
-    
-    // Test 4: Fresh with backtracking
-    {
-        trail t;
-        var_context var_ctx(t);
-        expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
-        
-        t.push();
-        const expr* v0 = ctx.fresh();
-        const expr* v1 = ctx.fresh();
-        assert(var_ctx.variable_count == 2);
-        assert(pool.size() == 2);
-        assert(pool.exprs.size() == 2);
-        assert(pool.exprs.count(*v0) == 1);
-        assert(pool.exprs.count(*v1) == 1);
-        
-        t.push();
-        const expr* v2 = ctx.fresh();
-        const expr* v3 = ctx.fresh();
-        assert(var_ctx.variable_count == 4);
-        assert(pool.size() == 4);
-        assert(pool.exprs.size() == 4);
-        assert(pool.exprs.count(*v2) == 1);
-        assert(pool.exprs.count(*v3) == 1);
-        
-        t.pop();
-        assert(var_ctx.variable_count == 2);
-        assert(pool.size() == 2);
-        assert(pool.exprs.size() == 2);
-        
-        t.pop();
-        assert(var_ctx.variable_count == 0);
-        assert(pool.size() == 0);
-        assert(pool.exprs.size() == 0);
-    }
-    
-    // Test 5: Many fresh variables
-    {
-        trail t;
-        var_context var_ctx(t);
-        expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
-        
-        t.push();
-        
-        std::set<const expr*> vars;
-        for (int i = 0; i < 100; ++i) {
-            const expr* v = ctx.fresh();
-            assert(std::get<expr::var>(v->content).index == static_cast<uint32_t>(i));
-            assert(vars.count(v) == 0);  // Should be unique
-            assert(pool.exprs.count(*v) == 1);  // Should be interned
-            vars.insert(v);
-            assert(var_ctx.variable_count == static_cast<uint32_t>(i + 1));
-            assert(pool.size() == static_cast<uint32_t>(i + 1));
-            assert(pool.exprs.size() == static_cast<uint32_t>(i + 1));
-        }
-        assert(vars.size() == 100);
-        assert(var_ctx.variable_count == 100);
-        assert(pool.size() == 100);
-        assert(pool.exprs.size() == 100);
-        
-        t.pop();
-        assert(var_ctx.variable_count == 0);
-        assert(pool.size() == 0);
-        assert(pool.exprs.size() == 0);
-    }
-    
-    // Test 6: Multiple expr_contexts sharing dependencies
-    {
-        trail t;
-        var_context var_ctx(t);
-        expr_pool pool(t);
-        expr_context ctx1(var_ctx, pool);
-        expr_context ctx2(var_ctx, pool);
-        
-        t.push();
-        
-        const expr* v0_from_ctx1 = ctx1.fresh();
-        assert(std::get<expr::var>(v0_from_ctx1->content).index == 0);
-        assert(var_ctx.variable_count == 1);
-        assert(pool.size() == 1);
-        assert(pool.exprs.size() == 1);
-        assert(pool.exprs.count(*v0_from_ctx1) == 1);
-        
-        const expr* v1_from_ctx2 = ctx2.fresh();
-        assert(std::get<expr::var>(v1_from_ctx2->content).index == 1);
-        assert(var_ctx.variable_count == 2);
-        
-        // Both use same pool, so should be interned
-        assert(pool.size() == 2);
-        assert(pool.exprs.size() == 2);
-        assert(pool.exprs.count(*v0_from_ctx1) == 1);
-        assert(pool.exprs.count(*v1_from_ctx2) == 1);
-        assert(v0_from_ctx1 != v1_from_ctx2);
-        
-        t.pop();
-        assert(var_ctx.variable_count == 0);
-        assert(pool.size() == 0);
-        assert(pool.exprs.size() == 0);
-    }
-}
-
-void test_expr_context_copy() {
+void test_copier() {
     // Test 1: Copy atom - should return same pointer (atoms are immutable)
     {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -9978,7 +9792,7 @@ void test_expr_context_copy() {
         
         std::map<uint32_t, uint32_t> var_map;
         
-        const expr* copied = ctx.copy(original, var_map);
+        const expr* copied = copy(original, var_map);
         
         assert(copied == original);  // Same atom
         assert(var_map.empty());  // No variables mapped
@@ -9994,7 +9808,7 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -10005,7 +9819,7 @@ void test_expr_context_copy() {
         
         std::map<uint32_t, uint32_t> var_map;
         
-        const expr* copied = ctx.copy(original, var_map);
+        const expr* copied = copy(original, var_map);
         
         assert(copied != original);  // Different variable
         assert(std::holds_alternative<expr::var>(copied->content));
@@ -10026,7 +9840,7 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -10035,7 +9849,7 @@ void test_expr_context_copy() {
         
         std::map<uint32_t, uint32_t> var_map;
         
-        const expr* copied1 = ctx.copy(original, var_map);
+        const expr* copied1 = copy(original, var_map);
         assert(std::get<expr::var>(copied1->content).index == 0);
         assert(var_map.size() == 1);
         assert(var_map.at(10) == 0);
@@ -10043,7 +9857,7 @@ void test_expr_context_copy() {
         assert(pool.size() == 2);
         assert(pool.exprs.size() == 2);
         
-        const expr* copied2 = ctx.copy(original, var_map);
+        const expr* copied2 = copy(original, var_map);
         assert(copied2 == copied1);  // Should be same pointer (interned)
         assert(var_map.size() == 1);  // No new mapping
         assert(var_ctx.variable_count == 1);  // No new variable
@@ -10058,7 +9872,7 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -10070,7 +9884,7 @@ void test_expr_context_copy() {
         
         std::map<uint32_t, uint32_t> var_map;
         
-        const expr* copied = ctx.copy(original, var_map);
+        const expr* copied = copy(original, var_map);
         
         assert(copied == original);  // Same cons since atoms unchanged
         assert(var_map.empty());  // No variables
@@ -10086,7 +9900,7 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -10095,7 +9909,7 @@ void test_expr_context_copy() {
         const expr* original = pool.cons(v1, v2);
         std::map<uint32_t, uint32_t> var_map;
         
-        const expr* copied = ctx.copy(original, var_map);
+        const expr* copied = copy(original, var_map);
         
         assert(copied != original);  // Different cons (different vars)
         assert(std::holds_alternative<expr::cons>(copied->content));
@@ -10127,7 +9941,7 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -10137,7 +9951,7 @@ void test_expr_context_copy() {
         
         std::map<uint32_t, uint32_t> var_map;
         
-        const expr* copied = ctx.copy(original, var_map);
+        const expr* copied = copy(original, var_map);
         
         const expr::cons& copied_cons = std::get<expr::cons>(copied->content);
         assert(std::get<expr::var>(copied_cons.lhs->content).index == 0);
@@ -10164,7 +9978,7 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -10174,7 +9988,7 @@ void test_expr_context_copy() {
         const expr* original = pool.cons(inner, a);
         std::map<uint32_t, uint32_t> var_map;
         
-        const expr* copied = ctx.copy(original, var_map);
+        const expr* copied = copy(original, var_map);
         
         assert(copied != original);
         const expr::cons& outer_cons = std::get<expr::cons>(copied->content);
@@ -10196,7 +10010,7 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -10208,7 +10022,7 @@ void test_expr_context_copy() {
         const expr* original = pool.cons(c2, v1);  // v1 appears twice
         
         std::map<uint32_t, uint32_t> var_map;
-        const expr* copied = ctx.copy(original, var_map);
+        const expr* copied = copy(original, var_map);
         
         assert(var_map.size() == 3);
         assert(var_map.at(10) == 0);
@@ -10235,7 +10049,7 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -10247,7 +10061,7 @@ void test_expr_context_copy() {
         std::map<uint32_t, uint32_t> var_map;
         var_map[5] = 100;  // Map 5 to 100
         
-        const expr* copied = ctx.copy(original, var_map);
+        const expr* copied = copy(original, var_map);
         
         // v5 should use existing mapping, v10 should get fresh
         assert(var_map.size() == 2);
@@ -10268,7 +10082,7 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -10279,13 +10093,13 @@ void test_expr_context_copy() {
         
         std::map<uint32_t, uint32_t> var_map;
         
-        const expr* copied1 = ctx.copy(expr1, var_map);
+        const expr* copied1 = copy(expr1, var_map);
         assert(var_map.size() == 2);
         assert(var_map.at(1) == 0);
         assert(var_map.at(2) == 1);
         assert(var_ctx.variable_count == 2);
         
-        const expr* copied2 = ctx.copy(expr2, var_map);
+        const expr* copied2 = copy(expr2, var_map);
         assert(var_map.size() == 2);  // No new mappings
         assert(var_ctx.variable_count == 2);  // No new variables
         
@@ -10305,19 +10119,19 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
         const expr* v = pool.var(42);
         
         std::map<uint32_t, uint32_t> map1;
-        const expr* copy1 = ctx.copy(v, map1);
+        const expr* copy1 = copy(v, map1);
         assert(std::get<expr::var>(copy1->content).index == 0);
         assert(map1.at(42) == 0);
         
         std::map<uint32_t, uint32_t> map2;
-        const expr* copy2 = ctx.copy(v, map2);
+        const expr* copy2 = copy(v, map2);
         assert(std::get<expr::var>(copy2->content).index == 1);
         assert(map2.at(42) == 1);
         
@@ -10333,7 +10147,7 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -10346,7 +10160,7 @@ void test_expr_context_copy() {
         const expr* original = pool.cons(left, right);
         
         std::map<uint32_t, uint32_t> var_map;
-        const expr* copied = ctx.copy(original, var_map);
+        const expr* copied = copy(original, var_map);
         
         assert(var_map.size() == 2);
         assert(var_map.at(1) == 0);
@@ -10372,7 +10186,7 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -10381,7 +10195,7 @@ void test_expr_context_copy() {
         
         t.push();
         std::map<uint32_t, uint32_t> var_map;
-        const expr* copied = ctx.copy(original, var_map);
+        const expr* copied = copy(original, var_map);
         assert(var_ctx.variable_count == 1);
         assert(pool.size() == 5);  // v(5), atom("x"), original cons, v(0), new cons
         
@@ -10397,7 +10211,7 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -10405,17 +10219,17 @@ void test_expr_context_copy() {
         
         // Copy variables in order
         const expr* v10 = pool.var(10);
-        const expr* copy10 = ctx.copy(v10, var_map);
+        const expr* copy10 = copy(v10, var_map);
         assert(std::get<expr::var>(copy10->content).index == 0);
         assert(var_ctx.variable_count == 1);
         
         const expr* v20 = pool.var(20);
-        const expr* copy20 = ctx.copy(v20, var_map);
+        const expr* copy20 = copy(v20, var_map);
         assert(std::get<expr::var>(copy20->content).index == 1);
         assert(var_ctx.variable_count == 2);
         
         const expr* v30 = pool.var(30);
-        const expr* copy30 = ctx.copy(v30, var_map);
+        const expr* copy30 = copy(v30, var_map);
         assert(std::get<expr::var>(copy30->content).index == 2);
         assert(var_ctx.variable_count == 3);
         
@@ -10429,7 +10243,7 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -10441,7 +10255,7 @@ void test_expr_context_copy() {
         const expr* original = pool.cons(a, inner);
         
         std::map<uint32_t, uint32_t> var_map;
-        const expr* copied = ctx.copy(original, var_map);
+        const expr* copied = copy(original, var_map);
         
         assert(var_map.size() == 1);
         assert(var_map.at(5) == 0);
@@ -10463,7 +10277,7 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -10475,7 +10289,7 @@ void test_expr_context_copy() {
         const expr* original = pool.cons(left, right);
         
         std::map<uint32_t, uint32_t> var_map;
-        const expr* copied = ctx.copy(original, var_map);
+        const expr* copied = copy(original, var_map);
         
         assert(var_map.size() == 2);
         assert(var_map.at(1) == 0);
@@ -10500,7 +10314,7 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -10511,7 +10325,7 @@ void test_expr_context_copy() {
         const expr* original = pool.cons(c1, a3);
         
         std::map<uint32_t, uint32_t> var_map;
-        const expr* copied = ctx.copy(original, var_map);
+        const expr* copied = copy(original, var_map);
         
         assert(copied == original);  // No variables, so same structure
         assert(var_map.empty());
@@ -10525,23 +10339,24 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
         const expr* v10 = pool.var(10);
         std::map<uint32_t, uint32_t> var_map;
         
-        ctx.copy(v10, var_map);
+        copy(v10, var_map);
         assert(var_ctx.variable_count == 1);
         assert(var_map.at(10) == 0);
         
-        const expr* fresh_var = ctx.fresh();
+        // Manually create a fresh variable using var_ctx.next()
+        const expr* fresh_var = pool.var(var_ctx.next());
         assert(std::get<expr::var>(fresh_var->content).index == 1);
         assert(var_ctx.variable_count == 2);
         
         const expr* v20 = pool.var(20);
-        ctx.copy(v20, var_map);
+        copy(v20, var_map);
         assert(var_ctx.variable_count == 3);
         assert(var_map.at(20) == 2);
         
@@ -10553,7 +10368,7 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -10562,12 +10377,12 @@ void test_expr_context_copy() {
         const expr* original = pool.cons(v1, a);
         
         std::map<uint32_t, uint32_t> var_map;
-        const expr* copied1 = ctx.copy(original, var_map);
+        const expr* copied1 = copy(original, var_map);
         size_t pool_size_after_first = pool.size();
         
         // Copy again with cleared map - creates fresh var(1) which already exists!
         var_map.clear();
-        const expr* copied2 = ctx.copy(original, var_map);
+        const expr* copied2 = copy(original, var_map);
         
         // Fresh variable is var(1), which already exists, so gets interned
         // cons(var(1), atom("a")) also already exists, so also interned
@@ -10583,7 +10398,7 @@ void test_expr_context_copy() {
         trail t;
         var_context var_ctx(t);
         expr_pool pool(t);
-        expr_context ctx(var_ctx, pool);
+        copier copy(var_ctx, pool);
         
         t.push();
         
@@ -10592,7 +10407,7 @@ void test_expr_context_copy() {
         const expr* original = pool.cons(v0, v1);
         
         std::map<uint32_t, uint32_t> var_map;
-        const expr* copied = ctx.copy(original, var_map);
+        const expr* copied = copy(original, var_map);
         
         assert(var_map.at(0) == 0);  // 0 maps to fresh 0
         assert(var_map.at(1) == 1);  // 1 maps to fresh 1
@@ -10637,7 +10452,7 @@ void test_normalizer_normalize() {
         t.push();
         
         const expr* a = pool.atom("test");
-        const expr* result = norm.normalize(a);
+        const expr* result = norm(a);
         
         assert(result == a);
         assert(std::holds_alternative<expr::atom>(result->content));
@@ -10655,7 +10470,7 @@ void test_normalizer_normalize() {
         t.push();
         
         const expr* v = pool.var(5);
-        const expr* result = norm.normalize(v);
+        const expr* result = norm(v);
         
         assert(result == v);
         assert(std::holds_alternative<expr::var>(result->content));
@@ -10677,7 +10492,7 @@ void test_normalizer_normalize() {
         const expr* a = pool.atom("hello");
         bm.bind(1, a);
         
-        const expr* result = norm.normalize(v);
+        const expr* result = norm(v);
         
         assert(result == a);
         assert(std::holds_alternative<expr::atom>(result->content));
@@ -10704,7 +10519,7 @@ void test_normalizer_normalize() {
         bm.bind(2, v3);
         bm.bind(3, a);
         
-        const expr* result = norm.normalize(v1);
+        const expr* result = norm(v1);
         
         assert(result == a);
         assert(std::get<expr::atom>(result->content).value == "end");
@@ -10725,7 +10540,7 @@ void test_normalizer_normalize() {
         const expr* a2 = pool.atom("right");
         const expr* c = pool.cons(a1, a2);
         
-        const expr* result = norm.normalize(c);
+        const expr* result = norm(c);
         
         assert(result == c);
         const expr::cons& result_cons = std::get<expr::cons>(result->content);
@@ -10748,7 +10563,7 @@ void test_normalizer_normalize() {
         const expr* v2 = pool.var(2);
         const expr* c = pool.cons(v1, v2);
         
-        const expr* result = norm.normalize(c);
+        const expr* result = norm(c);
         
         assert(result == c);
         const expr::cons& result_cons = std::get<expr::cons>(result->content);
@@ -10776,7 +10591,7 @@ void test_normalizer_normalize() {
         bm.bind(1, a1);
         bm.bind(2, a2);
         
-        const expr* result = norm.normalize(c);
+        const expr* result = norm(c);
         
         assert(result != c);
         const expr::cons& result_cons = std::get<expr::cons>(result->content);
@@ -10802,7 +10617,7 @@ void test_normalizer_normalize() {
         
         bm.bind(1, a);
         
-        const expr* result = norm.normalize(c);
+        const expr* result = norm(c);
         
         const expr::cons& result_cons = std::get<expr::cons>(result->content);
         assert(result_cons.lhs == a);
@@ -10826,7 +10641,7 @@ void test_normalizer_normalize() {
         const expr* inner = pool.cons(a1, a2);
         const expr* outer = pool.cons(inner, a3);
         
-        const expr* result = norm.normalize(outer);
+        const expr* result = norm(outer);
         
         assert(result == outer);
         
@@ -10852,7 +10667,7 @@ void test_normalizer_normalize() {
         bm.bind(1, a1);
         bm.bind(2, a2);
         
-        const expr* result = norm.normalize(outer);
+        const expr* result = norm(outer);
         
         const expr::cons& outer_cons = std::get<expr::cons>(result->content);
         assert(outer_cons.rhs == a1);
@@ -10880,7 +10695,7 @@ void test_normalizer_normalize() {
         
         bm.bind(1, c);
         
-        const expr* result = norm.normalize(v);
+        const expr* result = norm(v);
         
         assert(result == c);
         
@@ -10907,7 +10722,7 @@ void test_normalizer_normalize() {
         bm.bind(2, a1);
         bm.bind(3, a2);
         
-        const expr* result = norm.normalize(v1);
+        const expr* result = norm(v1);
         
         const expr::cons& result_cons = std::get<expr::cons>(result->content);
         assert(result_cons.lhs == a1);
@@ -10937,7 +10752,7 @@ void test_normalizer_normalize() {
         bm.bind(2, a);
         bm.bind(3, a);
         
-        const expr* result = norm.normalize(c2);
+        const expr* result = norm(c2);
         
         const expr::cons& top = std::get<expr::cons>(result->content);
         assert(top.rhs == a);
@@ -10964,7 +10779,7 @@ void test_normalizer_normalize() {
         
         bm.bind(1, a);
         
-        const expr* result = norm.normalize(c);
+        const expr* result = norm(c);
         
         const expr::cons& result_cons = std::get<expr::cons>(result->content);
         assert(result_cons.lhs == a);
@@ -10989,17 +10804,17 @@ void test_normalizer_normalize() {
         
         t.push();
         bm.bind(1, a1);
-        const expr* result1 = norm.normalize(v);
+        const expr* result1 = norm(v);
         assert(result1 == a1);
         t.pop();
         
         // After pop, v should be unbound again
-        const expr* result2 = norm.normalize(v);
+        const expr* result2 = norm(v);
         assert(result2 == v);
         
         t.push();
         bm.bind(1, a2);
-        const expr* result3 = norm.normalize(v);
+        const expr* result3 = norm(v);
         assert(result3 == a2);
         t.pop();
         
@@ -11030,7 +10845,7 @@ void test_normalizer_normalize() {
         bm.bind(4, a);
         // v3 remains unbound
         
-        const expr* result = norm.normalize(c3);
+        const expr* result = norm(c3);
         
         const expr::cons& top = std::get<expr::cons>(result->content);
         
@@ -11063,8 +10878,8 @@ void test_normalizer_normalize() {
         bool unified = bm.unify(c1, c2);
         assert(unified);
         
-        const expr* result1 = norm.normalize(c1);
-        const expr* result2 = norm.normalize(c2);
+        const expr* result1 = norm(c1);
+        const expr* result2 = norm(c2);
         
         const expr::cons& r1 = std::get<expr::cons>(result1->content);
         const expr::cons& r2 = std::get<expr::cons>(result2->content);
@@ -11099,7 +10914,7 @@ void test_normalizer_normalize() {
         bm.bind(4, v5);
         bm.bind(5, a);
         
-        const expr* result = norm.normalize(v1);
+        const expr* result = norm(v1);
         
         assert(result == a);
         
@@ -11129,7 +10944,7 @@ void test_normalizer_normalize() {
         bm.bind(3, a1);
         // v2 remains unbound
         
-        const expr* result = norm.normalize(outer);
+        const expr* result = norm(outer);
         
         const expr::cons& top = std::get<expr::cons>(result->content);
         
@@ -11172,9 +10987,8 @@ void unit_test_main() {
     TEST(test_resolution_pool_size);
     TEST(test_var_context_constructor);
     TEST(test_var_context_next);
-    TEST(test_expr_context_constructor);
-    TEST(test_expr_context_fresh);
-    TEST(test_expr_context_copy);
+    TEST(test_copier_constructor);
+    TEST(test_copier);
     TEST(test_normalizer_constructor);
     TEST(test_normalizer_normalize);
 }
