@@ -9818,6 +9818,9 @@ void test_expr_context_fresh() {
         assert(var_ctx.variable_count == 3);
         assert(pool.size() == 3);
         assert(pool.exprs.size() == 3);
+        assert(pool.exprs.count(*v0) == 1);
+        assert(pool.exprs.count(*v1) == 1);
+        assert(pool.exprs.count(*v2) == 1);
         
         // All should be distinct
         assert(v0 != v1);
@@ -9825,6 +9828,9 @@ void test_expr_context_fresh() {
         assert(v0 != v2);
         
         t.pop();
+        assert(var_ctx.variable_count == 0);
+        assert(pool.size() == 0);
+        assert(pool.exprs.size() == 0);
     }
     
     // Test 3: Fresh variables are interned
@@ -9839,13 +9845,19 @@ void test_expr_context_fresh() {
         const expr* v0_first = ctx.fresh();
         assert(var_ctx.variable_count == 1);
         assert(pool.size() == 1);
+        assert(pool.exprs.size() == 1);
+        assert(pool.exprs.count(*v0_first) == 1);
         
         // Manually create same variable - should be interned
         const expr* v0_manual = pool.var(0);
         assert(v0_first == v0_manual);
         assert(pool.size() == 1);  // No new entry
+        assert(pool.exprs.size() == 1);
+        assert(pool.exprs.count(*v0_manual) == 1);
         
         t.pop();
+        assert(var_ctx.variable_count == 0);
+        assert(pool.size() == 0);
     }
     
     // Test 4: Fresh with backtracking
@@ -9856,24 +9868,32 @@ void test_expr_context_fresh() {
         expr_context ctx(var_ctx, pool);
         
         t.push();
-        ctx.fresh();
-        ctx.fresh();
+        const expr* v0 = ctx.fresh();
+        const expr* v1 = ctx.fresh();
         assert(var_ctx.variable_count == 2);
         assert(pool.size() == 2);
+        assert(pool.exprs.size() == 2);
+        assert(pool.exprs.count(*v0) == 1);
+        assert(pool.exprs.count(*v1) == 1);
         
         t.push();
-        ctx.fresh();
-        ctx.fresh();
+        const expr* v2 = ctx.fresh();
+        const expr* v3 = ctx.fresh();
         assert(var_ctx.variable_count == 4);
         assert(pool.size() == 4);
+        assert(pool.exprs.size() == 4);
+        assert(pool.exprs.count(*v2) == 1);
+        assert(pool.exprs.count(*v3) == 1);
         
         t.pop();
         assert(var_ctx.variable_count == 2);
         assert(pool.size() == 2);
+        assert(pool.exprs.size() == 2);
         
         t.pop();
         assert(var_ctx.variable_count == 0);
         assert(pool.size() == 0);
+        assert(pool.exprs.size() == 0);
     }
     
     // Test 5: Many fresh variables
@@ -9890,13 +9910,21 @@ void test_expr_context_fresh() {
             const expr* v = ctx.fresh();
             assert(std::get<expr::var>(v->content).index == static_cast<uint32_t>(i));
             assert(vars.count(v) == 0);  // Should be unique
+            assert(pool.exprs.count(*v) == 1);  // Should be interned
             vars.insert(v);
             assert(var_ctx.variable_count == static_cast<uint32_t>(i + 1));
             assert(pool.size() == static_cast<uint32_t>(i + 1));
+            assert(pool.exprs.size() == static_cast<uint32_t>(i + 1));
         }
         assert(vars.size() == 100);
+        assert(var_ctx.variable_count == 100);
+        assert(pool.size() == 100);
+        assert(pool.exprs.size() == 100);
         
         t.pop();
+        assert(var_ctx.variable_count == 0);
+        assert(pool.size() == 0);
+        assert(pool.exprs.size() == 0);
     }
     
     // Test 6: Multiple expr_contexts sharing dependencies
@@ -9912,6 +9940,9 @@ void test_expr_context_fresh() {
         const expr* v0_from_ctx1 = ctx1.fresh();
         assert(std::get<expr::var>(v0_from_ctx1->content).index == 0);
         assert(var_ctx.variable_count == 1);
+        assert(pool.size() == 1);
+        assert(pool.exprs.size() == 1);
+        assert(pool.exprs.count(*v0_from_ctx1) == 1);
         
         const expr* v1_from_ctx2 = ctx2.fresh();
         assert(std::get<expr::var>(v1_from_ctx2->content).index == 1);
@@ -9919,8 +9950,15 @@ void test_expr_context_fresh() {
         
         // Both use same pool, so should be interned
         assert(pool.size() == 2);
+        assert(pool.exprs.size() == 2);
+        assert(pool.exprs.count(*v0_from_ctx1) == 1);
+        assert(pool.exprs.count(*v1_from_ctx2) == 1);
+        assert(v0_from_ctx1 != v1_from_ctx2);
         
         t.pop();
+        assert(var_ctx.variable_count == 0);
+        assert(pool.size() == 0);
+        assert(pool.exprs.size() == 0);
     }
 }
 
@@ -9935,6 +9973,9 @@ void test_expr_context_copy() {
         t.push();
         
         const expr* original = pool.atom("test");
+        assert(pool.size() == 1);
+        assert(pool.exprs.size() == 1);
+        
         std::map<uint32_t, uint32_t> var_map;
         
         const expr* copied = ctx.copy(original, var_map);
@@ -9942,6 +9983,8 @@ void test_expr_context_copy() {
         assert(copied == original);  // Same atom
         assert(var_map.empty());  // No variables mapped
         assert(var_ctx.variable_count == 0);  // No fresh vars created
+        assert(pool.size() == 1);  // No new entries
+        assert(pool.exprs.size() == 1);
         
         t.pop();
     }
@@ -9956,6 +9999,10 @@ void test_expr_context_copy() {
         t.push();
         
         const expr* original = pool.var(5);
+        assert(pool.size() == 1);
+        assert(pool.exprs.size() == 1);
+        assert(pool.exprs.count(*original) == 1);
+        
         std::map<uint32_t, uint32_t> var_map;
         
         const expr* copied = ctx.copy(original, var_map);
@@ -9967,6 +10014,9 @@ void test_expr_context_copy() {
         assert(var_map.at(5) == 0);  // Original index 5 mapped to 0
         assert(var_ctx.variable_count == 1);
         assert(pool.size() == 2);  // Original var(5) and new var(0)
+        assert(pool.exprs.size() == 2);
+        assert(pool.exprs.count(*original) == 1);
+        assert(pool.exprs.count(*copied) == 1);
         
         t.pop();
     }
@@ -9981,17 +10031,24 @@ void test_expr_context_copy() {
         t.push();
         
         const expr* original = pool.var(10);
+        assert(pool.size() == 1);
+        
         std::map<uint32_t, uint32_t> var_map;
         
         const expr* copied1 = ctx.copy(original, var_map);
         assert(std::get<expr::var>(copied1->content).index == 0);
         assert(var_map.size() == 1);
+        assert(var_map.at(10) == 0);
         assert(var_ctx.variable_count == 1);
+        assert(pool.size() == 2);
+        assert(pool.exprs.size() == 2);
         
         const expr* copied2 = ctx.copy(original, var_map);
         assert(copied2 == copied1);  // Should be same pointer (interned)
         assert(var_map.size() == 1);  // No new mapping
         assert(var_ctx.variable_count == 1);  // No new variable
+        assert(pool.size() == 2);  // Still 2
+        assert(pool.exprs.size() == 2);
         
         t.pop();
     }
@@ -10008,6 +10065,9 @@ void test_expr_context_copy() {
         const expr* a = pool.atom("a");
         const expr* b = pool.atom("b");
         const expr* original = pool.cons(a, b);
+        assert(pool.size() == 3);
+        assert(pool.exprs.size() == 3);
+        
         std::map<uint32_t, uint32_t> var_map;
         
         const expr* copied = ctx.copy(original, var_map);
@@ -10015,6 +10075,8 @@ void test_expr_context_copy() {
         assert(copied == original);  // Same cons since atoms unchanged
         assert(var_map.empty());  // No variables
         assert(var_ctx.variable_count == 0);
+        assert(pool.size() == 3);  // No new entries
+        assert(pool.exprs.size() == 3);
         
         t.pop();
     }
@@ -10048,12 +10110,14 @@ void test_expr_context_copy() {
         assert(var_ctx.variable_count == 2);
         
         // Pool should contain: var(10), var(20), original cons, var(0), var(1), new cons
-        size_t actual_size = pool.size();
-        if (actual_size != 6) {
-            printf("ERROR: Expected pool.size() == 6, got %zu\n", actual_size);
-            fflush(stdout);
-        }
         assert(pool.size() == 6);
+        assert(pool.exprs.size() == 6);
+        assert(pool.exprs.count(*v1) == 1);
+        assert(pool.exprs.count(*v2) == 1);
+        assert(pool.exprs.count(*original) == 1);
+        assert(pool.exprs.count(*copied_cons.lhs) == 1);
+        assert(pool.exprs.count(*copied_cons.rhs) == 1);
+        assert(pool.exprs.count(*copied) == 1);
         
         t.pop();
     }
@@ -10069,6 +10133,8 @@ void test_expr_context_copy() {
         
         const expr* v = pool.var(5);
         const expr* original = pool.cons(v, v);
+        assert(pool.size() == 2);  // var(5) and cons
+        
         std::map<uint32_t, uint32_t> var_map;
         
         const expr* copied = ctx.copy(original, var_map);
@@ -10081,6 +10147,14 @@ void test_expr_context_copy() {
         assert(var_map.size() == 1);
         assert(var_map.at(5) == 0);
         assert(var_ctx.variable_count == 1);  // Only one fresh variable created
+        
+        // Pool: var(5), original cons, var(0), new cons
+        assert(pool.size() == 4);
+        assert(pool.exprs.size() == 4);
+        assert(pool.exprs.count(*v) == 1);
+        assert(pool.exprs.count(*original) == 1);
+        assert(pool.exprs.count(*copied_cons.lhs) == 1);
+        assert(pool.exprs.count(*copied) == 1);
         
         t.pop();
     }
