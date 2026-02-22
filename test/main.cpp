@@ -1,7 +1,7 @@
 #include "../hpp/expr.hpp"
 #include "../hpp/bind_map.hpp"
 #include "../hpp/resolution.hpp"
-#include "../hpp/var_context.hpp"
+#include "../hpp/sequencer.hpp"
 #include "../hpp/copier.hpp"
 #include "../hpp/normalizer.hpp"
 #include "test_utils.hpp"
@@ -9138,189 +9138,189 @@ void test_resolution_pool_size() {
     }
 }
 
-void test_var_context_constructor() {
+void test_sequencer_constructor() {
     trail t;
     
     // Basic construction with trail reference
-    var_context ctx1(t);
-    assert(ctx1.variable_count == 0);
+    sequencer vars1(t);
+    assert(vars1.index == 0);
     
-    // Multiple var_contexts can be constructed with same trail
-    var_context ctx2(t);
-    assert(ctx2.variable_count == 0);
+    // Multiple sequencers can be constructed with same trail
+    sequencer vars2(t);
+    assert(vars2.index == 0);
     
-    // Multiple var_contexts with different trails
+    // Multiple sequencers with different trails
     trail t2;
-    var_context ctx3(t2);
-    assert(ctx3.variable_count == 0);
+    sequencer vars3(t2);
+    assert(vars3.index == 0);
     
-    // All contexts should be independent
+    // All sequencers should be independent
     t.push();
-    uint32_t v1 = ctx1.next();
+    uint32_t v1 = vars1();
     assert(v1 == 0);
-    assert(ctx1.variable_count == 1);
-    assert(ctx2.variable_count == 0);  // ctx2 unchanged
-    assert(ctx3.variable_count == 0);  // ctx3 unchanged
+    assert(vars1.index == 1);
+    assert(vars2.index == 0);  // vars2 unchanged
+    assert(vars3.index == 0);  // vars3 unchanged
     
-    uint32_t v2 = ctx2.next();
+    uint32_t v2 = vars2();
     assert(v2 == 0);
-    assert(ctx2.variable_count == 1);
-    assert(ctx1.variable_count == 1);  // ctx1 unchanged
+    assert(vars2.index == 1);
+    assert(vars1.index == 1);  // vars1 unchanged
     
-    // Pop should affect both ctx1 and ctx2 since they share trail t
+    // Pop should affect both vars1 and vars2 since they share trail t
     t.pop();
-    assert(ctx1.variable_count == 0);
-    assert(ctx2.variable_count == 0);
+    assert(vars1.index == 0);
+    assert(vars2.index == 0);
     
-    // ctx3 with different trail is unaffected
-    assert(ctx3.variable_count == 0);
+    // vars3 with different trail is unaffected
+    assert(vars3.index == 0);
 }
 
-void test_var_context_next() {
+void test_sequencer() {
     // Test 1: Basic next() calls - verify sequential indices
     {
         trail t;
-        var_context ctx(t);
+        sequencer vars(t);
         
         t.push();
-        assert(ctx.variable_count == 0);
+        assert(vars.index == 0);
         assert(t.undo_stack.size() == 0);
         
-        uint32_t v0 = ctx.next();
+        uint32_t v0 = vars();
         assert(v0 == 0);
-        assert(ctx.variable_count == 1);
+        assert(vars.index == 1);
         assert(t.undo_stack.size() == 1);  // One undo logged
         
-        uint32_t v1 = ctx.next();
+        uint32_t v1 = vars();
         assert(v1 == 1);
-        assert(ctx.variable_count == 2);
+        assert(vars.index == 2);
         assert(t.undo_stack.size() == 2);
         
-        uint32_t v2 = ctx.next();
+        uint32_t v2 = vars();
         assert(v2 == 2);
-        assert(ctx.variable_count == 3);
+        assert(vars.index == 3);
         assert(t.undo_stack.size() == 3);
         
-        uint32_t v3 = ctx.next();
+        uint32_t v3 = vars();
         assert(v3 == 3);
-        assert(ctx.variable_count == 4);
+        assert(vars.index == 4);
         assert(t.undo_stack.size() == 4);
         
         t.pop();
-        assert(ctx.variable_count == 0);
+        assert(vars.index == 0);
         assert(t.undo_stack.size() == 0);
     }
     
     // Test 2: Many sequential calls
     {
         trail t;
-        var_context ctx(t);
+        sequencer vars(t);
         
         t.push();
         
         for (uint32_t i = 0; i < 100; ++i) {
-            uint32_t v = ctx.next();
+            uint32_t v = vars();
             assert(v == i);
-            assert(ctx.variable_count == i + 1);
+            assert(vars.index == i + 1);
         }
-        assert(ctx.variable_count == 100);
+        assert(vars.index == 100);
         assert(t.undo_stack.size() == 100);
         
         t.pop();
-        assert(ctx.variable_count == 0);
+        assert(vars.index == 0);
     }
     
     // Test 3: Backtracking - single frame
     {
         trail t;
-        var_context ctx(t);
+        sequencer vars(t);
         
-        size_t count_before = ctx.variable_count;
+        size_t count_before = vars.index;
         assert(count_before == 0);
         
         t.push();
-        uint32_t v1 = ctx.next();
-        uint32_t v2 = ctx.next();
-        uint32_t v3 = ctx.next();
+        uint32_t v1 = vars();
+        uint32_t v2 = vars();
+        uint32_t v3 = vars();
         assert(v1 == 0);
         assert(v2 == 1);
         assert(v3 == 2);
-        assert(ctx.variable_count == 3);
+        assert(vars.index == 3);
         
         t.pop();
-        assert(ctx.variable_count == count_before);
-        assert(ctx.variable_count == 0);
+        assert(vars.index == count_before);
+        assert(vars.index == 0);
     }
     
     // Test 4: Backtracking - nested frames
     {
         trail t;
-        var_context ctx(t);
+        sequencer vars(t);
         
         t.push();  // Frame 1
-        assert(ctx.variable_count == 0);
+        assert(vars.index == 0);
         assert(t.frame_boundary_stack.size() == 1);
         
-        uint32_t v0 = ctx.next();
-        uint32_t v1 = ctx.next();
+        uint32_t v0 = vars();
+        uint32_t v1 = vars();
         assert(v0 == 0);
         assert(v1 == 1);
-        assert(ctx.variable_count == 2);
-        size_t checkpoint1 = ctx.variable_count;
+        assert(vars.index == 2);
+        size_t checkpoint1 = vars.index;
         
         t.push();  // Frame 2
         assert(t.frame_boundary_stack.size() == 2);
-        uint32_t v2 = ctx.next();
-        uint32_t v3 = ctx.next();
-        uint32_t v4 = ctx.next();
+        uint32_t v2 = vars();
+        uint32_t v3 = vars();
+        uint32_t v4 = vars();
         assert(v2 == 2);
         assert(v3 == 3);
         assert(v4 == 4);
-        assert(ctx.variable_count == 5);
-        size_t checkpoint2 = ctx.variable_count;
+        assert(vars.index == 5);
+        size_t checkpoint2 = vars.index;
         
         t.push();  // Frame 3
         assert(t.frame_boundary_stack.size() == 3);
-        uint32_t v5 = ctx.next();
+        uint32_t v5 = vars();
         assert(v5 == 5);
-        assert(ctx.variable_count == 6);
+        assert(vars.index == 6);
         
         t.pop();  // Pop frame 3
-        assert(ctx.variable_count == checkpoint2);
-        assert(ctx.variable_count == 5);
+        assert(vars.index == checkpoint2);
+        assert(vars.index == 5);
         
         t.pop();  // Pop frame 2
-        assert(ctx.variable_count == checkpoint1);
-        assert(ctx.variable_count == 2);
+        assert(vars.index == checkpoint1);
+        assert(vars.index == 2);
         
         t.pop();  // Pop frame 1
-        assert(ctx.variable_count == 0);
+        assert(vars.index == 0);
     }
     
     // Test 5: Re-interning after backtrack - should reuse same indices
     {
         trail t;
-        var_context ctx(t);
+        sequencer vars(t);
         
         t.push();
-        uint32_t first_v0 = ctx.next();
-        uint32_t first_v1 = ctx.next();
+        uint32_t first_v0 = vars();
+        uint32_t first_v1 = vars();
         assert(first_v0 == 0);
         assert(first_v1 == 1);
-        assert(ctx.variable_count == 2);
+        assert(vars.index == 2);
         
         t.pop();
-        assert(ctx.variable_count == 0);
+        assert(vars.index == 0);
         
         // Call next() again - should get same indices
         t.push();
-        uint32_t second_v0 = ctx.next();
-        uint32_t second_v1 = ctx.next();
+        uint32_t second_v0 = vars();
+        uint32_t second_v1 = vars();
         assert(second_v0 == 0);
         assert(second_v1 == 1);
         assert(second_v0 == first_v0);
         assert(second_v1 == first_v1);
-        assert(ctx.variable_count == 2);
+        assert(vars.index == 2);
         
         t.pop();
     }
@@ -9328,376 +9328,376 @@ void test_var_context_next() {
     // Test 6: Complex nested scenario with checkpoints
     {
         trail t;
-        var_context ctx(t);
+        sequencer vars(t);
         
-        size_t checkpoint_start = ctx.variable_count;
+        size_t checkpoint_start = vars.index;
         assert(checkpoint_start == 0);
         
         t.push();  // Frame A
-        ctx.next();  // 0
-        ctx.next();  // 1
-        size_t checkpoint_a = ctx.variable_count;
+        vars();  // 0
+        vars();  // 1
+        size_t checkpoint_a = vars.index;
         assert(checkpoint_a == 2);
         
         t.push();  // Frame B
-        ctx.next();  // 2
-        ctx.next();  // 3
-        ctx.next();  // 4
-        size_t checkpoint_b = ctx.variable_count;
+        vars();  // 2
+        vars();  // 3
+        vars();  // 4
+        size_t checkpoint_b = vars.index;
         assert(checkpoint_b == 5);
         
         t.push();  // Frame C
-        ctx.next();  // 5
-        size_t checkpoint_c = ctx.variable_count;
+        vars();  // 5
+        size_t checkpoint_c = vars.index;
         assert(checkpoint_c == 6);
         
         // Pop Frame C
         t.pop();
-        assert(ctx.variable_count == checkpoint_b);
-        assert(ctx.variable_count == 5);
+        assert(vars.index == checkpoint_b);
+        assert(vars.index == 5);
         
         // Pop Frame B
         t.pop();
-        assert(ctx.variable_count == checkpoint_a);
-        assert(ctx.variable_count == 2);
+        assert(vars.index == checkpoint_a);
+        assert(vars.index == 2);
         
         // Pop Frame A
         t.pop();
-        assert(ctx.variable_count == checkpoint_start);
-        assert(ctx.variable_count == 0);
+        assert(vars.index == checkpoint_start);
+        assert(vars.index == 0);
     }
     
     // Test 7: Empty frames - push/pop with no next() calls
     {
         trail t;
-        var_context ctx(t);
+        sequencer vars(t);
         
         t.push();
-        ctx.next();
-        ctx.next();
-        assert(ctx.variable_count == 2);
+        vars();
+        vars();
+        assert(vars.index == 2);
         
         t.push();  // Empty frame
         // No next() calls
-        assert(ctx.variable_count == 2);
+        assert(vars.index == 2);
         
         t.pop();  // Pop empty frame
-        assert(ctx.variable_count == 2);  // Should remain unchanged
+        assert(vars.index == 2);  // Should remain unchanged
         
         t.pop();
-        assert(ctx.variable_count == 0);
+        assert(vars.index == 0);
     }
     
-    // Test 8: Multiple var_contexts with shared trail
+    // Test 8: Multiple sequencers with shared trail
     {
         trail t;
-        var_context ctx1(t);
-        var_context ctx2(t);
+        sequencer vars1(t);
+        sequencer vars2(t);
         
         t.push();
         
-        uint32_t v1 = ctx1.next();
+        uint32_t v1 = vars1();
         assert(v1 == 0);
-        assert(ctx1.variable_count == 1);
-        assert(ctx2.variable_count == 0);  // Independent
+        assert(vars1.index == 1);
+        assert(vars2.index == 0);  // Independent
         
-        uint32_t v2 = ctx2.next();
+        uint32_t v2 = vars2();
         assert(v2 == 0);
-        assert(ctx2.variable_count == 1);
-        assert(ctx1.variable_count == 1);  // Unchanged
+        assert(vars2.index == 1);
+        assert(vars1.index == 1);  // Unchanged
         
-        uint32_t v3 = ctx1.next();
+        uint32_t v3 = vars1();
         assert(v3 == 1);
-        assert(ctx1.variable_count == 2);
-        assert(ctx2.variable_count == 1);  // Still unchanged
+        assert(vars1.index == 2);
+        assert(vars2.index == 1);  // Still unchanged
         
-        // Pop should restore both contexts
+        // Pop should restore both sequencers
         t.pop();
-        assert(ctx1.variable_count == 0);
-        assert(ctx2.variable_count == 0);
+        assert(vars1.index == 0);
+        assert(vars2.index == 0);
     }
     
     // Test 9: Edge case - many variables
     {
         trail t;
-        var_context ctx(t);
+        sequencer vars(t);
         
         t.push();
         
         for (uint32_t i = 0; i < 1000; ++i) {
-            uint32_t v = ctx.next();
+            uint32_t v = vars();
             assert(v == i);
-            assert(ctx.variable_count == i + 1);
+            assert(vars.index == i + 1);
         }
-        assert(ctx.variable_count == 1000);
+        assert(vars.index == 1000);
         assert(t.undo_stack.size() == 1000);
         
         t.pop();
-        assert(ctx.variable_count == 0);
+        assert(vars.index == 0);
         assert(t.undo_stack.size() == 0);
     }
     
     // Test 10: Post-backtrack continuation
     {
         trail t;
-        var_context ctx(t);
+        sequencer vars(t);
         
         t.push();
-        ctx.next();  // 0
-        ctx.next();  // 1
-        ctx.next();  // 2
-        assert(ctx.variable_count == 3);
+        vars();  // 0
+        vars();  // 1
+        vars();  // 2
+        assert(vars.index == 3);
         
         t.push();
-        ctx.next();  // 3
-        ctx.next();  // 4
-        assert(ctx.variable_count == 5);
+        vars();  // 3
+        vars();  // 4
+        assert(vars.index == 5);
         
         t.pop();  // Back to 3
-        assert(ctx.variable_count == 3);
+        assert(vars.index == 3);
         
         // Continue from 3
-        uint32_t v = ctx.next();
+        uint32_t v = vars();
         assert(v == 3);
-        assert(ctx.variable_count == 4);
+        assert(vars.index == 4);
         
-        v = ctx.next();
+        v = vars();
         assert(v == 4);
-        assert(ctx.variable_count == 5);
+        assert(vars.index == 5);
         
         t.pop();
-        assert(ctx.variable_count == 0);
+        assert(vars.index == 0);
     }
     
     // Test 11: Deeply nested frames with precise tracking
     {
         trail t;
-        var_context ctx(t);
+        sequencer vars(t);
         
         t.push();  // Level 1
-        assert(ctx.variable_count == 0);
+        assert(vars.index == 0);
         assert(t.undo_stack.size() == 0);
         
-        uint32_t v0 = ctx.next();
+        uint32_t v0 = vars();
         assert(v0 == 0);
-        assert(ctx.variable_count == 1);
+        assert(vars.index == 1);
         assert(t.undo_stack.size() == 1);
         
         t.push();  // Level 2
         assert(t.frame_boundary_stack.size() == 2);
-        uint32_t v1 = ctx.next();
+        uint32_t v1 = vars();
         assert(v1 == 1);
-        assert(ctx.variable_count == 2);
+        assert(vars.index == 2);
         assert(t.undo_stack.size() == 2);
         
         t.push();  // Level 3
         assert(t.frame_boundary_stack.size() == 3);
-        uint32_t v2 = ctx.next();
+        uint32_t v2 = vars();
         assert(v2 == 2);
-        assert(ctx.variable_count == 3);
+        assert(vars.index == 3);
         assert(t.undo_stack.size() == 3);
         
         t.push();  // Level 4
         assert(t.frame_boundary_stack.size() == 4);
-        uint32_t v3 = ctx.next();
+        uint32_t v3 = vars();
         assert(v3 == 3);
-        assert(ctx.variable_count == 4);
+        assert(vars.index == 4);
         assert(t.undo_stack.size() == 4);
         
         t.push();  // Level 5
         assert(t.frame_boundary_stack.size() == 5);
-        uint32_t v4 = ctx.next();
+        uint32_t v4 = vars();
         assert(v4 == 4);
-        assert(ctx.variable_count == 5);
+        assert(vars.index == 5);
         assert(t.undo_stack.size() == 5);
         
         // Pop all levels
         t.pop();
-        assert(ctx.variable_count == 4);
+        assert(vars.index == 4);
         assert(t.undo_stack.size() == 4);
         
         t.pop();
-        assert(ctx.variable_count == 3);
+        assert(vars.index == 3);
         assert(t.undo_stack.size() == 3);
         
         t.pop();
-        assert(ctx.variable_count == 2);
+        assert(vars.index == 2);
         assert(t.undo_stack.size() == 2);
         
         t.pop();
-        assert(ctx.variable_count == 1);
+        assert(vars.index == 1);
         assert(t.undo_stack.size() == 1);
         
         t.pop();
-        assert(ctx.variable_count == 0);
+        assert(vars.index == 0);
         assert(t.undo_stack.size() == 0);
     }
     
     // Test 12: Interleaved push/pop/next operations
     {
         trail t;
-        var_context ctx(t);
+        sequencer vars(t);
         
         t.push();  // Frame 1
-        uint32_t v0 = ctx.next();
+        uint32_t v0 = vars();
         assert(v0 == 0);
-        assert(ctx.variable_count == 1);
+        assert(vars.index == 1);
         
         t.push();  // Frame 2
-        uint32_t v1 = ctx.next();
+        uint32_t v1 = vars();
         assert(v1 == 1);
-        assert(ctx.variable_count == 2);
+        assert(vars.index == 2);
         
         t.pop();  // Pop frame 2
-        assert(ctx.variable_count == 1);
+        assert(vars.index == 1);
         
         t.push();  // New frame 2
-        uint32_t v1_again = ctx.next();
+        uint32_t v1_again = vars();
         assert(v1_again == 1);  // Same index as before
-        assert(ctx.variable_count == 2);
+        assert(vars.index == 2);
         
         t.push();  // Frame 3
-        uint32_t v2 = ctx.next();
+        uint32_t v2 = vars();
         assert(v2 == 2);
-        assert(ctx.variable_count == 3);
+        assert(vars.index == 3);
         
         t.pop();  // Pop frame 3
-        assert(ctx.variable_count == 2);
+        assert(vars.index == 2);
         
         t.pop();  // Pop frame 2
-        assert(ctx.variable_count == 1);
+        assert(vars.index == 1);
         
         t.pop();  // Pop frame 1
-        assert(ctx.variable_count == 0);
+        assert(vars.index == 0);
     }
     
     // Test 13: Complex nested scenario - Frame A, B, C with partial pops
     {
         trail t;
-        var_context ctx(t);
+        sequencer vars(t);
         
-        size_t checkpoint_start = ctx.variable_count;
+        size_t checkpoint_start = vars.index;
         assert(checkpoint_start == 0);
         
         t.push();  // Frame A
-        assert(ctx.variable_count == 0);
+        assert(vars.index == 0);
         assert(t.undo_stack.size() == 0);
         
-        ctx.next();  // 0
-        assert(ctx.variable_count == 1);
+        vars();  // 0
+        assert(vars.index == 1);
         assert(t.undo_stack.size() == 1);
         
-        ctx.next();  // 1
-        assert(ctx.variable_count == 2);
+        vars();  // 1
+        assert(vars.index == 2);
         assert(t.undo_stack.size() == 2);
         
-        size_t checkpoint_a = ctx.variable_count;
+        size_t checkpoint_a = vars.index;
         assert(checkpoint_a == 2);
         
         t.push();  // Frame B
         assert(t.frame_boundary_stack.size() == 2);
-        assert(ctx.variable_count == 2);
+        assert(vars.index == 2);
         
-        ctx.next();  // 2
-        assert(ctx.variable_count == 3);
+        vars();  // 2
+        assert(vars.index == 3);
         
-        size_t checkpoint_b = ctx.variable_count;
+        size_t checkpoint_b = vars.index;
         assert(checkpoint_b == 3);
         
         // Add more to Frame B
-        ctx.next();  // 3
-        ctx.next();  // 4
-        assert(ctx.variable_count == 5);
-        size_t checkpoint_b_final = ctx.variable_count;
+        vars();  // 3
+        vars();  // 4
+        assert(vars.index == 5);
+        size_t checkpoint_b_final = vars.index;
         
         t.push();  // Frame C
         assert(t.frame_boundary_stack.size() == 3);
-        assert(ctx.variable_count == 5);
+        assert(vars.index == 5);
         
-        ctx.next();  // 5
-        assert(ctx.variable_count == 6);
-        size_t checkpoint_c = ctx.variable_count;
+        vars();  // 5
+        assert(vars.index == 6);
+        size_t checkpoint_c = vars.index;
         
         // Pop Frame C
         t.pop();
-        assert(ctx.variable_count == checkpoint_b_final);
-        assert(ctx.variable_count == 5);
+        assert(vars.index == checkpoint_b_final);
+        assert(vars.index == 5);
         assert(t.frame_boundary_stack.size() == 2);
         
         // Pop Frame B
         t.pop();
-        assert(ctx.variable_count == checkpoint_a);
-        assert(ctx.variable_count == 2);
+        assert(vars.index == checkpoint_a);
+        assert(vars.index == 2);
         assert(t.frame_boundary_stack.size() == 1);
         
         // Pop Frame A
         t.pop();
-        assert(ctx.variable_count == checkpoint_start);
-        assert(ctx.variable_count == 0);
+        assert(vars.index == checkpoint_start);
+        assert(vars.index == 0);
         assert(t.frame_boundary_stack.size() == 0);
     }
     
     // Test 14: Multiple operations per frame with precise undo_stack tracking
     {
         trail t;
-        var_context ctx(t);
+        sequencer vars(t);
         
         t.push();  // Level 1
         assert(t.frame_boundary_stack.top() == 0);
         
-        ctx.next();
+        vars();
         assert(t.undo_stack.size() == 1);
-        ctx.next();
+        vars();
         assert(t.undo_stack.size() == 2);
-        assert(ctx.variable_count == 2);
+        assert(vars.index == 2);
         
         t.push();  // Level 2
         assert(t.frame_boundary_stack.top() == 2);
         
-        ctx.next();
+        vars();
         assert(t.undo_stack.size() == 3);
-        ctx.next();
+        vars();
         assert(t.undo_stack.size() == 4);
-        ctx.next();
+        vars();
         assert(t.undo_stack.size() == 5);
-        assert(ctx.variable_count == 5);
+        assert(vars.index == 5);
         
         t.push();  // Level 3
         assert(t.frame_boundary_stack.top() == 5);
         
-        ctx.next();
+        vars();
         assert(t.undo_stack.size() == 6);
-        assert(ctx.variable_count == 6);
+        assert(vars.index == 6);
         
         t.pop();  // Pop level 3
         assert(t.undo_stack.size() == 5);
-        assert(ctx.variable_count == 5);
+        assert(vars.index == 5);
         
         t.pop();  // Pop level 2
         assert(t.undo_stack.size() == 2);
-        assert(ctx.variable_count == 2);
+        assert(vars.index == 2);
         
         t.pop();  // Pop level 1
         assert(t.undo_stack.size() == 0);
-        assert(ctx.variable_count == 0);
+        assert(vars.index == 0);
     }
     
     // Test 15: Verify no duplicate indices within a sequence
     {
         trail t;
-        var_context ctx(t);
+        sequencer vars(t);
         
         t.push();
         
         std::set<uint32_t> seen_indices;
         for (int i = 0; i < 50; ++i) {
-            uint32_t v = ctx.next();
+            uint32_t v = vars();
             assert(seen_indices.count(v) == 0);  // Should be unique
             seen_indices.insert(v);
             assert(v == static_cast<uint32_t>(i));
         }
         assert(seen_indices.size() == 50);
-        assert(ctx.variable_count == 50);
+        assert(vars.index == 50);
         
         t.pop();
     }
@@ -9705,45 +9705,45 @@ void test_var_context_next() {
     // Test 16: Mixed nesting with multiple next() calls
     {
         trail t;
-        var_context ctx(t);
+        sequencer vars(t);
         
         t.push();
-        assert(ctx.variable_count == 0);
+        assert(vars.index == 0);
         
-        ctx.next();
-        ctx.next();
-        assert(ctx.variable_count == 2);
-        
-        t.push();
-        ctx.next();
-        assert(ctx.variable_count == 3);
-        
-        t.pop();
-        assert(ctx.variable_count == 2);
+        vars();
+        vars();
+        assert(vars.index == 2);
         
         t.push();
-        ctx.next();
-        ctx.next();
-        assert(ctx.variable_count == 4);
+        vars();
+        assert(vars.index == 3);
         
         t.pop();
-        assert(ctx.variable_count == 2);
+        assert(vars.index == 2);
+        
+        t.push();
+        vars();
+        vars();
+        assert(vars.index == 4);
         
         t.pop();
-        assert(ctx.variable_count == 0);
+        assert(vars.index == 2);
+        
+        t.pop();
+        assert(vars.index == 0);
     }
     
     // Test 17: Verify exact undo_stack behavior
     {
         trail t;
-        var_context ctx(t);
+        sequencer vars(t);
         
         t.push();
         size_t undo_before = t.undo_stack.size();
         assert(undo_before == 0);
         
         for (int i = 0; i < 10; ++i) {
-            ctx.next();
+            vars();
             assert(t.undo_stack.size() == undo_before + i + 1);
         }
         
@@ -9754,25 +9754,25 @@ void test_var_context_next() {
 
 void test_copier_constructor() {
     trail t;
-    var_context var_ctx(t);
+    sequencer vars(t);
     expr_pool pool(t);
     
     // Basic construction
-    copier copy1(var_ctx, pool);
-    assert(&copy1.var_context_ref == &var_ctx);
+    copier copy1(vars, pool);
+    assert(&copy1.sequencer_ref == &vars);
     assert(&copy1.expr_pool_ref == &pool);
     
     // Multiple copiers can share same dependencies
-    copier copy2(var_ctx, pool);
-    assert(&copy2.var_context_ref == &var_ctx);
+    copier copy2(vars, pool);
+    assert(&copy2.sequencer_ref == &vars);
     assert(&copy2.expr_pool_ref == &pool);
     
     // Different dependencies
     trail t2;
-    var_context var_ctx2(t2);
+    sequencer vars2(t2);
     expr_pool pool2(t2);
-    copier copy3(var_ctx2, pool2);
-    assert(&copy3.var_context_ref == &var_ctx2);
+    copier copy3(vars2, pool2);
+    assert(&copy3.sequencer_ref == &vars2);
     assert(&copy3.expr_pool_ref == &pool2);
 }
 
@@ -9780,9 +9780,9 @@ void test_copier() {
     // Test 1: Copy atom - should return same pointer (atoms are immutable)
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -9796,7 +9796,7 @@ void test_copier() {
         
         assert(copied == original);  // Same atom
         assert(var_map.empty());  // No variables mapped
-        assert(var_ctx.variable_count == 0);  // No fresh vars created
+        assert(vars.index == 0);  // No fresh vars created
         assert(pool.size() == 1);  // No new entries
         assert(pool.exprs.size() == 1);
         
@@ -9806,9 +9806,9 @@ void test_copier() {
     // Test 2: Copy single variable - creates fresh variable
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -9826,7 +9826,7 @@ void test_copier() {
         assert(std::get<expr::var>(copied->content).index == 0);  // Fresh var starts at 0
         assert(var_map.size() == 1);
         assert(var_map.at(5) == 0);  // Original index 5 mapped to 0
-        assert(var_ctx.variable_count == 1);
+        assert(vars.index == 1);
         assert(pool.size() == 2);  // Original var(5) and new var(0)
         assert(pool.exprs.size() == 2);
         assert(pool.exprs.count(*original) == 1);
@@ -9838,9 +9838,9 @@ void test_copier() {
     // Test 3: Copy same variable twice - should use same mapping
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -9853,14 +9853,14 @@ void test_copier() {
         assert(std::get<expr::var>(copied1->content).index == 0);
         assert(var_map.size() == 1);
         assert(var_map.at(10) == 0);
-        assert(var_ctx.variable_count == 1);
+        assert(vars.index == 1);
         assert(pool.size() == 2);
         assert(pool.exprs.size() == 2);
         
         const expr* copied2 = copy(original, var_map);
         assert(copied2 == copied1);  // Should be same pointer (interned)
         assert(var_map.size() == 1);  // No new mapping
-        assert(var_ctx.variable_count == 1);  // No new variable
+        assert(vars.index == 1);  // No new variable
         assert(pool.size() == 2);  // Still 2
         assert(pool.exprs.size() == 2);
         
@@ -9870,9 +9870,9 @@ void test_copier() {
     // Test 4: Copy cons with atoms
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -9888,7 +9888,7 @@ void test_copier() {
         
         assert(copied == original);  // Same cons since atoms unchanged
         assert(var_map.empty());  // No variables
-        assert(var_ctx.variable_count == 0);
+        assert(vars.index == 0);
         assert(pool.size() == 3);  // No new entries
         assert(pool.exprs.size() == 3);
         
@@ -9898,9 +9898,9 @@ void test_copier() {
     // Test 5: Copy cons with variables
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -9921,7 +9921,7 @@ void test_copier() {
         assert(var_map.size() == 2);
         assert(var_map.at(10) == 0);
         assert(var_map.at(20) == 1);
-        assert(var_ctx.variable_count == 2);
+        assert(vars.index == 2);
         
         // Pool should contain: var(10), var(20), original cons, var(0), var(1), new cons
         assert(pool.size() == 6);
@@ -9939,9 +9939,9 @@ void test_copier() {
     // Test 6: Copy cons with same variable in both positions
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -9960,7 +9960,7 @@ void test_copier() {
         
         assert(var_map.size() == 1);
         assert(var_map.at(5) == 0);
-        assert(var_ctx.variable_count == 1);  // Only one fresh variable created
+        assert(vars.index == 1);  // Only one fresh variable created
         
         // Pool: var(5), original cons, var(0), new cons
         assert(pool.size() == 4);
@@ -9976,9 +9976,9 @@ void test_copier() {
     // Test 7: Copy nested cons with mixed content
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -10000,7 +10000,7 @@ void test_copier() {
         
         assert(var_map.size() == 1);
         assert(var_map.at(7) == 0);
-        assert(var_ctx.variable_count == 1);
+        assert(vars.index == 1);
         
         t.pop();
     }
@@ -10008,9 +10008,9 @@ void test_copier() {
     // Test 8: Copy deeply nested cons
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -10028,7 +10028,7 @@ void test_copier() {
         assert(var_map.at(10) == 0);
         assert(var_map.at(20) == 1);
         assert(var_map.at(30) == 2);
-        assert(var_ctx.variable_count == 3);
+        assert(vars.index == 3);
         
         // Verify structure
         const expr::cons& top = std::get<expr::cons>(copied->content);
@@ -10047,9 +10047,9 @@ void test_copier() {
     // Test 9: Copy with pre-populated variable map
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -10072,7 +10072,7 @@ void test_copier() {
         assert(std::get<expr::var>(copied_cons.lhs->content).index == 100);
         assert(std::get<expr::var>(copied_cons.rhs->content).index == 0);
         
-        assert(var_ctx.variable_count == 1);  // Only one fresh var created
+        assert(vars.index == 1);  // Only one fresh var created
         
         t.pop();
     }
@@ -10080,9 +10080,9 @@ void test_copier() {
     // Test 10: Copy multiple expressions with shared variable map
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -10097,11 +10097,11 @@ void test_copier() {
         assert(var_map.size() == 2);
         assert(var_map.at(1) == 0);
         assert(var_map.at(2) == 1);
-        assert(var_ctx.variable_count == 2);
+        assert(vars.index == 2);
         
         const expr* copied2 = copy(expr2, var_map);
         assert(var_map.size() == 2);  // No new mappings
-        assert(var_ctx.variable_count == 2);  // No new variables
+        assert(vars.index == 2);  // No new variables
         
         // Verify both use same variable mapping
         const expr::cons& cons1 = std::get<expr::cons>(copied1->content);
@@ -10117,9 +10117,9 @@ void test_copier() {
     // Test 11: Copy empty variable map vs populated
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -10137,7 +10137,7 @@ void test_copier() {
         
         // Different maps, different fresh variables
         assert(copy1 != copy2);
-        assert(var_ctx.variable_count == 2);
+        assert(vars.index == 2);
         
         t.pop();
     }
@@ -10145,9 +10145,9 @@ void test_copier() {
     // Test 12: Copy complex nested structure
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -10165,7 +10165,7 @@ void test_copier() {
         assert(var_map.size() == 2);
         assert(var_map.at(1) == 0);
         assert(var_map.at(2) == 1);
-        assert(var_ctx.variable_count == 2);
+        assert(vars.index == 2);
         
         // Verify structure: cons(cons(var(0), atom("a")), cons(var(1), var(0)))
         const expr::cons& top = std::get<expr::cons>(copied->content);
@@ -10184,9 +10184,9 @@ void test_copier() {
     // Test 13: Copy with backtracking
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -10196,11 +10196,11 @@ void test_copier() {
         t.push();
         std::map<uint32_t, uint32_t> var_map;
         const expr* copied = copy(original, var_map);
-        assert(var_ctx.variable_count == 1);
+        assert(vars.index == 1);
         assert(pool.size() == 5);  // v(5), atom("x"), original cons, v(0), new cons
         
         t.pop();
-        assert(var_ctx.variable_count == 0);
+        assert(vars.index == 0);
         assert(pool.size() == 3);  // Back to v(5), atom("x"), original cons
         
         t.pop();
@@ -10209,9 +10209,9 @@ void test_copier() {
     // Test 14: Multiple variables in sequence
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -10221,17 +10221,17 @@ void test_copier() {
         const expr* v10 = pool.var(10);
         const expr* copy10 = copy(v10, var_map);
         assert(std::get<expr::var>(copy10->content).index == 0);
-        assert(var_ctx.variable_count == 1);
+        assert(vars.index == 1);
         
         const expr* v20 = pool.var(20);
         const expr* copy20 = copy(v20, var_map);
         assert(std::get<expr::var>(copy20->content).index == 1);
-        assert(var_ctx.variable_count == 2);
+        assert(vars.index == 2);
         
         const expr* v30 = pool.var(30);
         const expr* copy30 = copy(v30, var_map);
         assert(std::get<expr::var>(copy30->content).index == 2);
-        assert(var_ctx.variable_count == 3);
+        assert(vars.index == 3);
         
         assert(var_map.size() == 3);
         
@@ -10241,9 +10241,9 @@ void test_copier() {
     // Test 15: Copy expression with all three types
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -10259,7 +10259,7 @@ void test_copier() {
         
         assert(var_map.size() == 1);
         assert(var_map.at(5) == 0);
-        assert(var_ctx.variable_count == 1);
+        assert(vars.index == 1);
         
         // Verify structure
         const expr::cons& top = std::get<expr::cons>(copied->content);
@@ -10275,9 +10275,9 @@ void test_copier() {
     // Test 16: Copy with variable appearing multiple times in deep structure
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -10294,7 +10294,7 @@ void test_copier() {
         assert(var_map.size() == 2);
         assert(var_map.at(1) == 0);
         assert(var_map.at(2) == 1);
-        assert(var_ctx.variable_count == 2);
+        assert(vars.index == 2);
         
         // Verify all occurrences use consistent mapping
         const expr::cons& top = std::get<expr::cons>(copied->content);
@@ -10312,9 +10312,9 @@ void test_copier() {
     // Test 17: Copy atom-only structure
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -10329,7 +10329,7 @@ void test_copier() {
         
         assert(copied == original);  // No variables, so same structure
         assert(var_map.empty());
-        assert(var_ctx.variable_count == 0);
+        assert(vars.index == 0);
         
         t.pop();
     }
@@ -10337,9 +10337,9 @@ void test_copier() {
     // Test 18: Copy with interleaved fresh() calls
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -10347,17 +10347,17 @@ void test_copier() {
         std::map<uint32_t, uint32_t> var_map;
         
         copy(v10, var_map);
-        assert(var_ctx.variable_count == 1);
+        assert(vars.index == 1);
         assert(var_map.at(10) == 0);
         
-        // Manually create a fresh variable using var_ctx.next()
-        const expr* fresh_var = pool.var(var_ctx.next());
+        // Manually create a fresh variable using vars()
+        const expr* fresh_var = pool.var(vars());
         assert(std::get<expr::var>(fresh_var->content).index == 1);
-        assert(var_ctx.variable_count == 2);
+        assert(vars.index == 2);
         
         const expr* v20 = pool.var(20);
         copy(v20, var_map);
-        assert(var_ctx.variable_count == 3);
+        assert(vars.index == 3);
         assert(var_map.at(20) == 2);
         
         t.pop();
@@ -10366,9 +10366,9 @@ void test_copier() {
     // Test 19: Verify pool interning during copy
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -10386,7 +10386,7 @@ void test_copier() {
         
         // Fresh variable is var(1), which already exists, so gets interned
         // cons(var(1), atom("a")) also already exists, so also interned
-        assert(var_ctx.variable_count == 2);
+        assert(vars.index == 2);
         assert(pool.exprs.size() == pool_size_after_first);  // No new entries due to interning
         assert(copied2 == original);  // Should be same as original due to interning!
         
@@ -10396,9 +10396,9 @@ void test_copier() {
     // Test 20: Copy with zero-indexed variables
     {
         trail t;
-        var_context var_ctx(t);
+        sequencer vars(t);
         expr_pool pool(t);
-        copier copy(var_ctx, pool);
+        copier copy(vars, pool);
         
         t.push();
         
@@ -10411,7 +10411,7 @@ void test_copier() {
         
         assert(var_map.at(0) == 0);  // 0 maps to fresh 0
         assert(var_map.at(1) == 1);  // 1 maps to fresh 1
-        assert(var_ctx.variable_count == 2);
+        assert(vars.index == 2);
         
         t.pop();
     }
@@ -10441,7 +10441,7 @@ void test_normalizer_constructor() {
     assert(&norm3.bind_map_ref == &bm2);
 }
 
-void test_normalizer_normalize() {
+void test_normalizer() {
     // Test 1: Normalize atom - returns unchanged
     {
         trail t;
@@ -10985,12 +10985,12 @@ void unit_test_main() {
     TEST(test_resolution_pool_pin);
     TEST(test_resolution_pool_trim);
     TEST(test_resolution_pool_size);
-    TEST(test_var_context_constructor);
-    TEST(test_var_context_next);
+    TEST(test_sequencer_constructor);
+    TEST(test_sequencer);
     TEST(test_copier_constructor);
     TEST(test_copier);
     TEST(test_normalizer_constructor);
-    TEST(test_normalizer_normalize);
+    TEST(test_normalizer);
 }
 
 int main() {
