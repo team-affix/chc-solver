@@ -1,16 +1,12 @@
 #include <stdexcept>
-#include "../hpp/expr_context.hpp"
+#include "../hpp/copier.hpp"
 
-expr_context::expr_context(var_context& var_context_ref, expr_pool& expr_pool_ref)
+copier::copier(var_context& var_context_ref, expr_pool& expr_pool_ref)
     : var_context_ref(var_context_ref), expr_pool_ref(expr_pool_ref) {
 
 }
 
-const expr* expr_context::fresh() {
-    return expr_pool_ref.var(var_context_ref.next());
-}
-
-const expr* expr_context::copy(const expr* e, std::map<uint32_t, uint32_t>& variable_map) {
+const expr* copier::operator()(const expr* e, std::map<uint32_t, uint32_t>& variable_map) {
     // If the expression is an atom, return the atom unchanged
     if (std::holds_alternative<expr::atom>(e->content))
         return e;
@@ -31,10 +27,10 @@ const expr* expr_context::copy(const expr* e, std::map<uint32_t, uint32_t>& vari
     // If the expression is a cons cell, copy the car and cdr
     if (const expr::cons* c = std::get_if<expr::cons>(&e->content)) {
         // Copy lhs
-        const expr* copied_lhs = copy(c->lhs, variable_map);
+        const expr* copied_lhs = operator()(c->lhs, variable_map);
         
         // Copy rhs
-        const expr* copied_rhs = copy(c->rhs, variable_map);
+        const expr* copied_rhs = operator()(c->rhs, variable_map);
         
         // Return the copied cons cell
         return expr_pool_ref.cons(copied_lhs, copied_rhs);
