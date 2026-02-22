@@ -3,6 +3,7 @@
 #include "../hpp/resolution.hpp"
 #include "../hpp/var_context.hpp"
 #include "../hpp/expr_context.hpp"
+#include "../hpp/normalizer.hpp"
 #include "test_utils.hpp"
 
 void test_trail_constructor() {
@@ -10527,6 +10528,549 @@ void test_expr_context_copy() {
     }
 }
 
+void test_normalizer_constructor() {
+    trail t;
+    expr_pool pool(t);
+    bind_map bm(t);
+    
+    // Basic construction
+    normalizer norm1(pool, bm);
+    assert(&norm1.expr_pool_ref == &pool);
+    assert(&norm1.bind_map_ref == &bm);
+    
+    // Multiple normalizers can share same dependencies
+    normalizer norm2(pool, bm);
+    assert(&norm2.expr_pool_ref == &pool);
+    assert(&norm2.bind_map_ref == &bm);
+    
+    // Different dependencies
+    trail t2;
+    expr_pool pool2(t2);
+    bind_map bm2(t2);
+    normalizer norm3(pool2, bm2);
+    assert(&norm3.expr_pool_ref == &pool2);
+    assert(&norm3.bind_map_ref == &bm2);
+}
+
+void test_normalizer_normalize() {
+    // Test 1: Normalize atom - returns unchanged
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* a = pool.atom("test");
+        const expr* result = norm.normalize(a);
+        
+        assert(result == a);
+        assert(std::holds_alternative<expr::atom>(result->content));
+        
+        t.pop();
+    }
+    
+    // Test 2: Normalize unbound variable - returns unchanged
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* v = pool.var(5);
+        const expr* result = norm.normalize(v);
+        
+        assert(result == v);
+        assert(std::holds_alternative<expr::var>(result->content));
+        assert(std::get<expr::var>(result->content).index == 5);
+        
+        t.pop();
+    }
+    
+    // Test 3: Normalize variable bound to atom
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* v = pool.var(1);
+        const expr* a = pool.atom("hello");
+        bm.bind(1, a);
+        
+        const expr* result = norm.normalize(v);
+        
+        assert(result == a);
+        assert(std::holds_alternative<expr::atom>(result->content));
+        assert(std::get<expr::atom>(result->content).value == "hello");
+        
+        t.pop();
+    }
+    
+    // Test 4: Normalize variable with chain of bindings
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* v1 = pool.var(1);
+        const expr* v2 = pool.var(2);
+        const expr* v3 = pool.var(3);
+        const expr* a = pool.atom("end");
+        
+        bm.bind(1, v2);
+        bm.bind(2, v3);
+        bm.bind(3, a);
+        
+        const expr* result = norm.normalize(v1);
+        
+        assert(result == a);
+        assert(std::get<expr::atom>(result->content).value == "end");
+        
+        t.pop();
+    }
+    
+    // Test 5: Normalize cons with atoms
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* a1 = pool.atom("left");
+        const expr* a2 = pool.atom("right");
+        const expr* c = pool.cons(a1, a2);
+        
+        const expr* result = norm.normalize(c);
+        
+        assert(result == c);
+        const expr::cons& result_cons = std::get<expr::cons>(result->content);
+        assert(result_cons.lhs == a1);
+        assert(result_cons.rhs == a2);
+        
+        t.pop();
+    }
+    
+    // Test 6: Normalize cons with unbound variables
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* v1 = pool.var(1);
+        const expr* v2 = pool.var(2);
+        const expr* c = pool.cons(v1, v2);
+        
+        const expr* result = norm.normalize(c);
+        
+        assert(result == c);
+        const expr::cons& result_cons = std::get<expr::cons>(result->content);
+        assert(result_cons.lhs == v1);
+        assert(result_cons.rhs == v2);
+        
+        t.pop();
+    }
+    
+    // Test 7: Normalize cons with bound variables
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* v1 = pool.var(1);
+        const expr* v2 = pool.var(2);
+        const expr* a1 = pool.atom("a");
+        const expr* a2 = pool.atom("b");
+        const expr* c = pool.cons(v1, v2);
+        
+        bm.bind(1, a1);
+        bm.bind(2, a2);
+        
+        const expr* result = norm.normalize(c);
+        
+        assert(result != c);
+        const expr::cons& result_cons = std::get<expr::cons>(result->content);
+        assert(result_cons.lhs == a1);
+        assert(result_cons.rhs == a2);
+        
+        t.pop();
+    }
+    
+    // Test 8: Normalize cons with one bound, one unbound variable
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* v1 = pool.var(1);
+        const expr* v2 = pool.var(2);
+        const expr* a = pool.atom("bound");
+        const expr* c = pool.cons(v1, v2);
+        
+        bm.bind(1, a);
+        
+        const expr* result = norm.normalize(c);
+        
+        const expr::cons& result_cons = std::get<expr::cons>(result->content);
+        assert(result_cons.lhs == a);
+        assert(result_cons.rhs == v2);
+        
+        t.pop();
+    }
+    
+    // Test 9: Normalize nested cons with all atoms
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* a1 = pool.atom("a");
+        const expr* a2 = pool.atom("b");
+        const expr* a3 = pool.atom("c");
+        const expr* inner = pool.cons(a1, a2);
+        const expr* outer = pool.cons(inner, a3);
+        
+        const expr* result = norm.normalize(outer);
+        
+        assert(result == outer);
+        
+        t.pop();
+    }
+    
+    // Test 10: Normalize nested cons with bound variables
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* v1 = pool.var(1);
+        const expr* v2 = pool.var(2);
+        const expr* a1 = pool.atom("x");
+        const expr* a2 = pool.atom("y");
+        const expr* inner = pool.cons(v1, v2);
+        const expr* outer = pool.cons(inner, a1);
+        
+        bm.bind(1, a1);
+        bm.bind(2, a2);
+        
+        const expr* result = norm.normalize(outer);
+        
+        const expr::cons& outer_cons = std::get<expr::cons>(result->content);
+        assert(outer_cons.rhs == a1);
+        
+        const expr::cons& inner_cons = std::get<expr::cons>(outer_cons.lhs->content);
+        assert(inner_cons.lhs == a1);
+        assert(inner_cons.rhs == a2);
+        
+        t.pop();
+    }
+    
+    // Test 11: Normalize variable bound to cons
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* v = pool.var(1);
+        const expr* a1 = pool.atom("left");
+        const expr* a2 = pool.atom("right");
+        const expr* c = pool.cons(a1, a2);
+        
+        bm.bind(1, c);
+        
+        const expr* result = norm.normalize(v);
+        
+        assert(result == c);
+        
+        t.pop();
+    }
+    
+    // Test 12: Normalize variable bound to cons with variables
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* v1 = pool.var(1);
+        const expr* v2 = pool.var(2);
+        const expr* v3 = pool.var(3);
+        const expr* a1 = pool.atom("a");
+        const expr* a2 = pool.atom("b");
+        const expr* c = pool.cons(v2, v3);
+        
+        bm.bind(1, c);
+        bm.bind(2, a1);
+        bm.bind(3, a2);
+        
+        const expr* result = norm.normalize(v1);
+        
+        const expr::cons& result_cons = std::get<expr::cons>(result->content);
+        assert(result_cons.lhs == a1);
+        assert(result_cons.rhs == a2);
+        
+        t.pop();
+    }
+    
+    // Test 13: Normalize deeply nested structure
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* v1 = pool.var(1);
+        const expr* v2 = pool.var(2);
+        const expr* v3 = pool.var(3);
+        const expr* a = pool.atom("atom");
+        
+        const expr* c1 = pool.cons(v1, v2);
+        const expr* c2 = pool.cons(c1, v3);
+        
+        bm.bind(1, a);
+        bm.bind(2, a);
+        bm.bind(3, a);
+        
+        const expr* result = norm.normalize(c2);
+        
+        const expr::cons& top = std::get<expr::cons>(result->content);
+        assert(top.rhs == a);
+        
+        const expr::cons& bottom = std::get<expr::cons>(top.lhs->content);
+        assert(bottom.lhs == a);
+        assert(bottom.rhs == a);
+        
+        t.pop();
+    }
+    
+    // Test 14: Normalize cons where same variable appears multiple times
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* v = pool.var(1);
+        const expr* a = pool.atom("shared");
+        const expr* c = pool.cons(v, v);
+        
+        bm.bind(1, a);
+        
+        const expr* result = norm.normalize(c);
+        
+        const expr::cons& result_cons = std::get<expr::cons>(result->content);
+        assert(result_cons.lhs == a);
+        assert(result_cons.rhs == a);
+        assert(result_cons.lhs == result_cons.rhs);
+        
+        t.pop();
+    }
+    
+    // Test 15: Normalize with backtracking
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* v = pool.var(1);
+        const expr* a1 = pool.atom("first");
+        const expr* a2 = pool.atom("second");
+        
+        t.push();
+        bm.bind(1, a1);
+        const expr* result1 = norm.normalize(v);
+        assert(result1 == a1);
+        t.pop();
+        
+        // After pop, v should be unbound again
+        const expr* result2 = norm.normalize(v);
+        assert(result2 == v);
+        
+        t.push();
+        bm.bind(1, a2);
+        const expr* result3 = norm.normalize(v);
+        assert(result3 == a2);
+        t.pop();
+        
+        t.pop();
+    }
+    
+    // Test 16: Normalize complex structure with mixed bindings
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* v1 = pool.var(1);
+        const expr* v2 = pool.var(2);
+        const expr* v3 = pool.var(3);
+        const expr* v4 = pool.var(4);
+        const expr* a = pool.atom("atom");
+        
+        const expr* c1 = pool.cons(v1, a);
+        const expr* c2 = pool.cons(v2, v3);
+        const expr* c3 = pool.cons(c1, c2);
+        
+        bm.bind(1, a);
+        bm.bind(2, v4);
+        bm.bind(4, a);
+        // v3 remains unbound
+        
+        const expr* result = norm.normalize(c3);
+        
+        const expr::cons& top = std::get<expr::cons>(result->content);
+        
+        const expr::cons& left = std::get<expr::cons>(top.lhs->content);
+        assert(left.lhs == a);
+        assert(left.rhs == a);
+        
+        const expr::cons& right = std::get<expr::cons>(top.rhs->content);
+        assert(right.lhs == a);
+        assert(right.rhs == v3);
+        
+        t.pop();
+    }
+    
+    // Test 17: Normalize after unification
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* v1 = pool.var(1);
+        const expr* v2 = pool.var(2);
+        const expr* a = pool.atom("unified");
+        const expr* c1 = pool.cons(v1, a);
+        const expr* c2 = pool.cons(a, v2);
+        
+        bool unified = bm.unify(c1, c2);
+        assert(unified);
+        
+        const expr* result1 = norm.normalize(c1);
+        const expr* result2 = norm.normalize(c2);
+        
+        const expr::cons& r1 = std::get<expr::cons>(result1->content);
+        const expr::cons& r2 = std::get<expr::cons>(result2->content);
+        
+        assert(r1.lhs == a);
+        assert(r1.rhs == a);
+        assert(r2.lhs == a);
+        assert(r2.rhs == a);
+        
+        t.pop();
+    }
+    
+    // Test 18: Normalize variable bound through multiple indirections
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* v1 = pool.var(1);
+        const expr* v2 = pool.var(2);
+        const expr* v3 = pool.var(3);
+        const expr* v4 = pool.var(4);
+        const expr* v5 = pool.var(5);
+        const expr* a = pool.atom("final");
+        
+        bm.bind(1, v2);
+        bm.bind(2, v3);
+        bm.bind(3, v4);
+        bm.bind(4, v5);
+        bm.bind(5, a);
+        
+        const expr* result = norm.normalize(v1);
+        
+        assert(result == a);
+        
+        t.pop();
+    }
+    
+    // Test 19: Normalize cons of cons with various binding patterns
+    {
+        trail t;
+        expr_pool pool(t);
+        bind_map bm(t);
+        normalizer norm(pool, bm);
+        
+        t.push();
+        
+        const expr* v1 = pool.var(1);
+        const expr* v2 = pool.var(2);
+        const expr* v3 = pool.var(3);
+        const expr* a1 = pool.atom("a1");
+        const expr* a2 = pool.atom("a2");
+        
+        const expr* inner1 = pool.cons(v1, a1);
+        const expr* inner2 = pool.cons(v2, v3);
+        const expr* outer = pool.cons(inner1, inner2);
+        
+        bm.bind(1, a2);
+        bm.bind(3, a1);
+        // v2 remains unbound
+        
+        const expr* result = norm.normalize(outer);
+        
+        const expr::cons& top = std::get<expr::cons>(result->content);
+        
+        const expr::cons& left = std::get<expr::cons>(top.lhs->content);
+        assert(left.lhs == a2);
+        assert(left.rhs == a1);
+        
+        const expr::cons& right = std::get<expr::cons>(top.rhs->content);
+        assert(right.lhs == v2);
+        assert(right.rhs == a1);
+        
+        t.pop();
+    }
+}
+
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
 
@@ -10557,6 +11101,8 @@ void unit_test_main() {
     TEST(test_expr_context_constructor);
     TEST(test_expr_context_fresh);
     TEST(test_expr_context_copy);
+    TEST(test_normalizer_constructor);
+    TEST(test_normalizer_normalize);
 }
 
 int main() {
