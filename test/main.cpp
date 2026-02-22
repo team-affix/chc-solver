@@ -1,6 +1,7 @@
 #include "../hpp/expr.hpp"
 #include "../hpp/bind_map.hpp"
 #include "../hpp/resolution.hpp"
+#include "../hpp/var_context.hpp"
 #include "test_utils.hpp"
 
 void test_trail_constructor() {
@@ -9135,6 +9136,620 @@ void test_resolution_pool_size() {
     }
 }
 
+void test_var_context_constructor() {
+    trail t;
+    
+    // Basic construction with trail reference
+    var_context ctx1(t);
+    assert(ctx1.variable_count == 0);
+    
+    // Multiple var_contexts can be constructed with same trail
+    var_context ctx2(t);
+    assert(ctx2.variable_count == 0);
+    
+    // Multiple var_contexts with different trails
+    trail t2;
+    var_context ctx3(t2);
+    assert(ctx3.variable_count == 0);
+    
+    // All contexts should be independent
+    t.push();
+    uint32_t v1 = ctx1.next();
+    assert(v1 == 0);
+    assert(ctx1.variable_count == 1);
+    assert(ctx2.variable_count == 0);  // ctx2 unchanged
+    assert(ctx3.variable_count == 0);  // ctx3 unchanged
+    
+    uint32_t v2 = ctx2.next();
+    assert(v2 == 0);
+    assert(ctx2.variable_count == 1);
+    assert(ctx1.variable_count == 1);  // ctx1 unchanged
+    
+    // Pop should affect both ctx1 and ctx2 since they share trail t
+    t.pop();
+    assert(ctx1.variable_count == 0);
+    assert(ctx2.variable_count == 0);
+    
+    // ctx3 with different trail is unaffected
+    assert(ctx3.variable_count == 0);
+}
+
+void test_var_context_next() {
+    // Test 1: Basic next() calls - verify sequential indices
+    {
+        trail t;
+        var_context ctx(t);
+        
+        t.push();
+        assert(ctx.variable_count == 0);
+        assert(t.undo_stack.size() == 0);
+        
+        uint32_t v0 = ctx.next();
+        assert(v0 == 0);
+        assert(ctx.variable_count == 1);
+        assert(t.undo_stack.size() == 1);  // One undo logged
+        
+        uint32_t v1 = ctx.next();
+        assert(v1 == 1);
+        assert(ctx.variable_count == 2);
+        assert(t.undo_stack.size() == 2);
+        
+        uint32_t v2 = ctx.next();
+        assert(v2 == 2);
+        assert(ctx.variable_count == 3);
+        assert(t.undo_stack.size() == 3);
+        
+        uint32_t v3 = ctx.next();
+        assert(v3 == 3);
+        assert(ctx.variable_count == 4);
+        assert(t.undo_stack.size() == 4);
+        
+        t.pop();
+        assert(ctx.variable_count == 0);
+        assert(t.undo_stack.size() == 0);
+    }
+    
+    // Test 2: Many sequential calls
+    {
+        trail t;
+        var_context ctx(t);
+        
+        t.push();
+        
+        for (uint32_t i = 0; i < 100; ++i) {
+            uint32_t v = ctx.next();
+            assert(v == i);
+            assert(ctx.variable_count == i + 1);
+        }
+        assert(ctx.variable_count == 100);
+        assert(t.undo_stack.size() == 100);
+        
+        t.pop();
+        assert(ctx.variable_count == 0);
+    }
+    
+    // Test 3: Backtracking - single frame
+    {
+        trail t;
+        var_context ctx(t);
+        
+        size_t count_before = ctx.variable_count;
+        assert(count_before == 0);
+        
+        t.push();
+        uint32_t v1 = ctx.next();
+        uint32_t v2 = ctx.next();
+        uint32_t v3 = ctx.next();
+        assert(v1 == 0);
+        assert(v2 == 1);
+        assert(v3 == 2);
+        assert(ctx.variable_count == 3);
+        
+        t.pop();
+        assert(ctx.variable_count == count_before);
+        assert(ctx.variable_count == 0);
+    }
+    
+    // Test 4: Backtracking - nested frames
+    {
+        trail t;
+        var_context ctx(t);
+        
+        t.push();  // Frame 1
+        assert(ctx.variable_count == 0);
+        assert(t.frame_boundary_stack.size() == 1);
+        
+        uint32_t v0 = ctx.next();
+        uint32_t v1 = ctx.next();
+        assert(v0 == 0);
+        assert(v1 == 1);
+        assert(ctx.variable_count == 2);
+        size_t checkpoint1 = ctx.variable_count;
+        
+        t.push();  // Frame 2
+        assert(t.frame_boundary_stack.size() == 2);
+        uint32_t v2 = ctx.next();
+        uint32_t v3 = ctx.next();
+        uint32_t v4 = ctx.next();
+        assert(v2 == 2);
+        assert(v3 == 3);
+        assert(v4 == 4);
+        assert(ctx.variable_count == 5);
+        size_t checkpoint2 = ctx.variable_count;
+        
+        t.push();  // Frame 3
+        assert(t.frame_boundary_stack.size() == 3);
+        uint32_t v5 = ctx.next();
+        assert(v5 == 5);
+        assert(ctx.variable_count == 6);
+        
+        t.pop();  // Pop frame 3
+        assert(ctx.variable_count == checkpoint2);
+        assert(ctx.variable_count == 5);
+        
+        t.pop();  // Pop frame 2
+        assert(ctx.variable_count == checkpoint1);
+        assert(ctx.variable_count == 2);
+        
+        t.pop();  // Pop frame 1
+        assert(ctx.variable_count == 0);
+    }
+    
+    // Test 5: Re-interning after backtrack - should reuse same indices
+    {
+        trail t;
+        var_context ctx(t);
+        
+        t.push();
+        uint32_t first_v0 = ctx.next();
+        uint32_t first_v1 = ctx.next();
+        assert(first_v0 == 0);
+        assert(first_v1 == 1);
+        assert(ctx.variable_count == 2);
+        
+        t.pop();
+        assert(ctx.variable_count == 0);
+        
+        // Call next() again - should get same indices
+        t.push();
+        uint32_t second_v0 = ctx.next();
+        uint32_t second_v1 = ctx.next();
+        assert(second_v0 == 0);
+        assert(second_v1 == 1);
+        assert(second_v0 == first_v0);
+        assert(second_v1 == first_v1);
+        assert(ctx.variable_count == 2);
+        
+        t.pop();
+    }
+    
+    // Test 6: Complex nested scenario with checkpoints
+    {
+        trail t;
+        var_context ctx(t);
+        
+        size_t checkpoint_start = ctx.variable_count;
+        assert(checkpoint_start == 0);
+        
+        t.push();  // Frame A
+        ctx.next();  // 0
+        ctx.next();  // 1
+        size_t checkpoint_a = ctx.variable_count;
+        assert(checkpoint_a == 2);
+        
+        t.push();  // Frame B
+        ctx.next();  // 2
+        ctx.next();  // 3
+        ctx.next();  // 4
+        size_t checkpoint_b = ctx.variable_count;
+        assert(checkpoint_b == 5);
+        
+        t.push();  // Frame C
+        ctx.next();  // 5
+        size_t checkpoint_c = ctx.variable_count;
+        assert(checkpoint_c == 6);
+        
+        // Pop Frame C
+        t.pop();
+        assert(ctx.variable_count == checkpoint_b);
+        assert(ctx.variable_count == 5);
+        
+        // Pop Frame B
+        t.pop();
+        assert(ctx.variable_count == checkpoint_a);
+        assert(ctx.variable_count == 2);
+        
+        // Pop Frame A
+        t.pop();
+        assert(ctx.variable_count == checkpoint_start);
+        assert(ctx.variable_count == 0);
+    }
+    
+    // Test 7: Empty frames - push/pop with no next() calls
+    {
+        trail t;
+        var_context ctx(t);
+        
+        t.push();
+        ctx.next();
+        ctx.next();
+        assert(ctx.variable_count == 2);
+        
+        t.push();  // Empty frame
+        // No next() calls
+        assert(ctx.variable_count == 2);
+        
+        t.pop();  // Pop empty frame
+        assert(ctx.variable_count == 2);  // Should remain unchanged
+        
+        t.pop();
+        assert(ctx.variable_count == 0);
+    }
+    
+    // Test 8: Multiple var_contexts with shared trail
+    {
+        trail t;
+        var_context ctx1(t);
+        var_context ctx2(t);
+        
+        t.push();
+        
+        uint32_t v1 = ctx1.next();
+        assert(v1 == 0);
+        assert(ctx1.variable_count == 1);
+        assert(ctx2.variable_count == 0);  // Independent
+        
+        uint32_t v2 = ctx2.next();
+        assert(v2 == 0);
+        assert(ctx2.variable_count == 1);
+        assert(ctx1.variable_count == 1);  // Unchanged
+        
+        uint32_t v3 = ctx1.next();
+        assert(v3 == 1);
+        assert(ctx1.variable_count == 2);
+        assert(ctx2.variable_count == 1);  // Still unchanged
+        
+        // Pop should restore both contexts
+        t.pop();
+        assert(ctx1.variable_count == 0);
+        assert(ctx2.variable_count == 0);
+    }
+    
+    // Test 9: Edge case - many variables
+    {
+        trail t;
+        var_context ctx(t);
+        
+        t.push();
+        
+        for (uint32_t i = 0; i < 1000; ++i) {
+            uint32_t v = ctx.next();
+            assert(v == i);
+            assert(ctx.variable_count == i + 1);
+        }
+        assert(ctx.variable_count == 1000);
+        assert(t.undo_stack.size() == 1000);
+        
+        t.pop();
+        assert(ctx.variable_count == 0);
+        assert(t.undo_stack.size() == 0);
+    }
+    
+    // Test 10: Post-backtrack continuation
+    {
+        trail t;
+        var_context ctx(t);
+        
+        t.push();
+        ctx.next();  // 0
+        ctx.next();  // 1
+        ctx.next();  // 2
+        assert(ctx.variable_count == 3);
+        
+        t.push();
+        ctx.next();  // 3
+        ctx.next();  // 4
+        assert(ctx.variable_count == 5);
+        
+        t.pop();  // Back to 3
+        assert(ctx.variable_count == 3);
+        
+        // Continue from 3
+        uint32_t v = ctx.next();
+        assert(v == 3);
+        assert(ctx.variable_count == 4);
+        
+        v = ctx.next();
+        assert(v == 4);
+        assert(ctx.variable_count == 5);
+        
+        t.pop();
+        assert(ctx.variable_count == 0);
+    }
+    
+    // Test 11: Deeply nested frames with precise tracking
+    {
+        trail t;
+        var_context ctx(t);
+        
+        t.push();  // Level 1
+        assert(ctx.variable_count == 0);
+        assert(t.undo_stack.size() == 0);
+        
+        uint32_t v0 = ctx.next();
+        assert(v0 == 0);
+        assert(ctx.variable_count == 1);
+        assert(t.undo_stack.size() == 1);
+        
+        t.push();  // Level 2
+        assert(t.frame_boundary_stack.size() == 2);
+        uint32_t v1 = ctx.next();
+        assert(v1 == 1);
+        assert(ctx.variable_count == 2);
+        assert(t.undo_stack.size() == 2);
+        
+        t.push();  // Level 3
+        assert(t.frame_boundary_stack.size() == 3);
+        uint32_t v2 = ctx.next();
+        assert(v2 == 2);
+        assert(ctx.variable_count == 3);
+        assert(t.undo_stack.size() == 3);
+        
+        t.push();  // Level 4
+        assert(t.frame_boundary_stack.size() == 4);
+        uint32_t v3 = ctx.next();
+        assert(v3 == 3);
+        assert(ctx.variable_count == 4);
+        assert(t.undo_stack.size() == 4);
+        
+        t.push();  // Level 5
+        assert(t.frame_boundary_stack.size() == 5);
+        uint32_t v4 = ctx.next();
+        assert(v4 == 4);
+        assert(ctx.variable_count == 5);
+        assert(t.undo_stack.size() == 5);
+        
+        // Pop all levels
+        t.pop();
+        assert(ctx.variable_count == 4);
+        assert(t.undo_stack.size() == 4);
+        
+        t.pop();
+        assert(ctx.variable_count == 3);
+        assert(t.undo_stack.size() == 3);
+        
+        t.pop();
+        assert(ctx.variable_count == 2);
+        assert(t.undo_stack.size() == 2);
+        
+        t.pop();
+        assert(ctx.variable_count == 1);
+        assert(t.undo_stack.size() == 1);
+        
+        t.pop();
+        assert(ctx.variable_count == 0);
+        assert(t.undo_stack.size() == 0);
+    }
+    
+    // Test 12: Interleaved push/pop/next operations
+    {
+        trail t;
+        var_context ctx(t);
+        
+        t.push();  // Frame 1
+        uint32_t v0 = ctx.next();
+        assert(v0 == 0);
+        assert(ctx.variable_count == 1);
+        
+        t.push();  // Frame 2
+        uint32_t v1 = ctx.next();
+        assert(v1 == 1);
+        assert(ctx.variable_count == 2);
+        
+        t.pop();  // Pop frame 2
+        assert(ctx.variable_count == 1);
+        
+        t.push();  // New frame 2
+        uint32_t v1_again = ctx.next();
+        assert(v1_again == 1);  // Same index as before
+        assert(ctx.variable_count == 2);
+        
+        t.push();  // Frame 3
+        uint32_t v2 = ctx.next();
+        assert(v2 == 2);
+        assert(ctx.variable_count == 3);
+        
+        t.pop();  // Pop frame 3
+        assert(ctx.variable_count == 2);
+        
+        t.pop();  // Pop frame 2
+        assert(ctx.variable_count == 1);
+        
+        t.pop();  // Pop frame 1
+        assert(ctx.variable_count == 0);
+    }
+    
+    // Test 13: Complex nested scenario - Frame A, B, C with partial pops
+    {
+        trail t;
+        var_context ctx(t);
+        
+        size_t checkpoint_start = ctx.variable_count;
+        assert(checkpoint_start == 0);
+        
+        t.push();  // Frame A
+        assert(ctx.variable_count == 0);
+        assert(t.undo_stack.size() == 0);
+        
+        ctx.next();  // 0
+        assert(ctx.variable_count == 1);
+        assert(t.undo_stack.size() == 1);
+        
+        ctx.next();  // 1
+        assert(ctx.variable_count == 2);
+        assert(t.undo_stack.size() == 2);
+        
+        size_t checkpoint_a = ctx.variable_count;
+        assert(checkpoint_a == 2);
+        
+        t.push();  // Frame B
+        assert(t.frame_boundary_stack.size() == 2);
+        assert(ctx.variable_count == 2);
+        
+        ctx.next();  // 2
+        assert(ctx.variable_count == 3);
+        
+        size_t checkpoint_b = ctx.variable_count;
+        assert(checkpoint_b == 3);
+        
+        // Add more to Frame B
+        ctx.next();  // 3
+        ctx.next();  // 4
+        assert(ctx.variable_count == 5);
+        size_t checkpoint_b_final = ctx.variable_count;
+        
+        t.push();  // Frame C
+        assert(t.frame_boundary_stack.size() == 3);
+        assert(ctx.variable_count == 5);
+        
+        ctx.next();  // 5
+        assert(ctx.variable_count == 6);
+        size_t checkpoint_c = ctx.variable_count;
+        
+        // Pop Frame C
+        t.pop();
+        assert(ctx.variable_count == checkpoint_b_final);
+        assert(ctx.variable_count == 5);
+        assert(t.frame_boundary_stack.size() == 2);
+        
+        // Pop Frame B
+        t.pop();
+        assert(ctx.variable_count == checkpoint_a);
+        assert(ctx.variable_count == 2);
+        assert(t.frame_boundary_stack.size() == 1);
+        
+        // Pop Frame A
+        t.pop();
+        assert(ctx.variable_count == checkpoint_start);
+        assert(ctx.variable_count == 0);
+        assert(t.frame_boundary_stack.size() == 0);
+    }
+    
+    // Test 14: Multiple operations per frame with precise undo_stack tracking
+    {
+        trail t;
+        var_context ctx(t);
+        
+        t.push();  // Level 1
+        assert(t.frame_boundary_stack.top() == 0);
+        
+        ctx.next();
+        assert(t.undo_stack.size() == 1);
+        ctx.next();
+        assert(t.undo_stack.size() == 2);
+        assert(ctx.variable_count == 2);
+        
+        t.push();  // Level 2
+        assert(t.frame_boundary_stack.top() == 2);
+        
+        ctx.next();
+        assert(t.undo_stack.size() == 3);
+        ctx.next();
+        assert(t.undo_stack.size() == 4);
+        ctx.next();
+        assert(t.undo_stack.size() == 5);
+        assert(ctx.variable_count == 5);
+        
+        t.push();  // Level 3
+        assert(t.frame_boundary_stack.top() == 5);
+        
+        ctx.next();
+        assert(t.undo_stack.size() == 6);
+        assert(ctx.variable_count == 6);
+        
+        t.pop();  // Pop level 3
+        assert(t.undo_stack.size() == 5);
+        assert(ctx.variable_count == 5);
+        
+        t.pop();  // Pop level 2
+        assert(t.undo_stack.size() == 2);
+        assert(ctx.variable_count == 2);
+        
+        t.pop();  // Pop level 1
+        assert(t.undo_stack.size() == 0);
+        assert(ctx.variable_count == 0);
+    }
+    
+    // Test 15: Verify no duplicate indices within a sequence
+    {
+        trail t;
+        var_context ctx(t);
+        
+        t.push();
+        
+        std::set<uint32_t> seen_indices;
+        for (int i = 0; i < 50; ++i) {
+            uint32_t v = ctx.next();
+            assert(seen_indices.count(v) == 0);  // Should be unique
+            seen_indices.insert(v);
+            assert(v == static_cast<uint32_t>(i));
+        }
+        assert(seen_indices.size() == 50);
+        assert(ctx.variable_count == 50);
+        
+        t.pop();
+    }
+    
+    // Test 16: Mixed nesting with multiple next() calls
+    {
+        trail t;
+        var_context ctx(t);
+        
+        t.push();
+        assert(ctx.variable_count == 0);
+        
+        ctx.next();
+        ctx.next();
+        assert(ctx.variable_count == 2);
+        
+        t.push();
+        ctx.next();
+        assert(ctx.variable_count == 3);
+        
+        t.pop();
+        assert(ctx.variable_count == 2);
+        
+        t.push();
+        ctx.next();
+        ctx.next();
+        assert(ctx.variable_count == 4);
+        
+        t.pop();
+        assert(ctx.variable_count == 2);
+        
+        t.pop();
+        assert(ctx.variable_count == 0);
+    }
+    
+    // Test 17: Verify exact undo_stack behavior
+    {
+        trail t;
+        var_context ctx(t);
+        
+        t.push();
+        size_t undo_before = t.undo_stack.size();
+        assert(undo_before == 0);
+        
+        for (int i = 0; i < 10; ++i) {
+            ctx.next();
+            assert(t.undo_stack.size() == undo_before + i + 1);
+        }
+        
+        t.pop();
+        assert(t.undo_stack.size() == 0);
+    }
+}
+
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
 
@@ -9160,6 +9775,8 @@ void unit_test_main() {
     TEST(test_resolution_pool_pin);
     TEST(test_resolution_pool_trim);
     TEST(test_resolution_pool_size);
+    TEST(test_var_context_constructor);
+    TEST(test_var_context_next);
 }
 
 int main() {
