@@ -6,7 +6,7 @@ normalizer::normalizer(expr_pool& expr_pool_ref, bind_map& bind_map_ref)
 
 }
 
-const expr* normalizer::normalize(const expr* e) {
+const expr* normalizer::operator()(const expr* e) {
     // First, get the whnf
     e = bind_map_ref.whnf(e);
     
@@ -20,8 +20,8 @@ const expr* normalizer::normalize(const expr* e) {
 
     // If the expression is a cons cell, normalize the lhs and rhs
     if (const expr::cons* c = std::get_if<expr::cons>(&e->content)) {
-        const expr* normalized_lhs = normalize(c->lhs);
-        const expr* normalized_rhs = normalize(c->rhs);
+        const expr* normalized_lhs = operator()(c->lhs);
+        const expr* normalized_rhs = operator()(c->rhs);
         return expr_pool_ref.cons(normalized_lhs, normalized_rhs);
     }
 

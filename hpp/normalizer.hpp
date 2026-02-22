@@ -6,7 +6,7 @@
 
 struct normalizer {
     normalizer(expr_pool&, bind_map&);
-    const expr* normalize(const expr*);
+    const expr* operator()(const expr*);
 #ifndef DEBUG
 private:
 #endif
