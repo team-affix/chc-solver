@@ -1,8 +1,8 @@
 #include <stdexcept>
 #include "../hpp/copier.hpp"
 
-copier::copier(var_context& var_context_ref, expr_pool& expr_pool_ref)
-    : var_context_ref(var_context_ref), expr_pool_ref(expr_pool_ref) {
+copier::copier(sequencer& sequencer_ref, expr_pool& expr_pool_ref)
+    : sequencer_ref(sequencer_ref), expr_pool_ref(expr_pool_ref) {
 
 }
 
@@ -18,7 +18,7 @@ const expr* copier::operator()(const expr* e, std::map<uint32_t, uint32_t>& vari
         
         // If the variable has does not have a mapping, create one
         if (it == variable_map.end())
-            it = variable_map.insert({v->index, var_context_ref.next()}).first;
+            it = variable_map.insert({v->index, sequencer_ref()}).first;
 
         // Return the mapped variable
         return expr_pool_ref.var(it->second);
