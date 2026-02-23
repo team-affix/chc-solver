@@ -1,6 +1,6 @@
 #include "../hpp/expr.hpp"
 #include "../hpp/bind_map.hpp"
-#include "../hpp/resolution.hpp"
+#include "../hpp/lineage.hpp"
 #include "../hpp/sequencer.hpp"
 #include "../hpp/copier.hpp"
 #include "../hpp/normalizer.hpp"
@@ -7641,7 +7641,7 @@ void test_bind_map_unify() {
         
 //         assert(ptr1 != nullptr);
 //         assert(ptr1->parent == nullptr);
-//         assert(ptr1->chosen_rule == 1);
+//         assert(ptr1->idx == 1);
 //         assert(ptr1->body_index == 0);
 //         assert(pool.size() == 1);
 //         assert(pool.constraint_ids.size() == 1);
@@ -7657,7 +7657,7 @@ void test_bind_map_unify() {
         
 //         assert(ptr2 != nullptr);
 //         assert(ptr2->parent == nullptr);
-//         assert(ptr2->chosen_rule == 2);
+//         assert(ptr2->idx == 2);
 //         assert(ptr2->body_index == 1);
 //         assert(pool.size() == 1);
 //         assert(pool.constraint_ids.size() == 1);
@@ -7692,7 +7692,7 @@ void test_bind_map_unify() {
         
 //         assert(ptr4 != nullptr);
 //         assert(ptr4->parent == parent);
-//         assert(ptr4->chosen_rule == 5);
+//         assert(ptr4->idx == 5);
 //         assert(ptr4->body_index == 2);
 //         assert(pool.size() == 2);
 //         assert(pool.constraint_ids.size() == 2);
@@ -7712,7 +7712,7 @@ void test_bind_map_unify() {
 //         assert(pool.size() == 2);
 //         assert(pool.constraint_ids.size() == 2);
 //         assert(ptr5->parent == parent);
-//         assert(ptr5->chosen_rule == 10);
+//         assert(ptr5->idx == 10);
 //         assert(ptr5->body_index == 0);
         
 //         constraint_id id6{parent, 10, 1};
@@ -7720,7 +7720,7 @@ void test_bind_map_unify() {
 //         assert(pool.size() == 3);
 //         assert(pool.constraint_ids.size() == 3);
 //         assert(ptr6->parent == parent);
-//         assert(ptr6->chosen_rule == 10);
+//         assert(ptr6->idx == 10);
 //         assert(ptr6->body_index == 1);
 //         assert(ptr5 != ptr6);  // Different body_index means different constraint_ids
         
@@ -7749,7 +7749,7 @@ void test_bind_map_unify() {
 //         assert(pool.size() == 3);
 //         assert(pool.constraint_ids.size() == 3);
 //         assert(ptr8->parent == parent1);
-//         assert(ptr8->chosen_rule == 99);
+//         assert(ptr8->idx == 99);
 //         assert(ptr8->body_index == 5);
         
 //         constraint_id id9{parent2, 99, 5};
@@ -7758,7 +7758,7 @@ void test_bind_map_unify() {
 //         assert(pool.size() == 4);
 //         assert(pool.constraint_ids.size() == 4);
 //         assert(ptr9->parent == parent2);
-//         assert(ptr9->chosen_rule == 99);
+//         assert(ptr9->idx == 99);
 //         assert(ptr9->body_index == 5);
 //     }
     
@@ -7774,19 +7774,19 @@ void test_bind_map_unify() {
 //         const constraint_id* p2 = pool.intern(std::move(id10));
 //         assert(pool.size() == 2);
 //         assert(pool.constraint_ids.size() == 2);
-//         assert(p2->chosen_rule == 20);
+//         assert(p2->idx == 20);
         
 //         constraint_id id11{p2, 21, 0};
 //         const constraint_id* p3 = pool.intern(std::move(id11));
 //         assert(pool.size() == 3);
 //         assert(pool.constraint_ids.size() == 3);
-//         assert(p3->chosen_rule == 21);
+//         assert(p3->idx == 21);
         
 //         constraint_id id12{p3, 22, 0};
 //         const constraint_id* p4 = pool.intern(std::move(id12));
 //         assert(pool.size() == 4);
 //         assert(pool.constraint_ids.size() == 4);
-//         assert(p4->chosen_rule == 22);
+//         assert(p4->idx == 22);
         
 //         // Verify the chain
 //         assert(p4->parent == p3);
@@ -7801,7 +7801,7 @@ void test_bind_map_unify() {
         
 //         constraint_id id13{nullptr, 1000, 999};
 //         const constraint_id* ptr13 = pool.intern(std::move(id13));
-//         assert(ptr13->chosen_rule == 1000);
+//         assert(ptr13->idx == 1000);
 //         assert(ptr13->body_index == 999);
 //         assert(ptr13->parent == nullptr);
 //         assert(pool.size() == 1);
@@ -7815,7 +7815,7 @@ void test_bind_map_unify() {
         
 //         constraint_id id14{nullptr, 0, 0};
 //         const constraint_id* ptr14 = pool.intern(std::move(id14));
-//         assert(ptr14->chosen_rule == 0);
+//         assert(ptr14->idx == 0);
 //         assert(ptr14->body_index == 0);
 //         assert(ptr14->parent == nullptr);
 //         assert(pool.size() == 1);
@@ -7843,8 +7843,8 @@ void test_bind_map_unify() {
 //         assert(ptr1 != ptr2);
 //         assert(ptr1->parent == parent);
 //         assert(ptr2->parent == parent);
-//         assert(ptr1->chosen_rule == 10);
-//         assert(ptr2->chosen_rule == 20);
+//         assert(ptr1->idx == 10);
+//         assert(ptr2->idx == 20);
 //         assert(ptr1->body_index == 5);
 //         assert(ptr2->body_index == 5);
 //     }
@@ -7884,7 +7884,7 @@ void test_bind_map_unify() {
         
 //         // Store values
 //         const constraint_id* parent_stored = ptr1->parent;
-//         rule_id rule_stored = ptr1->chosen_rule;
+//         rule_id rule_stored = ptr1->idx;
 //         uint32_t index_stored = ptr1->body_index;
         
 //         // Add many more entries
@@ -7895,7 +7895,7 @@ void test_bind_map_unify() {
         
 //         // Original pointer should still be valid with same values
 //         assert(ptr1->parent == parent_stored);
-//         assert(ptr1->chosen_rule == rule_stored);
+//         assert(ptr1->idx == rule_stored);
 //         assert(ptr1->body_index == index_stored);
 //         assert(pool.constraint_ids.count(*ptr1) == 1);
 //     }
@@ -7911,7 +7911,7 @@ void test_bind_map_unify() {
         
 //         assert(child1 != nullptr);
 //         assert(child1->parent == nullptr);
-//         assert(child1->chosen_rule == 1);
+//         assert(child1->idx == 1);
 //         assert(child1->body_index == 0);
 //         assert(pool.size() == 1);
 //         assert(pool.constraint_ids.size() == 1);
@@ -7926,7 +7926,7 @@ void test_bind_map_unify() {
         
 //         assert(child2 != nullptr);
 //         assert(child2->parent == nullptr);
-//         assert(child2->chosen_rule == 5);
+//         assert(child2->idx == 5);
 //         assert(child2->body_index == 2);
 //         assert(pool.size() == 1);
 //     }
@@ -7957,7 +7957,7 @@ void test_bind_map_unify() {
         
 //         assert(child != nullptr);
 //         assert(child->parent == parent);
-//         assert(child->chosen_rule == 11);
+//         assert(child->idx == 11);
 //         assert(child->body_index == 1);
 //         assert(pool.size() == 2);
 //         assert(pool.constraint_ids.count(*child) == 1);
@@ -7975,21 +7975,21 @@ void test_bind_map_unify() {
 //         assert(pool.size() == 2);
 //         assert(pool.constraint_ids.size() == 2);
 //         assert(child1->parent == parent);
-//         assert(child1->chosen_rule == 21);
+//         assert(child1->idx == 21);
 //         assert(child1->body_index == 0);
         
 //         const constraint_id* child2 = pool.fulfillment_child(parent, 21, 1);
 //         assert(pool.size() == 3);
 //         assert(pool.constraint_ids.size() == 3);
 //         assert(child2->parent == parent);
-//         assert(child2->chosen_rule == 21);
+//         assert(child2->idx == 21);
 //         assert(child2->body_index == 1);
         
 //         const constraint_id* child3 = pool.fulfillment_child(parent, 21, 2);
 //         assert(pool.size() == 4);
 //         assert(pool.constraint_ids.size() == 4);
 //         assert(child3->parent == parent);
-//         assert(child3->chosen_rule == 21);
+//         assert(child3->idx == 21);
 //         assert(child3->body_index == 2);
         
 //         // All children should be distinct
@@ -8021,7 +8021,7 @@ void test_bind_map_unify() {
         
 //         const constraint_id* level0 = pool.fulfillment_child(nullptr, 100, 0);
 //         size_t size_after_level0 = pool.size();
-//         assert(level0->chosen_rule == 100);
+//         assert(level0->idx == 100);
 //         assert(level0->body_index == 0);
 //         assert(pool.constraint_ids.size() == size_after_level0);
         
@@ -8029,25 +8029,25 @@ void test_bind_map_unify() {
 //         assert(pool.size() == size_after_level0 + 1);
 //         assert(pool.constraint_ids.size() == size_after_level0 + 1);
 //         assert(level1->parent == level0);
-//         assert(level1->chosen_rule == 101);
+//         assert(level1->idx == 101);
         
 //         const constraint_id* level2 = pool.fulfillment_child(level1, 102, 0);
 //         assert(pool.size() == size_after_level0 + 2);
 //         assert(pool.constraint_ids.size() == size_after_level0 + 2);
 //         assert(level2->parent == level1);
-//         assert(level2->chosen_rule == 102);
+//         assert(level2->idx == 102);
         
 //         const constraint_id* level3 = pool.fulfillment_child(level2, 103, 0);
 //         assert(pool.size() == size_after_level0 + 3);
 //         assert(pool.constraint_ids.size() == size_after_level0 + 3);
 //         assert(level3->parent == level2);
-//         assert(level3->chosen_rule == 103);
+//         assert(level3->idx == 103);
         
 //         const constraint_id* level4 = pool.fulfillment_child(level3, 104, 0);
 //         assert(pool.size() == size_after_level0 + 4);
 //         assert(pool.constraint_ids.size() == size_after_level0 + 4);
 //         assert(level4->parent == level3);
-//         assert(level4->chosen_rule == 104);
+//         assert(level4->idx == 104);
         
 //         // Verify the full chain
 //         assert(level4->parent->parent->parent->parent == level0);
@@ -8076,8 +8076,8 @@ void test_bind_map_unify() {
 //         assert(child1 != child2);
 //         assert(child1->parent == parent1);
 //         assert(child2->parent == parent2);
-//         assert(child1->chosen_rule == child2->chosen_rule);
-//         assert(child1->chosen_rule == 50);
+//         assert(child1->idx == child2->idx);
+//         assert(child1->idx == 50);
 //         assert(child1->body_index == child2->body_index);
 //         assert(child1->body_index == 5);
 //     }
@@ -8140,10 +8140,10 @@ void test_bind_map_unify() {
 //         assert(child1->parent == parent);
 //         assert(child2->parent == parent);
 //         assert(child3->parent == parent);
-//         assert(child0->chosen_rule == 401);
-//         assert(child1->chosen_rule == 401);
-//         assert(child2->chosen_rule == 401);
-//         assert(child3->chosen_rule == 401);
+//         assert(child0->idx == 401);
+//         assert(child1->idx == 401);
+//         assert(child2->idx == 401);
+//         assert(child3->idx == 401);
         
 //         // Verify body_index values
 //         assert(child0->body_index == 0);
@@ -8175,7 +8175,7 @@ void test_bind_map_unify() {
 //         constraint_id_pool pool;
         
 //         const constraint_id* max_child = pool.fulfillment_child(nullptr, UINT32_MAX, UINT32_MAX);
-//         assert(max_child->chosen_rule == UINT32_MAX);
+//         assert(max_child->idx == UINT32_MAX);
 //         assert(max_child->body_index == UINT32_MAX);
 //         assert(max_child->parent == nullptr);
 //         assert(pool.size() == 1);
@@ -8208,9 +8208,9 @@ void test_bind_map_unify() {
 //         assert(child1->body_index == 7);
 //         assert(child2->body_index == 7);
 //         assert(child3->body_index == 7);
-//         assert(child1->chosen_rule == 10);
-//         assert(child2->chosen_rule == 20);
-//         assert(child3->chosen_rule == 30);
+//         assert(child1->idx == 10);
+//         assert(child2->idx == 20);
+//         assert(child3->idx == 30);
 //     }
     
 //     // Test 14: Multiple duplicates in sequence
@@ -8245,10 +8245,10 @@ void test_bind_map_unify() {
         
 //         // Store the values
 //         const constraint_id* root_parent = root->parent;
-//         rule_id root_rule = root->chosen_rule;
+//         rule_id root_rule = root->idx;
 //         uint32_t root_index = root->body_index;
 //         const constraint_id* child_parent = child->parent;
-//         rule_id child_rule = child->chosen_rule;
+//         rule_id child_rule = child->idx;
 //         uint32_t child_index = child->body_index;
         
 //         // Add many more entries
@@ -8258,172 +8258,175 @@ void test_bind_map_unify() {
         
 //         // Original pointers should still be valid with same values
 //         assert(root->parent == root_parent);
-//         assert(root->chosen_rule == root_rule);
+//         assert(root->idx == root_rule);
 //         assert(root->body_index == root_index);
 //         assert(child->parent == child_parent);
-//         assert(child->chosen_rule == child_rule);
+//         assert(child->idx == child_rule);
 //         assert(child->body_index == child_index);
 //         assert(child->parent == root);  // Relationship still valid
 //     }
 // }
 
-void test_resolution_pool_constructor() {
+void test_lineage_pool_constructor() {
     // Basic construction
-    resolution_pool pool1;
+    lineage_pool pool1;
     assert(pool1.size() == 0);
-    assert(pool1.resolutions.size() == 0);
-    assert(pool1.resolutions.empty());
+    assert(pool1.lineages.size() == 0);
+    assert(pool1.lineages.empty());
 }
 
-void test_resolution_pool_intern() {
+void test_lineage_pool_intern() {
     // Test 1: Intern a simple resolution with nullptr parent (root)
     {
-        resolution_pool pool;
+        lineage_pool pool;
         assert(pool.size() == 0);
         
-        resolution r1{nullptr, 1, 10};
-        const resolution* ptr1 = pool.intern(std::move(r1));
+        lineage l1{nullptr, lineage_type::GOAL, 1};
+        const lineage* ptr1 = pool.intern(std::move(l1));
         
         assert(ptr1 != nullptr);
         assert(ptr1->parent == nullptr);
-        assert(ptr1->chosen_subgoal == 1);
-        assert(ptr1->chosen_rule == 10);
+        assert(ptr1->type == lineage_type::GOAL);
+        assert(ptr1->idx == 1);
         assert(pool.size() == 1);
-        assert(pool.resolutions.size() == 1);
-        assert(pool.resolutions.count(*ptr1) == 1);
-        assert(pool.resolutions.at(*ptr1) == false);  // Not pinned by default
+        assert(pool.lineages.size() == 1);
+        assert(pool.lineages.count(*ptr1) == 1);
+        assert(pool.lineages.at(*ptr1) == false);  // Not pinned by default
     }
     
     // Test 2: Intern a different resolution
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        resolution r2{nullptr, 2, 20};
-        const resolution* ptr2 = pool.intern(std::move(r2));
+        lineage l2{nullptr, lineage_type::RESOLUTION, 2};
+        const lineage* ptr2 = pool.intern(std::move(l2));
         
         assert(ptr2 != nullptr);
         assert(ptr2->parent == nullptr);
-        assert(ptr2->chosen_subgoal == 2);
-        assert(ptr2->chosen_rule == 20);
+        assert(ptr2->type == lineage_type::RESOLUTION);
+        assert(ptr2->idx == 2);
         assert(pool.size() == 1);
-        assert(pool.resolutions.size() == 1);
-        assert(pool.resolutions.at(*ptr2) == false);
+        assert(pool.lineages.size() == 1);
+        assert(pool.lineages.at(*ptr2) == false);
     }
     
     // Test 3: Intern duplicate - should return same pointer
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        resolution r1{nullptr, 1, 10};
-        const resolution* ptr1 = pool.intern(std::move(r1));
+        lineage l1{nullptr, lineage_type::GOAL, 1};
+        const lineage* ptr1 = pool.intern(std::move(l1));
         
-        resolution r3{nullptr, 1, 10};  // Same as r1
-        const resolution* ptr3 = pool.intern(std::move(r3));
+        lineage l3{nullptr, lineage_type::GOAL, 1};  // Same as l1
+        const lineage* ptr3 = pool.intern(std::move(l3));
         
         assert(ptr3 == ptr1);
         assert(pool.size() == 1);  // No new entry added
-        assert(pool.resolutions.size() == 1);
+        assert(pool.lineages.size() == 1);
     }
     
-    // Test 4: Intern resolution with parent pointer
+    // Test 4: Intern lineage with parent pointer
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
         // Create parent
-        resolution r_parent{nullptr, 1, 10};
-        const resolution* parent = pool.intern(std::move(r_parent));
-        assert(pool.resolutions.size() == 1);
+        lineage l_parent{nullptr, lineage_type::GOAL, 1};
+        const lineage* parent = pool.intern(std::move(l_parent));
+        assert(pool.lineages.size() == 1);
         
-        resolution r4{parent, 5, 50};
-        const resolution* ptr4 = pool.intern(std::move(r4));
+        lineage l4{parent, lineage_type::RESOLUTION, 5};
+        const lineage* ptr4 = pool.intern(std::move(l4));
         
         assert(ptr4 != nullptr);
         assert(ptr4->parent == parent);
-        assert(ptr4->chosen_subgoal == 5);
-        assert(ptr4->chosen_rule == 50);
+        assert(ptr4->type == lineage_type::RESOLUTION);
+        assert(ptr4->idx == 5);
         assert(pool.size() == 2);
-        assert(pool.resolutions.size() == 2);
-        assert(pool.resolutions.at(*ptr4) == false);
+        assert(pool.lineages.size() == 2);
+        assert(pool.lineages.at(*ptr4) == false);
     }
     
     // Test 5: Intern multiple with same parent
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
         // Create parent
-        resolution r_parent{nullptr, 2, 20};
-        const resolution* parent = pool.intern(std::move(r_parent));
+        lineage l_parent{nullptr, lineage_type::GOAL, 2};
+        const lineage* parent = pool.intern(std::move(l_parent));
         
-        resolution r5{parent, 10, 100};
-        const resolution* ptr5 = pool.intern(std::move(r5));
+        lineage l5{parent, lineage_type::RESOLUTION, 10};
+        const lineage* ptr5 = pool.intern(std::move(l5));
         assert(pool.size() == 2);
         assert(ptr5->parent == parent);
-        assert(ptr5->chosen_subgoal == 10);
-        assert(ptr5->chosen_rule == 100);
+        assert(ptr5->type == lineage_type::RESOLUTION);
+        assert(ptr5->idx == 10);
         
-        resolution r6{parent, 10, 101};
-        const resolution* ptr6 = pool.intern(std::move(r6));
+        lineage l6{parent, lineage_type::RESOLUTION, 11};
+        const lineage* ptr6 = pool.intern(std::move(l6));
         assert(pool.size() == 3);
         assert(ptr6->parent == parent);
-        assert(ptr6->chosen_subgoal == 10);
-        assert(ptr6->chosen_rule == 101);
-        assert(ptr5 != ptr6);  // Different rule means different resolution
+        assert(ptr6->type == lineage_type::RESOLUTION);
+        assert(ptr6->idx == 11);
+        assert(ptr5 != ptr6);  // Different idx means different lineage
         
-        // Same parent, same subgoal, same rule - duplicate
-        resolution r7{parent, 10, 100};
-        const resolution* ptr7 = pool.intern(std::move(r7));
+        // Same parent, same type, same idx - duplicate
+        lineage l7{parent, lineage_type::RESOLUTION, 10};
+        const lineage* ptr7 = pool.intern(std::move(l7));
         assert(ptr7 == ptr5);  // Should be same pointer
         assert(pool.size() == 3);  // No new entry
     }
     
-    // Test 6: Different parent, same subgoal and rule
+    // Test 6: Different parent, same type and idx
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
         // Create two different parents
-        resolution r_p1{nullptr, 1, 10};
-        const resolution* parent1 = pool.intern(std::move(r_p1));
+        lineage l_p1{nullptr, lineage_type::GOAL, 1};
+        const lineage* parent1 = pool.intern(std::move(l_p1));
         
-        resolution r_p2{nullptr, 2, 20};
-        const resolution* parent2 = pool.intern(std::move(r_p2));
+        lineage l_p2{nullptr, lineage_type::GOAL, 2};
+        const lineage* parent2 = pool.intern(std::move(l_p2));
         assert(parent1 != parent2);
         
-        resolution r8{parent1, 99, 999};
-        const resolution* ptr8 = pool.intern(std::move(r8));
+        lineage l8{parent1, lineage_type::RESOLUTION, 99};
+        const lineage* ptr8 = pool.intern(std::move(l8));
         assert(pool.size() == 3);
         assert(ptr8->parent == parent1);
         
-        resolution r9{parent2, 99, 999};
-        const resolution* ptr9 = pool.intern(std::move(r9));
-        assert(ptr9 != ptr8);  // Different parents, so different resolutions
+        lineage l9{parent2, lineage_type::RESOLUTION, 99};
+        const lineage* ptr9 = pool.intern(std::move(l9));
+        assert(ptr9 != ptr8);  // Different parents, so different lineages
         assert(pool.size() == 4);
         assert(ptr9->parent == parent2);
-        assert(ptr9->chosen_subgoal == 99);
-        assert(ptr9->chosen_rule == 999);
+        assert(ptr9->type == lineage_type::RESOLUTION);
+        assert(ptr9->idx == 99);
     }
     
     // Test 7: Chain of parents
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        resolution r1{nullptr, 1, 10};
-        const resolution* p1 = pool.intern(std::move(r1));
-        assert(pool.resolutions.size() == 1);
+        lineage l1{nullptr, lineage_type::GOAL, 1};
+        const lineage* p1 = pool.intern(std::move(l1));
+        assert(pool.lineages.size() == 1);
         
-        resolution r10{p1, 2, 20};
-        const resolution* p2 = pool.intern(std::move(r10));
+        lineage l10{p1, lineage_type::RESOLUTION, 2};
+        const lineage* p2 = pool.intern(std::move(l10));
         assert(pool.size() == 2);
-        assert(p2->chosen_subgoal == 2);
+        assert(p2->type == lineage_type::RESOLUTION);
+        assert(p2->idx == 2);
         
-        resolution r11{p2, 3, 30};
-        const resolution* p3 = pool.intern(std::move(r11));
+        lineage l11{p2, lineage_type::GOAL, 3};
+        const lineage* p3 = pool.intern(std::move(l11));
         assert(pool.size() == 3);
-        assert(p3->chosen_subgoal == 3);
+        assert(p3->type == lineage_type::GOAL);
+        assert(p3->idx == 3);
         
-        resolution r12{p3, 4, 40};
-        const resolution* p4 = pool.intern(std::move(r12));
+        lineage l12{p3, lineage_type::RESOLUTION, 4};
+        const lineage* p4 = pool.intern(std::move(l12));
         assert(pool.size() == 4);
-        assert(p4->chosen_subgoal == 4);
+        assert(p4->type == lineage_type::RESOLUTION);
+        assert(p4->idx == 4);
         
         // Verify the chain
         assert(p4->parent == p3);
@@ -8432,114 +8435,117 @@ void test_resolution_pool_intern() {
         assert(p1->parent == nullptr);
     }
     
-    // Test 8: Edge cases - maximum values
+    // Test 8: Edge cases - maximum idx value
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        resolution r13{nullptr, UINT32_MAX, UINT32_MAX};
-        const resolution* ptr13 = pool.intern(std::move(r13));
-        assert(ptr13->chosen_subgoal == UINT32_MAX);
-        assert(ptr13->chosen_rule == UINT32_MAX);
+        lineage l13{nullptr, lineage_type::GOAL, SIZE_MAX};
+        const lineage* ptr13 = pool.intern(std::move(l13));
+        assert(ptr13->type == lineage_type::GOAL);
+        assert(ptr13->idx == SIZE_MAX);
         assert(ptr13->parent == nullptr);
         assert(pool.size() == 1);
-        assert(pool.resolutions.at(*ptr13) == false);
+        assert(pool.lineages.at(*ptr13) == false);
     }
     
-    // Test 9: Zero values
+    // Test 9: Zero idx value
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        resolution r14{nullptr, 0, 0};
-        const resolution* ptr14 = pool.intern(std::move(r14));
-        assert(ptr14->chosen_subgoal == 0);
-        assert(ptr14->chosen_rule == 0);
+        lineage l14{nullptr, lineage_type::GOAL, 0};
+        const lineage* ptr14 = pool.intern(std::move(l14));
+        assert(ptr14->type == lineage_type::GOAL);
+        assert(ptr14->idx == 0);
         assert(ptr14->parent == nullptr);
         assert(pool.size() == 1);
-        assert(pool.resolutions.at(*ptr14) == false);
+        assert(pool.lineages.at(*ptr14) == false);
     }
 }
 
-void test_resolution_pool_make_resolution() {
-    // Test 1: Create root resolution (nullptr parent)
+void test_lineage_pool_make_lineage() {
+    // Test 1: Create root lineage (nullptr parent) - GOAL type
     {
-        resolution_pool pool;
+        lineage_pool pool;
         assert(pool.size() == 0);
         
-        const resolution* r1 = pool.make_resolution(nullptr, 1, 10);
+        const lineage* l1 = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
         
-        assert(r1 != nullptr);
-        assert(r1->parent == nullptr);
-        assert(r1->chosen_subgoal == 1);
-        assert(r1->chosen_rule == 10);
+        assert(l1 != nullptr);
+        assert(l1->parent == nullptr);
+        assert(l1->type == lineage_type::GOAL);
+        assert(l1->idx == 1);
         assert(pool.size() == 1);
-        assert(pool.resolutions.size() == 1);
-        assert(pool.resolutions.count(*r1) == 1);
-        assert(pool.resolutions.at(*r1) == false);
+        assert(pool.lineages.size() == 1);
+        assert(pool.lineages.count(*l1) == 1);
+        assert(pool.lineages.at(*l1) == false);
     }
     
-    // Test 2: Create another root with different parameters
+    // Test 2: Create another root with RESOLUTION type
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* r2 = pool.make_resolution(nullptr, 5, 50);
+        const lineage* l2 = pool.make_lineage(nullptr, lineage_type::RESOLUTION, 5);
         
-        assert(r2 != nullptr);
-        assert(r2->parent == nullptr);
-        assert(r2->chosen_subgoal == 5);
-        assert(r2->chosen_rule == 50);
+        assert(l2 != nullptr);
+        assert(l2->parent == nullptr);
+        assert(l2->type == lineage_type::RESOLUTION);
+        assert(l2->idx == 5);
         assert(pool.size() == 1);
     }
     
     // Test 3: Create duplicate root - should return same pointer
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* r1 = pool.make_resolution(nullptr, 1, 10);
-        const resolution* r3 = pool.make_resolution(nullptr, 1, 10);
+        const lineage* l1 = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
+        const lineage* l3 = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
         
-        assert(r3 == r1);  // Should be interned to same pointer
+        assert(l3 == l1);  // Should be interned to same pointer
         assert(pool.size() == 1);  // No new entry
-        assert(pool.resolutions.size() == 1);
+        assert(pool.lineages.size() == 1);
     }
     
     // Test 4: Create child with parent
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* parent = pool.make_resolution(nullptr, 10, 100);
+        const lineage* parent = pool.make_lineage(nullptr, lineage_type::GOAL, 10);
         assert(pool.size() == 1);
         
-        const resolution* child = pool.make_resolution(parent, 11, 110);
+        const lineage* child = pool.make_lineage(parent, lineage_type::RESOLUTION, 11);
         
         assert(child != nullptr);
         assert(child->parent == parent);
-        assert(child->chosen_subgoal == 11);
-        assert(child->chosen_rule == 110);
+        assert(child->type == lineage_type::RESOLUTION);
+        assert(child->idx == 11);
         assert(pool.size() == 2);
-        assert(pool.resolutions.count(*child) == 1);
+        assert(pool.lineages.count(*child) == 1);
     }
     
     // Test 5: Create multiple children from same parent
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* parent = pool.make_resolution(nullptr, 20, 200);
+        const lineage* parent = pool.make_lineage(nullptr, lineage_type::GOAL, 20);
         assert(pool.size() == 1);
         
-        const resolution* child1 = pool.make_resolution(parent, 21, 210);
+        const lineage* child1 = pool.make_lineage(parent, lineage_type::RESOLUTION, 21);
         assert(pool.size() == 2);
         assert(child1->parent == parent);
-        assert(child1->chosen_subgoal == 21);
+        assert(child1->type == lineage_type::RESOLUTION);
+        assert(child1->idx == 21);
         
-        const resolution* child2 = pool.make_resolution(parent, 22, 220);
+        const lineage* child2 = pool.make_lineage(parent, lineage_type::RESOLUTION, 22);
         assert(pool.size() == 3);
         assert(child2->parent == parent);
-        assert(child2->chosen_subgoal == 22);
+        assert(child2->type == lineage_type::RESOLUTION);
+        assert(child2->idx == 22);
         
-        const resolution* child3 = pool.make_resolution(parent, 23, 230);
+        const lineage* child3 = pool.make_lineage(parent, lineage_type::GOAL, 23);
         assert(pool.size() == 4);
         assert(child3->parent == parent);
-        assert(child3->chosen_subgoal == 23);
+        assert(child3->type == lineage_type::GOAL);
+        assert(child3->idx == 23);
         
         // All children should be distinct
         assert(child1 != child2);
@@ -8549,89 +8555,97 @@ void test_resolution_pool_make_resolution() {
     
     // Test 6: Create duplicate child - should return same pointer
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* parent = pool.make_resolution(nullptr, 20, 200);
-        const resolution* original = pool.make_resolution(parent, 21, 210);
+        const lineage* parent = pool.make_lineage(nullptr, lineage_type::GOAL, 20);
+        const lineage* original = pool.make_lineage(parent, lineage_type::RESOLUTION, 21);
         size_t size_before = pool.size();
         
-        const resolution* duplicate = pool.make_resolution(parent, 21, 210);
+        const lineage* duplicate = pool.make_lineage(parent, lineage_type::RESOLUTION, 21);
         
         assert(duplicate == original);  // Should be same pointer
         assert(pool.size() == size_before);  // No new entry
     }
     
-    // Test 7: Create deep chain of resolutions
+    // Test 7: Create deep chain of lineages
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* level0 = pool.make_resolution(nullptr, 100, 1000);
+        const lineage* level0 = pool.make_lineage(nullptr, lineage_type::GOAL, 100);
         size_t size_after_level0 = pool.size();
-        assert(level0->chosen_subgoal == 100);
-        assert(pool.resolutions.size() == size_after_level0);
+        assert(level0->type == lineage_type::GOAL);
+        assert(level0->idx == 100);
+        assert(pool.lineages.size() == size_after_level0);
         
-        const resolution* level1 = pool.make_resolution(level0, 101, 1010);
+        const lineage* level1 = pool.make_lineage(level0, lineage_type::RESOLUTION, 101);
         assert(pool.size() == size_after_level0 + 1);
         assert(level1->parent == level0);
-        assert(level1->chosen_subgoal == 101);
+        assert(level1->type == lineage_type::RESOLUTION);
+        assert(level1->idx == 101);
         
-        const resolution* level2 = pool.make_resolution(level1, 102, 1020);
+        const lineage* level2 = pool.make_lineage(level1, lineage_type::GOAL, 102);
         assert(pool.size() == size_after_level0 + 2);
         assert(level2->parent == level1);
+        assert(level2->type == lineage_type::GOAL);
+        assert(level2->idx == 102);
         
-        const resolution* level3 = pool.make_resolution(level2, 103, 1030);
+        const lineage* level3 = pool.make_lineage(level2, lineage_type::RESOLUTION, 103);
         assert(pool.size() == size_after_level0 + 3);
         assert(level3->parent == level2);
+        assert(level3->type == lineage_type::RESOLUTION);
+        assert(level3->idx == 103);
         
-        const resolution* level4 = pool.make_resolution(level3, 104, 1040);
+        const lineage* level4 = pool.make_lineage(level3, lineage_type::GOAL, 104);
         assert(pool.size() == size_after_level0 + 4);
         assert(level4->parent == level3);
+        assert(level4->type == lineage_type::GOAL);
+        assert(level4->idx == 104);
         
         // Verify the full chain
         assert(level4->parent->parent->parent->parent == level0);
         assert(level0->parent == nullptr);
     }
     
-    // Test 8: Different parents, same subgoal and rule
+    // Test 8: Different parents, same type and idx
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* parent1 = pool.make_resolution(nullptr, 200, 2000);
-        const resolution* parent2 = pool.make_resolution(nullptr, 201, 2010);
+        const lineage* parent1 = pool.make_lineage(nullptr, lineage_type::GOAL, 200);
+        const lineage* parent2 = pool.make_lineage(nullptr, lineage_type::GOAL, 201);
         assert(parent1 != parent2);
         size_t size_before = pool.size();
         
-        const resolution* child1 = pool.make_resolution(parent1, 50, 500);
+        const lineage* child1 = pool.make_lineage(parent1, lineage_type::RESOLUTION, 50);
         assert(pool.size() == size_before + 1);
         
-        const resolution* child2 = pool.make_resolution(parent2, 50, 500);
+        const lineage* child2 = pool.make_lineage(parent2, lineage_type::RESOLUTION, 50);
         assert(pool.size() == size_before + 2);
         
-        // Different parents means different resolutions
+        // Different parents means different lineages
         assert(child1 != child2);
         assert(child1->parent == parent1);
         assert(child2->parent == parent2);
-        assert(child1->chosen_subgoal == child2->chosen_subgoal);
-        assert(child1->chosen_rule == child2->chosen_rule);
+        assert(child1->type == child2->type);
+        assert(child1->idx == child2->idx);
     }
     
     // Test 9: Branching tree structure
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* root = pool.make_resolution(nullptr, 300, 3000);
+        const lineage* root = pool.make_lineage(nullptr, lineage_type::GOAL, 300);
         size_t size_after_root = pool.size();
         
         // Create multiple branches from root
-        const resolution* branch1 = pool.make_resolution(root, 301, 3010);
-        const resolution* branch2 = pool.make_resolution(root, 302, 3020);
-        const resolution* branch3 = pool.make_resolution(root, 303, 3030);
+        const lineage* branch1 = pool.make_lineage(root, lineage_type::RESOLUTION, 301);
+        const lineage* branch2 = pool.make_lineage(root, lineage_type::RESOLUTION, 302);
+        const lineage* branch3 = pool.make_lineage(root, lineage_type::GOAL, 303);
         assert(pool.size() == size_after_root + 3);
         
         // Extend each branch
-        const resolution* branch1_child = pool.make_resolution(branch1, 311, 3110);
-        const resolution* branch2_child = pool.make_resolution(branch2, 312, 3120);
-        const resolution* branch3_child = pool.make_resolution(branch3, 313, 3130);
+        const lineage* branch1_child = pool.make_lineage(branch1, lineage_type::GOAL, 311);
+        const lineage* branch2_child = pool.make_lineage(branch2, lineage_type::GOAL, 312);
+        const lineage* branch3_child = pool.make_lineage(branch3, lineage_type::RESOLUTION, 313);
         assert(pool.size() == size_after_root + 6);
         
         // Verify all branches point to root
@@ -8646,212 +8660,212 @@ void test_resolution_pool_make_resolution() {
     }
 }
 
-void test_resolution_pool_pin() {
+void test_lineage_pool_pin() {
     // Test 1: Pin nullptr (root) - should not crash
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
         pool.pin(nullptr);  // Should return immediately
         assert(pool.size() == 0);
     }
     
-    // Test 2: Pin a single root resolution
+    // Test 2: Pin a single root lineage
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* r1 = pool.make_resolution(nullptr, 1, 10);
-        assert(pool.resolutions.at(*r1) == false);
+        const lineage* l1 = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
+        assert(pool.lineages.at(*l1) == false);
         
-        pool.pin(r1);
-        assert(pool.resolutions.at(*r1) == true);  // Now pinned
+        pool.pin(l1);
+        assert(pool.lineages.at(*l1) == true);  // Now pinned
         assert(pool.size() == 1);
     }
     
-    // Test 3: Pin the same resolution twice - should be idempotent
+    // Test 3: Pin the same lineage twice - should be idempotent
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* r1 = pool.make_resolution(nullptr, 1, 10);
-        assert(pool.resolutions.at(*r1) == false);
+        const lineage* l1 = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
+        assert(pool.lineages.at(*l1) == false);
         
-        pool.pin(r1);
-        assert(pool.resolutions.at(*r1) == true);
+        pool.pin(l1);
+        assert(pool.lineages.at(*l1) == true);
         
-        pool.pin(r1);  // Pin again
-        assert(pool.resolutions.at(*r1) == true);  // Still pinned
+        pool.pin(l1);  // Pin again
+        assert(pool.lineages.at(*l1) == true);  // Still pinned
         assert(pool.size() == 1);
     }
     
     // Test 4: Pin a child - should pin parent chain to root
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* parent = pool.make_resolution(nullptr, 1, 10);
-        const resolution* child = pool.make_resolution(parent, 2, 20);
+        const lineage* parent = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
+        const lineage* child = pool.make_lineage(parent, lineage_type::RESOLUTION, 2);
         
-        assert(pool.resolutions.at(*parent) == false);
-        assert(pool.resolutions.at(*child) == false);
+        assert(pool.lineages.at(*parent) == false);
+        assert(pool.lineages.at(*child) == false);
         
         pool.pin(child);
         
         // Both child and parent should be pinned
-        assert(pool.resolutions.at(*child) == true);
-        assert(pool.resolutions.at(*parent) == true);
+        assert(pool.lineages.at(*child) == true);
+        assert(pool.lineages.at(*parent) == true);
     }
     
     // Test 5: Pin deep chain - all ancestors should be pinned
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* r1 = pool.make_resolution(nullptr, 1, 10);
-        const resolution* r2 = pool.make_resolution(r1, 2, 20);
-        const resolution* r3 = pool.make_resolution(r2, 3, 30);
-        const resolution* r4 = pool.make_resolution(r3, 4, 40);
-        const resolution* r5 = pool.make_resolution(r4, 5, 50);
+        const lineage* r1 = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
+        const lineage* r2 = pool.make_lineage(r1, lineage_type::RESOLUTION, 2);
+        const lineage* r3 = pool.make_lineage(r2, lineage_type::GOAL, 3);
+        const lineage* r4 = pool.make_lineage(r3, lineage_type::RESOLUTION, 4);
+        const lineage* r5 = pool.make_lineage(r4, lineage_type::GOAL, 5);
         
         // All should be unpinned initially
-        assert(pool.resolutions.at(*r1) == false);
-        assert(pool.resolutions.at(*r2) == false);
-        assert(pool.resolutions.at(*r3) == false);
-        assert(pool.resolutions.at(*r4) == false);
-        assert(pool.resolutions.at(*r5) == false);
+        assert(pool.lineages.at(*r1) == false);
+        assert(pool.lineages.at(*r2) == false);
+        assert(pool.lineages.at(*r3) == false);
+        assert(pool.lineages.at(*r4) == false);
+        assert(pool.lineages.at(*r5) == false);
         
         pool.pin(r5);
         
         // All should be pinned now
-        assert(pool.resolutions.at(*r1) == true);
-        assert(pool.resolutions.at(*r2) == true);
-        assert(pool.resolutions.at(*r3) == true);
-        assert(pool.resolutions.at(*r4) == true);
-        assert(pool.resolutions.at(*r5) == true);
+        assert(pool.lineages.at(*r1) == true);
+        assert(pool.lineages.at(*r2) == true);
+        assert(pool.lineages.at(*r3) == true);
+        assert(pool.lineages.at(*r4) == true);
+        assert(pool.lineages.at(*r5) == true);
     }
     
     // Test 6: Pin multiple branches - shared ancestors pinned once
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* root = pool.make_resolution(nullptr, 1, 10);
-        const resolution* branch1 = pool.make_resolution(root, 2, 20);
-        const resolution* branch2 = pool.make_resolution(root, 3, 30);
-        const resolution* leaf1 = pool.make_resolution(branch1, 4, 40);
-        const resolution* leaf2 = pool.make_resolution(branch2, 5, 50);
+        const lineage* root = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
+        const lineage* branch1 = pool.make_lineage(root, lineage_type::RESOLUTION, 2);
+        const lineage* branch2 = pool.make_lineage(root, lineage_type::RESOLUTION, 3);
+        const lineage* leaf1 = pool.make_lineage(branch1, lineage_type::GOAL, 4);
+        const lineage* leaf2 = pool.make_lineage(branch2, lineage_type::GOAL, 5);
         
         pool.pin(leaf1);
         
         // leaf1, branch1, and root should be pinned
-        assert(pool.resolutions.at(*root) == true);
-        assert(pool.resolutions.at(*branch1) == true);
-        assert(pool.resolutions.at(*leaf1) == true);
+        assert(pool.lineages.at(*root) == true);
+        assert(pool.lineages.at(*branch1) == true);
+        assert(pool.lineages.at(*leaf1) == true);
         // branch2 and leaf2 should still be unpinned
-        assert(pool.resolutions.at(*branch2) == false);
-        assert(pool.resolutions.at(*leaf2) == false);
+        assert(pool.lineages.at(*branch2) == false);
+        assert(pool.lineages.at(*leaf2) == false);
         
         pool.pin(leaf2);
         
         // Now everything should be pinned
-        assert(pool.resolutions.at(*root) == true);
-        assert(pool.resolutions.at(*branch1) == true);
-        assert(pool.resolutions.at(*branch2) == true);
-        assert(pool.resolutions.at(*leaf1) == true);
-        assert(pool.resolutions.at(*leaf2) == true);
+        assert(pool.lineages.at(*root) == true);
+        assert(pool.lineages.at(*branch1) == true);
+        assert(pool.lineages.at(*branch2) == true);
+        assert(pool.lineages.at(*leaf1) == true);
+        assert(pool.lineages.at(*leaf2) == true);
     }
     
     // Test 7: Pin parent after child - parent should already be pinned
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* parent = pool.make_resolution(nullptr, 1, 10);
-        const resolution* child = pool.make_resolution(parent, 2, 20);
+        const lineage* parent = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
+        const lineage* child = pool.make_lineage(parent, lineage_type::RESOLUTION, 2);
         
         pool.pin(child);
-        assert(pool.resolutions.at(*parent) == true);
-        assert(pool.resolutions.at(*child) == true);
+        assert(pool.lineages.at(*parent) == true);
+        assert(pool.lineages.at(*child) == true);
         
         // Pin parent again - should be no-op since already pinned
         pool.pin(parent);
-        assert(pool.resolutions.at(*parent) == true);
+        assert(pool.lineages.at(*parent) == true);
         assert(pool.size() == 2);
     }
     
     // Test 8: Pin sibling nodes independently
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* parent = pool.make_resolution(nullptr, 1, 10);
-        const resolution* child1 = pool.make_resolution(parent, 2, 20);
-        const resolution* child2 = pool.make_resolution(parent, 3, 30);
-        const resolution* child3 = pool.make_resolution(parent, 4, 40);
+        const lineage* parent = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
+        const lineage* child1 = pool.make_lineage(parent, lineage_type::RESOLUTION, 2);
+        const lineage* child2 = pool.make_lineage(parent, lineage_type::RESOLUTION, 3);
+        const lineage* child3 = pool.make_lineage(parent, lineage_type::RESOLUTION, 4);
         
         // Pin only child1
         pool.pin(child1);
-        assert(pool.resolutions.at(*parent) == true);
-        assert(pool.resolutions.at(*child1) == true);
-        assert(pool.resolutions.at(*child2) == false);
-        assert(pool.resolutions.at(*child3) == false);
+        assert(pool.lineages.at(*parent) == true);
+        assert(pool.lineages.at(*child1) == true);
+        assert(pool.lineages.at(*child2) == false);
+        assert(pool.lineages.at(*child3) == false);
         
         // Pin child3
         pool.pin(child3);
-        assert(pool.resolutions.at(*parent) == true);
-        assert(pool.resolutions.at(*child1) == true);
-        assert(pool.resolutions.at(*child2) == false);  // Still unpinned
-        assert(pool.resolutions.at(*child3) == true);
+        assert(pool.lineages.at(*parent) == true);
+        assert(pool.lineages.at(*child1) == true);
+        assert(pool.lineages.at(*child2) == false);  // Still unpinned
+        assert(pool.lineages.at(*child3) == true);
     }
     
     // Test 9: Complex tree with multiple levels
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* root = pool.make_resolution(nullptr, 0, 0);
-        const resolution* l1_a = pool.make_resolution(root, 1, 10);
-        const resolution* l1_b = pool.make_resolution(root, 2, 20);
-        const resolution* l2_a = pool.make_resolution(l1_a, 3, 30);
-        const resolution* l2_b = pool.make_resolution(l1_a, 4, 40);
-        const resolution* l2_c = pool.make_resolution(l1_b, 5, 50);
-        const resolution* l3_a = pool.make_resolution(l2_a, 6, 60);
+        const lineage* root = pool.make_lineage(nullptr, lineage_type::GOAL, 0);
+        const lineage* l1_a = pool.make_lineage(root, lineage_type::RESOLUTION, 1);
+        const lineage* l1_b = pool.make_lineage(root, lineage_type::RESOLUTION, 2);
+        const lineage* l2_a = pool.make_lineage(l1_a, lineage_type::GOAL, 3);
+        const lineage* l2_b = pool.make_lineage(l1_a, lineage_type::GOAL, 4);
+        const lineage* l2_c = pool.make_lineage(l1_b, lineage_type::GOAL, 5);
+        const lineage* l3_a = pool.make_lineage(l2_a, lineage_type::RESOLUTION, 6);
         
         // Pin l3_a - should pin l3_a, l2_a, l1_a, root
         pool.pin(l3_a);
-        assert(pool.resolutions.at(*root) == true);
-        assert(pool.resolutions.at(*l1_a) == true);
-        assert(pool.resolutions.at(*l1_b) == false);
-        assert(pool.resolutions.at(*l2_a) == true);
-        assert(pool.resolutions.at(*l2_b) == false);
-        assert(pool.resolutions.at(*l2_c) == false);
-        assert(pool.resolutions.at(*l3_a) == true);
+        assert(pool.lineages.at(*root) == true);
+        assert(pool.lineages.at(*l1_a) == true);
+        assert(pool.lineages.at(*l1_b) == false);
+        assert(pool.lineages.at(*l2_a) == true);
+        assert(pool.lineages.at(*l2_b) == false);
+        assert(pool.lineages.at(*l2_c) == false);
+        assert(pool.lineages.at(*l3_a) == true);
     }
     
     // Test 10: Pin parent does NOT pin children
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* parent = pool.make_resolution(nullptr, 1, 10);
-        const resolution* child1 = pool.make_resolution(parent, 2, 20);
-        const resolution* child2 = pool.make_resolution(parent, 3, 30);
-        const resolution* grandchild = pool.make_resolution(child1, 4, 40);
+        const lineage* parent = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
+        const lineage* child1 = pool.make_lineage(parent, lineage_type::RESOLUTION, 2);
+        const lineage* child2 = pool.make_lineage(parent, lineage_type::RESOLUTION, 3);
+        const lineage* grandchild = pool.make_lineage(child1, lineage_type::GOAL, 4);
         assert(pool.size() == 4);
         
         // All should be unpinned initially
-        assert(pool.resolutions.at(*parent) == false);
-        assert(pool.resolutions.at(*child1) == false);
-        assert(pool.resolutions.at(*child2) == false);
-        assert(pool.resolutions.at(*grandchild) == false);
+        assert(pool.lineages.at(*parent) == false);
+        assert(pool.lineages.at(*child1) == false);
+        assert(pool.lineages.at(*child2) == false);
+        assert(pool.lineages.at(*grandchild) == false);
         
         // Pin only the parent
         pool.pin(parent);
         
         // Only parent should be pinned, children should remain unpinned
-        assert(pool.resolutions.at(*parent) == true);
-        assert(pool.resolutions.at(*child1) == false);
-        assert(pool.resolutions.at(*child2) == false);
-        assert(pool.resolutions.at(*grandchild) == false);
+        assert(pool.lineages.at(*parent) == true);
+        assert(pool.lineages.at(*child1) == false);
+        assert(pool.lineages.at(*child2) == false);
+        assert(pool.lineages.at(*grandchild) == false);
         assert(pool.size() == 4);  // Size unchanged by pin
     }
 }
 
-void test_resolution_pool_trim() {
+void test_lineage_pool_trim() {
     // Test 1: Trim empty pool - should not crash
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
         pool.trim();
         assert(pool.size() == 0);
@@ -8859,25 +8873,25 @@ void test_resolution_pool_trim() {
     
     // Test 2: Trim pool with all unpinned entries - should remove all
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        pool.make_resolution(nullptr, 1, 10);
-        pool.make_resolution(nullptr, 2, 20);
-        pool.make_resolution(nullptr, 3, 30);
+        pool.make_lineage(nullptr, lineage_type::GOAL, 1);
+        pool.make_lineage(nullptr, lineage_type::RESOLUTION, 2);
+        pool.make_lineage(nullptr, lineage_type::GOAL, 3);
         assert(pool.size() == 3);
         
         pool.trim();
         assert(pool.size() == 0);
-        assert(pool.resolutions.empty());
+        assert(pool.lineages.empty());
     }
     
     // Test 3: Trim pool with all pinned entries - should remove none
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* r1 = pool.make_resolution(nullptr, 1, 10);
-        const resolution* r2 = pool.make_resolution(nullptr, 2, 20);
-        const resolution* r3 = pool.make_resolution(nullptr, 3, 30);
+        const lineage* r1 = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
+        const lineage* r2 = pool.make_lineage(nullptr, lineage_type::RESOLUTION, 2);
+        const lineage* r3 = pool.make_lineage(nullptr, lineage_type::GOAL, 3);
         assert(pool.size() == 3);
         
         pool.pin(r1);
@@ -8886,73 +8900,73 @@ void test_resolution_pool_trim() {
         
         pool.trim();
         assert(pool.size() == 3);
-        assert(pool.resolutions.count(*r1) == 1);
-        assert(pool.resolutions.count(*r2) == 1);
-        assert(pool.resolutions.count(*r3) == 1);
+        assert(pool.lineages.count(*r1) == 1);
+        assert(pool.lineages.count(*r2) == 1);
+        assert(pool.lineages.count(*r3) == 1);
     }
     
     // Test 4: Trim pool with mixed pinned/unpinned - remove only unpinned
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* r1 = pool.make_resolution(nullptr, 1, 10);
-        const resolution* r2 = pool.make_resolution(nullptr, 2, 20);
-        const resolution* r3 = pool.make_resolution(nullptr, 3, 30);
+        const lineage* r1 = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
+        const lineage* r2 = pool.make_lineage(nullptr, lineage_type::RESOLUTION, 2);
+        const lineage* r3 = pool.make_lineage(nullptr, lineage_type::GOAL, 3);
         assert(pool.size() == 3);
         
         pool.pin(r2);  // Pin only r2
         
         pool.trim();
         assert(pool.size() == 1);  // Only r2 remains
-        assert(pool.resolutions.count(*r2) == 1);
-        assert(pool.resolutions.at(*r2) == true);
+        assert(pool.lineages.count(*r2) == 1);
+        assert(pool.lineages.at(*r2) == true);
     }
     
     // Test 5: Trim preserves pinned chain
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* parent = pool.make_resolution(nullptr, 1, 10);
-        const resolution* child = pool.make_resolution(parent, 2, 20);
-        const resolution* unrelated = pool.make_resolution(nullptr, 3, 30);
+        const lineage* parent = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
+        const lineage* child = pool.make_lineage(parent, lineage_type::RESOLUTION, 2);
+        const lineage* unrelated = pool.make_lineage(nullptr, lineage_type::GOAL, 3);
         assert(pool.size() == 3);
         
         pool.pin(child);  // This pins both child and parent
         
         pool.trim();
         assert(pool.size() == 2);  // parent and child remain
-        assert(pool.resolutions.count(*parent) == 1);
-        assert(pool.resolutions.count(*child) == 1);
-        assert(pool.resolutions.at(*parent) == true);
-        assert(pool.resolutions.at(*child) == true);
+        assert(pool.lineages.count(*parent) == 1);
+        assert(pool.lineages.count(*child) == 1);
+        assert(pool.lineages.at(*parent) == true);
+        assert(pool.lineages.at(*child) == true);
     }
     
     // Test 6: Trim with branching structure
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* root = pool.make_resolution(nullptr, 1, 10);
-        const resolution* branch1 = pool.make_resolution(root, 2, 20);
-        const resolution* branch2 = pool.make_resolution(root, 3, 30);
-        const resolution* leaf1 = pool.make_resolution(branch1, 4, 40);
-        const resolution* leaf2 = pool.make_resolution(branch2, 5, 50);
+        const lineage* root = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
+        const lineage* branch1 = pool.make_lineage(root, lineage_type::RESOLUTION, 2);
+        const lineage* branch2 = pool.make_lineage(root, lineage_type::RESOLUTION, 3);
+        const lineage* leaf1 = pool.make_lineage(branch1, lineage_type::GOAL, 4);
+        const lineage* leaf2 = pool.make_lineage(branch2, lineage_type::GOAL, 5);
         assert(pool.size() == 5);
         
         pool.pin(leaf1);  // Pins leaf1, branch1, root
         
         pool.trim();
         assert(pool.size() == 3);  // root, branch1, leaf1 remain
-        assert(pool.resolutions.count(*root) == 1);
-        assert(pool.resolutions.count(*branch1) == 1);
-        assert(pool.resolutions.count(*leaf1) == 1);
+        assert(pool.lineages.count(*root) == 1);
+        assert(pool.lineages.count(*branch1) == 1);
+        assert(pool.lineages.count(*leaf1) == 1);
     }
     
     // Test 7: Multiple trims in sequence
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* r1 = pool.make_resolution(nullptr, 1, 10);
-        const resolution* r2 = pool.make_resolution(nullptr, 2, 20);
+        const lineage* r1 = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
+        const lineage* r2 = pool.make_lineage(nullptr, lineage_type::RESOLUTION, 2);
         assert(pool.size() == 2);
         
         pool.pin(r1);
@@ -8960,23 +8974,23 @@ void test_resolution_pool_trim() {
         assert(pool.size() == 1);
         
         // Add more entries
-        const resolution* r3 = pool.make_resolution(nullptr, 3, 30);
-        const resolution* r4 = pool.make_resolution(nullptr, 4, 40);
+        const lineage* r3 = pool.make_lineage(nullptr, lineage_type::GOAL, 3);
+        const lineage* r4 = pool.make_lineage(nullptr, lineage_type::RESOLUTION, 4);
         assert(pool.size() == 3);
         
         pool.trim();  // r3 and r4 should be removed
         assert(pool.size() == 1);
-        assert(pool.resolutions.count(*r1) == 1);
+        assert(pool.lineages.count(*r1) == 1);
     }
     
     // // Test 8: Trim after unpinning is not possible (no unpin function)
     // // This test verifies that once pinned, entries stay pinned
     // {
-    //     resolution_pool pool;
+    //     lineage_pool pool;
         
-    //     const resolution* r1 = pool.make_resolution(nullptr, 1, 10);
+    //     const lineage* r1 = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
     //     pool.pin(r1);
-    //     assert(pool.resolutions.at(*r1) == true);
+    //     assert(pool.lineages.at(*r1) == true);
         
     //     pool.trim();
     //     assert(pool.size() == 1);  // r1 remains
@@ -8988,16 +9002,16 @@ void test_resolution_pool_trim() {
     
     // Test 9: Complex scenario with multiple pin operations and trim
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
         // Create a tree structure
-        const resolution* root = pool.make_resolution(nullptr, 0, 0);
-        const resolution* l1_a = pool.make_resolution(root, 1, 10);
-        const resolution* l1_b = pool.make_resolution(root, 2, 20);
-        const resolution* l2_a = pool.make_resolution(l1_a, 3, 30);
-        const resolution* l2_b = pool.make_resolution(l1_a, 4, 40);
-        const resolution* l2_c = pool.make_resolution(l1_b, 5, 50);
-        const resolution* l3_a = pool.make_resolution(l2_a, 6, 60);
+        const lineage* root = pool.make_lineage(nullptr, lineage_type::GOAL, 0);
+        const lineage* l1_a = pool.make_lineage(root, lineage_type::RESOLUTION, 1);
+        const lineage* l1_b = pool.make_lineage(root, lineage_type::RESOLUTION, 2);
+        const lineage* l2_a = pool.make_lineage(l1_a, lineage_type::GOAL, 3);
+        const lineage* l2_b = pool.make_lineage(l1_a, lineage_type::GOAL, 4);
+        const lineage* l2_c = pool.make_lineage(l1_b, lineage_type::GOAL, 5);
+        const lineage* l3_a = pool.make_lineage(l2_a, lineage_type::RESOLUTION, 6);
         assert(pool.size() == 7);
         
         // Pin only l3_a
@@ -9007,22 +9021,22 @@ void test_resolution_pool_trim() {
         // Should keep: root, l1_a, l2_a, l3_a (the chain)
         // Should remove: l1_b, l2_b, l2_c
         assert(pool.size() == 4);
-        assert(pool.resolutions.count(*root) == 1);
-        assert(pool.resolutions.count(*l1_a) == 1);
-        assert(pool.resolutions.count(*l2_a) == 1);
-        assert(pool.resolutions.count(*l3_a) == 1);
+        assert(pool.lineages.count(*root) == 1);
+        assert(pool.lineages.count(*l1_a) == 1);
+        assert(pool.lineages.count(*l2_a) == 1);
+        assert(pool.lineages.count(*l3_a) == 1);
     }
     
     // Test 10: Trim with multiple pinned branches
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* root = pool.make_resolution(nullptr, 0, 0);
-        const resolution* b1 = pool.make_resolution(root, 1, 10);
-        const resolution* b2 = pool.make_resolution(root, 2, 20);
-        const resolution* b3 = pool.make_resolution(root, 3, 30);
-        const resolution* b1_child = pool.make_resolution(b1, 4, 40);
-        const resolution* b3_child = pool.make_resolution(b3, 5, 50);
+        const lineage* root = pool.make_lineage(nullptr, lineage_type::GOAL, 0);
+        const lineage* b1 = pool.make_lineage(root, lineage_type::RESOLUTION, 1);
+        const lineage* b2 = pool.make_lineage(root, lineage_type::RESOLUTION, 2);
+        const lineage* b3 = pool.make_lineage(root, lineage_type::RESOLUTION, 3);
+        const lineage* b1_child = pool.make_lineage(b1, lineage_type::GOAL, 4);
+        const lineage* b3_child = pool.make_lineage(b3, lineage_type::GOAL, 5);
         assert(pool.size() == 6);
         
         pool.pin(b1_child);  // Pins b1_child, b1, root
@@ -9032,101 +9046,101 @@ void test_resolution_pool_trim() {
         // Should keep: root, b1, b3, b1_child, b3_child
         // Should remove: b2
         assert(pool.size() == 5);
-        assert(pool.resolutions.count(*root) == 1);
-        assert(pool.resolutions.count(*b1) == 1);
-        assert(pool.resolutions.count(*b3) == 1);
-        assert(pool.resolutions.count(*b1_child) == 1);
-        assert(pool.resolutions.count(*b3_child) == 1);
+        assert(pool.lineages.count(*root) == 1);
+        assert(pool.lineages.count(*b1) == 1);
+        assert(pool.lineages.count(*b3) == 1);
+        assert(pool.lineages.count(*b1_child) == 1);
+        assert(pool.lineages.count(*b3_child) == 1);
     }
     
     // Test 11: Verify pointers remain valid after trim
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* r1 = pool.make_resolution(nullptr, 1, 10);
-        const resolution* r2 = pool.make_resolution(r1, 2, 20);
+        const lineage* r1 = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
+        const lineage* r2 = pool.make_lineage(r1, lineage_type::RESOLUTION, 2);
         
         // Store values before trim
-        const resolution* r1_parent = r1->parent;
-        subgoal_id r1_subgoal = r1->chosen_subgoal;
-        rule_id r1_rule = r1->chosen_rule;
-        const resolution* r2_parent = r2->parent;
-        subgoal_id r2_subgoal = r2->chosen_subgoal;
-        rule_id r2_rule = r2->chosen_rule;
+        const lineage* r1_parent = r1->parent;
+        lineage_type r1_type = r1->type;
+        size_t r1_idx = r1->idx;
+        const lineage* r2_parent = r2->parent;
+        lineage_type r2_type = r2->type;
+        size_t r2_idx = r2->idx;
         
         pool.pin(r2);
         pool.trim();
         
         // Pointers should still be valid with same values
         assert(r1->parent == r1_parent);
-        assert(r1->chosen_subgoal == r1_subgoal);
-        assert(r1->chosen_rule == r1_rule);
+        assert(r1->type == r1_type);
+        assert(r1->idx == r1_idx);
         assert(r2->parent == r2_parent);
-        assert(r2->chosen_subgoal == r2_subgoal);
-        assert(r2->chosen_rule == r2_rule);
+        assert(r2->type == r2_type);
+        assert(r2->idx == r2_idx);
         assert(r2->parent == r1);
     }
 }
 
-void test_resolution_pool_size() {
+void test_lineage_pool_size() {
     // Test 1: Size of empty pool
     {
-        resolution_pool pool;
+        lineage_pool pool;
         assert(pool.size() == 0);
-        assert(pool.resolutions.size() == 0);
+        assert(pool.lineages.size() == 0);
     }
     
     // Test 2: Size increases with each unique entry
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        pool.make_resolution(nullptr, 1, 10);
+        pool.make_lineage(nullptr, lineage_type::GOAL, 1);
         assert(pool.size() == 1);
-        assert(pool.resolutions.size() == 1);
+        assert(pool.lineages.size() == 1);
         
-        pool.make_resolution(nullptr, 2, 20);
+        pool.make_lineage(nullptr, lineage_type::RESOLUTION, 2);
         assert(pool.size() == 2);
-        assert(pool.resolutions.size() == 2);
+        assert(pool.lineages.size() == 2);
         
-        pool.make_resolution(nullptr, 3, 30);
+        pool.make_lineage(nullptr, lineage_type::GOAL, 3);
         assert(pool.size() == 3);
-        assert(pool.resolutions.size() == 3);
+        assert(pool.lineages.size() == 3);
     }
     
     // Test 3: Size doesn't increase for duplicates
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* r1 = pool.make_resolution(nullptr, 1, 10);
+        const lineage* r1 = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
         assert(pool.size() == 1);
         
-        const resolution* r2 = pool.make_resolution(nullptr, 1, 10);
+        const lineage* r2 = pool.make_lineage(nullptr, lineage_type::GOAL, 1);
         assert(r1 == r2);
         assert(pool.size() == 1);  // No increase
     }
     
     // Test 4: Size decreases after trim
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        pool.make_resolution(nullptr, 1, 10);
-        pool.make_resolution(nullptr, 2, 20);
-        const resolution* r3 = pool.make_resolution(nullptr, 3, 30);
+        pool.make_lineage(nullptr, lineage_type::GOAL, 1);
+        pool.make_lineage(nullptr, lineage_type::RESOLUTION, 2);
+        const lineage* r3 = pool.make_lineage(nullptr, lineage_type::GOAL, 3);
         assert(pool.size() == 3);
         
         pool.pin(r3);
         pool.trim();
         assert(pool.size() == 1);
-        assert(pool.resolutions.size() == 1);
+        assert(pool.lineages.size() == 1);
     }
     
     // Test 5: Size consistency through pin and trim operations
     {
-        resolution_pool pool;
+        lineage_pool pool;
         
-        const resolution* root = pool.make_resolution(nullptr, 0, 0);
-        const resolution* child1 = pool.make_resolution(root, 1, 10);
-        const resolution* child2 = pool.make_resolution(root, 2, 20);
+        const lineage* root = pool.make_lineage(nullptr, lineage_type::GOAL, 0);
+        const lineage* child1 = pool.make_lineage(root, lineage_type::RESOLUTION, 1);
+        const lineage* child2 = pool.make_lineage(root, lineage_type::RESOLUTION, 2);
         assert(pool.size() == 3);
         
         pool.pin(child1);
@@ -9134,7 +9148,7 @@ void test_resolution_pool_size() {
         
         pool.trim();
         assert(pool.size() == 2);  // root and child1 remain
-        assert(pool.resolutions.size() == 2);
+        assert(pool.lineages.size() == 2);
     }
 }
 
@@ -10979,12 +10993,12 @@ void unit_test_main() {
     TEST(test_bind_map_whnf);
     TEST(test_bind_map_occurs_check);
     TEST(test_bind_map_unify);
-    TEST(test_resolution_pool_constructor);
-    TEST(test_resolution_pool_intern);
-    TEST(test_resolution_pool_make_resolution);
-    TEST(test_resolution_pool_pin);
-    TEST(test_resolution_pool_trim);
-    TEST(test_resolution_pool_size);
+    TEST(test_lineage_pool_constructor);
+    TEST(test_lineage_pool_intern);
+    TEST(test_lineage_pool_make_lineage);
+    TEST(test_lineage_pool_pin);
+    TEST(test_lineage_pool_trim);
+    TEST(test_lineage_pool_size);
     TEST(test_sequencer_constructor);
     TEST(test_sequencer);
     TEST(test_copier_constructor);
