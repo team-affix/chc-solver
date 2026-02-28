@@ -4,6 +4,7 @@
 #include "../hpp/sequencer.hpp"
 #include "../hpp/copier.hpp"
 #include "../hpp/normalizer.hpp"
+#include "../hpp/rule.hpp"
 #include "test_utils.hpp"
 
 void test_trail_constructor() {
@@ -10694,6 +10695,93 @@ void test_normalizer() {
         
         t.pop();
     }
+}
+
+void test_algo1() {
+    trail t;
+    sequencer vars(t);
+    expr_pool ep(t);
+    bind_map bm(t);
+    lineage_pool lp;
+
+    // avoidance store
+    std::set<std::set<const resolution_lineage*>> as;
+    
+    // required by cdcl_eliminator, resolution store
+    std::set<const resolution_lineage*> rs;
+
+    // decision store
+    std::set<const resolution_lineage*> ds;
+    
+    // goal store
+    std::map<const goal_lineage*, const expr*> gs;
+    
+    // goal candidate store
+    std::multimap<const goal_lineage*, size_t> gcs;
+
+    // detecting if a goal has no candidatese is as simple as checking if gcs.count(goal) == 0.
+
+    // each time a goal is added, we add it to the goal store (gs), and we also add the whole database as candidates for the goal.
+
+    // each time we resolve a goal, we add the resolution to the resolution store (rs), remove the goal from the goal store as well as all entries from the gcs. Then, we add all the subgoals of the resolutions to gs and gcs.
+
+    // for decisions, we need a decider. It will make a resolution.
+    // dec = mgt_decider(gs, gcs, simulation)
+    // choice = dec()
+
+    std::vector<const rule*> db;
+    
+    // for initializing the set of candidates for a goal, we need a querier.
+    // querier = uncached_querier(db)
+
+    // maybe we have a goal_adder that takes in by DI gs and gcs, and manages the goal addition system (no trail needed since we do restarts)
+    // ga = trivial_goal_adder(gs, gcs, db)
+    // ga(goal)
+
+    // maybe we have a goal_resolver which requires rs, gs, gcs, ga (no trail needed since we do restarts)
+    // gr = trivial_goal_resolver(rs, gs, gcs, ga)
+
+    // maybe we have a head_elimination_detector which requires trail, bind_map, gs (const&), database
+    // he = trivial_head_elimination_detector(t, bm, gss, db)
+    // eliminate = he(lin, rule_index)
+
+    // we have a cdcl_elimination_detector which requires as, rs
+    // ce = trivial_cdcl_elimination_detector(as, rs)
+    // eliminate = ce(lin, rule_index)
+
+    // we have a unit_propagation_detector which requires gcs
+    // up = unit_propagation_detector(gcs)
+    // candidate = up(lin)
+
+    // soln_detector (sd) requires just gs
+    // sd = solution_detector(gs)
+
+    // conflict_detector (cd) requires gs and gcs
+    // cd = conflict_detector(gs, gcs)
+    
+    // our main algorithm handles the reaching of the fixpoint
+    // while(!cd() && !sd()) {
+    //     if (std::erase_if(gcs, [&he](const auto& entry) { return he(entry.first, entry.second); }))
+    //         continue;
+    //     if (std::erase_if(gcs, [&ce](const auto& entry) { return ce(entry.first, entry.second); }))
+    //         continue;
+    //     bool propagated = false;
+    //     for (const auto& lin : gs) {
+    //         if (size_t candidate = up(lin)) {
+    //             gr(lin, candidate);
+    //             propagated = true;
+    //         }
+    //     }
+    //     if (propagated)
+    //         continue;
+    //     auto [lin, candidate] = dec();
+    //     gr(lin, candidate);
+    // }
+    // if (sd())
+    //     return true;
+    // if (cd()) { as.insert(ds); return false; }
+    //     
+    
 }
 
 void unit_test_main() {
