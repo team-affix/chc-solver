@@ -1,13 +1,27 @@
 #include "../hpp/lineage.hpp"
 
-const lineage* lineage_pool::make_lineage(const lineage* parent, lineage_type type, size_t idx) {
-    return intern(lineage{parent, type, idx});
+const goal_lineage* lineage_pool::goal(const resolution_lineage* parent, size_t idx) {
+    return intern(goal_lineage{parent, idx});
 }
 
-void lineage_pool::pin(const lineage* l) {
+const resolution_lineage* lineage_pool::resolution(const goal_lineage* parent, size_t idx) {
+    return intern(resolution_lineage{parent, idx});
+}
+
+void lineage_pool::pin(const goal_lineage* l) {
     if (!l)
         return; /*at root*/
-    bool& is_pinned = lineages.at(*l);
+    bool& is_pinned = goal_lineages.at(*l);
+    if (is_pinned)
+        return; /*from here to root is already pinned*/
+    is_pinned = true;
+    pin(l->parent); /*pin from here to root*/
+}
+
+void lineage_pool::pin(const resolution_lineage* l) {
+    if (!l)
+        return; /*at root*/
+    bool& is_pinned = resolution_lineages.at(*l);
     if (is_pinned)
         return; /*from here to root is already pinned*/
     is_pinned = true;
@@ -15,16 +29,20 @@ void lineage_pool::pin(const lineage* l) {
 }
 
 void lineage_pool::trim() {
-    for (auto it = lineages.begin(); it != lineages.end();) {
+    for (auto it = goal_lineages.begin(); it != goal_lineages.end();) {
         if (it->second) { ++it; continue; }
-        lineages.erase(it++); // remove unpinned lineages
+        goal_lineages.erase(it++); // remove unpinned goal lineages
+    }
+    for (auto it = resolution_lineages.begin(); it != resolution_lineages.end();) {
+        if (it->second) { ++it; continue; }
+        resolution_lineages.erase(it++); // remove unpinned resolution lineages
     }
 }
 
-size_t lineage_pool::size() const {
-    return lineages.size();
+const goal_lineage* lineage_pool::intern(goal_lineage&& l) {
+    return &goal_lineages.emplace(std::move(l), false).first->first;
 }
 
-const lineage* lineage_pool::intern(lineage&& l) {
-    return &lineages.emplace(std::move(l), false).first->first;
+const resolution_lineage* lineage_pool::intern(resolution_lineage&& l) {
+    return &resolution_lineages.emplace(std::move(l), false).first->first;
 }
