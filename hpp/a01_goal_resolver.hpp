@@ -18,7 +18,7 @@ struct a01_goal_resolver {
         bind_map&,
         lineage_pool&,
         a01_goal_adder&);
-    const resolution_lineage* operator()(const goal_lineage*, size_t);
+    void operator()(const goal_lineage*, size_t);
 #ifndef DEBUG
 private:
 #endif
