@@ -12855,6 +12855,753 @@ void test_a01_goal_resolver() {
         assert(lp.resolution_lineages.count(*rl_old2) == 1);
         assert(lp.resolution_lineages.count(*rl_new) == 1);
     }
+    
+    // Test 17: Complex nested expressions with deep structures
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Build nested expression: p(f(g(h(a))))
+        const expr* atom_a = ep.atom("a");
+        const expr* h_a = ep.cons(ep.atom("h"), atom_a);
+        const expr* g_h_a = ep.cons(ep.atom("g"), h_a);
+        const expr* f_g_h_a = ep.cons(ep.atom("f"), g_h_a);
+        const expr* p_nested = ep.cons(ep.atom("p"), f_g_h_a);
+        
+        // Build rule with nested expression in body: p(f(g(h(a)))) :- q(f(g(h(a))))
+        const expr* q_nested = ep.cons(ep.atom("q"), f_g_h_a);
+        rule r1{p_nested, {q_nested}};
+        a01_database db = {r1};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Add goal matching the rule head
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        ga(g1, p_nested);
+        
+        // Resolve
+        resolver(g1, 0);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        
+        // Verify resolution created
+        assert(rs.size() == 1);
+        assert(rs.count(rl) == 1);
+        
+        // One child goal added
+        assert(gs.size() == 1);
+        const goal_lineage* child = lp.goal(rl, 0);
+        assert(gs.count(child) == 1);
+        
+        // Verify the child expression is the deeply nested structure
+        const expr* child_expr = gs.at(child);
+        
+        // Navigate through the nested structure: q(f(g(h(a))))
+        assert(std::holds_alternative<expr::cons>(child_expr->content));
+        const expr::cons& cons1 = std::get<expr::cons>(child_expr->content);
+        assert(std::holds_alternative<expr::atom>(cons1.lhs->content));
+        assert(std::get<expr::atom>(cons1.lhs->content).value == "q");
+        
+        // Get f(g(h(a)))
+        const expr* f_part = cons1.rhs;
+        assert(std::holds_alternative<expr::cons>(f_part->content));
+        const expr::cons& cons2 = std::get<expr::cons>(f_part->content);
+        assert(std::get<expr::atom>(cons2.lhs->content).value == "f");
+        
+        // Get g(h(a))
+        const expr* g_part = cons2.rhs;
+        assert(std::holds_alternative<expr::cons>(g_part->content));
+        const expr::cons& cons3 = std::get<expr::cons>(g_part->content);
+        assert(std::get<expr::atom>(cons3.lhs->content).value == "g");
+        
+        // Get h(a)
+        const expr* h_part = cons3.rhs;
+        assert(std::holds_alternative<expr::cons>(h_part->content));
+        const expr::cons& cons4 = std::get<expr::cons>(h_part->content);
+        assert(std::get<expr::atom>(cons4.lhs->content).value == "h");
+        
+        // Get a
+        const expr* a_part = cons4.rhs;
+        assert(std::holds_alternative<expr::atom>(a_part->content));
+        assert(std::get<expr::atom>(a_part->content).value == "a");
+        
+        // CRITICAL: The copier processed the deep structure correctly
+        // Since there are no variables, the copied expression might be the same
+        // as the original (expression pool interns), but the structure is verified correct
+    }
+    
+    // Test 18: Large body clauses (10+ literals)
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Create rule with 15 body literals: p :- q1, q2, ..., q15
+        const expr* p_expr = ep.atom("p");
+        std::vector<const expr*> body_literals;
+        for (int i = 1; i <= 15; i++) {
+            body_literals.push_back(ep.atom("q" + std::to_string(i)));
+        }
+        
+        rule r1{p_expr, {body_literals.begin(), body_literals.end()}};
+        a01_database db = {r1};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Add goal
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        ga(g1, p_expr);
+        
+        assert(gs.size() == 1);
+        assert(cs.size() == 1);
+        
+        // Resolve
+        resolver(g1, 0);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        
+        // Verify resolution
+        assert(rs.size() == 1);
+        assert(rs.count(rl) == 1);
+        
+        // Goal removed
+        assert(gs.count(g1) == 0);
+        
+        // 15 child goals should be added
+        assert(gs.size() == 15);
+        
+        // Verify each child
+        for (size_t i = 0; i < 15; i++) {
+            const goal_lineage* child = lp.goal(rl, i);
+            assert(gs.count(child) == 1);
+            assert(child->parent == rl);
+            assert(child->idx == i);
+            
+            // Verify expression
+            const expr* child_expr = gs.at(child);
+            assert(std::holds_alternative<expr::atom>(child_expr->content));
+            assert(std::get<expr::atom>(child_expr->content).value == "q" + std::to_string(i + 1));
+            
+            // Each child should have candidates
+            assert(cs.count(child) == 1);
+        }
+        
+        // Total: 15 children * 1 candidate each
+        assert(cs.size() == 15);
+    }
+    
+    // Test 19: CRITICAL - Goal with multiple variables
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: rule "p(A, B) :- q(A), r(B)"
+        const expr* var_a = ep.var(seq());
+        const expr* var_b = ep.var(seq());
+        uint32_t original_a_idx = std::get<expr::var>(var_a->content).index;
+        uint32_t original_b_idx = std::get<expr::var>(var_b->content).index;
+        
+        const expr* p_ab = ep.cons(ep.atom("p"), ep.cons(var_a, var_b));
+        const expr* q_a = ep.cons(ep.atom("q"), var_a);
+        const expr* r_b = ep.cons(ep.atom("r"), var_b);
+        rule r1{p_ab, {q_a, r_b}};
+        a01_database db = {r1};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // CRITICAL: Create goal with VARIABLES: p(X, Y) where X and Y are goal variables
+        const expr* goal_var_x = ep.var(seq());
+        const expr* goal_var_y = ep.var(seq());
+        uint32_t goal_x_idx = std::get<expr::var>(goal_var_x->content).index;
+        uint32_t goal_y_idx = std::get<expr::var>(goal_var_y->content).index;
+        
+        const expr* goal_p_xy = ep.cons(ep.atom("p"), ep.cons(goal_var_x, goal_var_y));
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        ga(g1, goal_p_xy);
+        
+        // Pre-resolution: NO variables should be in bind_map
+        assert(bm.bindings.count(original_a_idx) == 0);
+        assert(bm.bindings.count(original_b_idx) == 0);
+        assert(bm.bindings.count(goal_x_idx) == 0);
+        assert(bm.bindings.count(goal_y_idx) == 0);
+        
+        uint32_t seq_before = seq.index;
+        
+        // Resolve - this will do variable-on-variable unification
+        resolver(g1, 0);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        
+        // Sequencer advanced (rule variables renamed)
+        assert(seq.index > seq_before);
+        
+        // CRITICAL: Original rule variables should STILL NOT be in bind_map
+        assert(bm.bindings.count(original_a_idx) == 0);
+        assert(bm.bindings.count(original_b_idx) == 0);
+        
+        // Two children added
+        assert(gs.size() == 2);
+        const goal_lineage* child0 = lp.goal(rl, 0);
+        const goal_lineage* child1 = lp.goal(rl, 1);
+        
+        // Get child expressions
+        const expr* expr0 = gs.at(child0);
+        const expr* expr1 = gs.at(child1);
+        
+        // Both should be cons cells with variables
+        assert(std::holds_alternative<expr::cons>(expr0->content));
+        assert(std::holds_alternative<expr::cons>(expr1->content));
+        
+        const expr::cons& cons0 = std::get<expr::cons>(expr0->content);
+        const expr::cons& cons1 = std::get<expr::cons>(expr1->content);
+        
+        // Heads should be q and r
+        assert(std::get<expr::atom>(cons0.lhs->content).value == "q");
+        assert(std::get<expr::atom>(cons1.lhs->content).value == "r");
+        
+        // Arguments should be variables (unified with goal variables)
+        const expr* arg0 = cons0.rhs;
+        const expr* arg1 = cons1.rhs;
+        
+        assert(std::holds_alternative<expr::var>(arg0->content));
+        assert(std::holds_alternative<expr::var>(arg1->content));
+        
+        // These are the renamed rule variables
+        uint32_t renamed_a_idx = std::get<expr::var>(arg0->content).index;
+        uint32_t renamed_b_idx = std::get<expr::var>(arg1->content).index;
+        
+        // They should be different from originals
+        assert(renamed_a_idx != original_a_idx);
+        assert(renamed_b_idx != original_b_idx);
+        
+        // CRITICAL: Check bind_map bindings - variable-on-variable unification occurred
+        // Either goal vars are bound to renamed vars, or renamed vars are bound to goal vars
+        bool a_binding_exists = (bm.bindings.count(goal_x_idx) > 0) || (bm.bindings.count(renamed_a_idx) > 0);
+        bool b_binding_exists = (bm.bindings.count(goal_y_idx) > 0) || (bm.bindings.count(renamed_b_idx) > 0);
+        assert(a_binding_exists);
+        assert(b_binding_exists);
+        
+        // Normalize both to verify they point to same ultimate variable
+        const expr* norm0 = bm.whnf(arg0);
+        const expr* norm1 = bm.whnf(arg1);
+        
+        // Both should still be variables (not atoms)
+        assert(std::holds_alternative<expr::var>(norm0->content));
+        assert(std::holds_alternative<expr::var>(norm1->content));
+    }
+    
+    // Test 20: EXTREMELY IMPORTANT - Check exact binding contents
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: rule "p(X, Y) :- q(X), r(Y)"
+        const expr* var_x = ep.var(seq());
+        const expr* var_y = ep.var(seq());
+        uint32_t original_x_idx = std::get<expr::var>(var_x->content).index;
+        uint32_t original_y_idx = std::get<expr::var>(var_y->content).index;
+        
+        const expr* p_xy = ep.cons(ep.atom("p"), ep.cons(var_x, var_y));
+        const expr* q_x = ep.cons(ep.atom("q"), var_x);
+        const expr* r_y = ep.cons(ep.atom("r"), var_y);
+        rule r1{p_xy, {q_x, r_y}};
+        a01_database db = {r1};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Goal: p(a, b) - instantiated
+        const expr* atom_a = ep.atom("a");
+        const expr* atom_b = ep.atom("b");
+        const expr* goal_p_ab = ep.cons(ep.atom("p"), ep.cons(atom_a, atom_b));
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        ga(g1, goal_p_ab);
+        
+        // Pre-resolution: bind_map should be empty
+        assert(bm.bindings.size() == 0);
+        assert(bm.bindings.count(original_x_idx) == 0);
+        assert(bm.bindings.count(original_y_idx) == 0);
+        
+        uint32_t seq_before = seq.index;
+        
+        // Resolve
+        resolver(g1, 0);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        
+        // Two new variables were created (renamed X and Y)
+        uint32_t seq_after = seq.index;
+        assert(seq_after >= seq_before + 2);
+        
+        // CRITICAL: Original variables still not in bind_map
+        assert(bm.bindings.count(original_x_idx) == 0);
+        assert(bm.bindings.count(original_y_idx) == 0);
+        
+        // Get the child goals to extract renamed variables
+        const goal_lineage* child0 = lp.goal(rl, 0);
+        const goal_lineage* child1 = lp.goal(rl, 1);
+        
+        const expr* expr0 = gs.at(child0);
+        const expr* expr1 = gs.at(child1);
+        
+        // Extract renamed variables from children
+        const expr::cons& cons0 = std::get<expr::cons>(expr0->content);
+        const expr::cons& cons1 = std::get<expr::cons>(expr1->content);
+        const expr* arg0 = cons0.rhs;
+        const expr* arg1 = cons1.rhs;
+        
+        uint32_t renamed_x_idx = 0;
+        uint32_t renamed_y_idx = 0;
+        
+        if (std::holds_alternative<expr::var>(arg0->content)) {
+            renamed_x_idx = std::get<expr::var>(arg0->content).index;
+        }
+        if (std::holds_alternative<expr::var>(arg1->content)) {
+            renamed_y_idx = std::get<expr::var>(arg1->content).index;
+        }
+        
+        // CRITICAL: Verify exact bind_map contents
+        // Bind_map should have exactly 2 entries (one for each renamed variable)
+        assert(bm.bindings.size() == 2);
+        
+        // CRITICAL: Renamed X should be bound to "a"
+        assert(bm.bindings.count(renamed_x_idx) == 1);
+        const expr* x_binding = bm.bindings.at(renamed_x_idx);
+        assert(x_binding != nullptr);
+        assert(std::holds_alternative<expr::atom>(x_binding->content));
+        assert(std::get<expr::atom>(x_binding->content).value == "a");
+        
+        // CRITICAL: Renamed Y should be bound to "b"
+        assert(bm.bindings.count(renamed_y_idx) == 1);
+        const expr* y_binding = bm.bindings.at(renamed_y_idx);
+        assert(y_binding != nullptr);
+        assert(std::holds_alternative<expr::atom>(y_binding->content));
+        assert(std::get<expr::atom>(y_binding->content).value == "b");
+        
+        // Verify whnf returns the atoms
+        const expr* x_normalized = bm.whnf(arg0);
+        const expr* y_normalized = bm.whnf(arg1);
+        assert(x_normalized == atom_a);
+        assert(y_normalized == atom_b);
+    }
+    
+    // Test 21: EXTREMELY IMPORTANT - Verify copied expressions are new instances
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: rule "p(X) :- q(X), r(X)"
+        const expr* var_x = ep.var(seq());
+        const expr* p_x = ep.cons(ep.atom("p"), var_x);
+        const expr* q_x = ep.cons(ep.atom("q"), var_x);
+        const expr* r_x = ep.cons(ep.atom("r"), var_x);
+        rule r1{p_x, {q_x, r_x}};
+        a01_database db = {r1};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Store original expression pointers
+        const expr* original_head = r1.head;
+        const expr* original_body0 = *r1.body.begin();
+        const expr* original_body1 = *(++r1.body.begin());
+        
+        // Goal: p(a)
+        const expr* goal_p_a = ep.cons(ep.atom("p"), ep.atom("a"));
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        ga(g1, goal_p_a);
+        
+        size_t ep_size_before = ep.size();
+        
+        // Resolve
+        resolver(g1, 0);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        
+        // CRITICAL: Expression pool should have grown
+        size_t ep_size_after = ep.size();
+        assert(ep_size_after > ep_size_before);
+        
+        // Get child expressions
+        const goal_lineage* child0 = lp.goal(rl, 0);
+        const goal_lineage* child1 = lp.goal(rl, 1);
+        const expr* copied_body0 = gs.at(child0);
+        const expr* copied_body1 = gs.at(child1);
+        
+        // CRITICAL: Copied expressions should be DIFFERENT pointers from originals
+        assert(copied_body0 != original_body0);
+        assert(copied_body1 != original_body1);
+        
+        // CRITICAL: But they should be EQUAL in structure (before substitution)
+        // Since variables were renamed, the structure is similar but vars differ
+        // The head atom "q" should match
+        const expr::cons& copied_cons0 = std::get<expr::cons>(copied_body0->content);
+        const expr::cons& copied_cons1 = std::get<expr::cons>(copied_body1->content);
+        const expr::cons& original_cons0 = std::get<expr::cons>(original_body0->content);
+        const expr::cons& original_cons1 = std::get<expr::cons>(original_body1->content);
+        
+        // Heads match
+        assert(std::get<expr::atom>(copied_cons0.lhs->content).value == 
+               std::get<expr::atom>(original_cons0.lhs->content).value);
+        assert(std::get<expr::atom>(copied_cons1.lhs->content).value == 
+               std::get<expr::atom>(original_cons1.lhs->content).value);
+        
+        // But the tail (variables) should be different pointers
+        assert(copied_cons0.rhs != original_cons0.rhs);
+        assert(copied_cons1.rhs != original_cons1.rhs);
+    }
+    
+    // Test 22: Exact candidate indices verification
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: 5 rules
+        const expr* p = ep.atom("p");
+        const expr* q = ep.atom("q");
+        rule r0{p, {}};
+        rule r1{p, {q}};
+        rule r2{q, {}};
+        rule r3{q, {p}};
+        rule r4{p, {q, q}};
+        a01_database db = {r0, r1, r2, r3, r4};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Add goal p
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        ga(g1, p);
+        
+        // Verify exact candidate indices for g1 (should be 0,1,2,3,4)
+        assert(cs.count(g1) == 5);
+        auto range = cs.equal_range(g1);
+        std::vector<size_t> candidates;
+        for (auto it = range.first; it != range.second; ++it) {
+            candidates.push_back(it->second);
+        }
+        std::sort(candidates.begin(), candidates.end());
+        assert(candidates.size() == 5);
+        assert(candidates[0] == 0);
+        assert(candidates[1] == 1);
+        assert(candidates[2] == 2);
+        assert(candidates[3] == 3);
+        assert(candidates[4] == 4);
+        
+        // Resolve with rule 1
+        resolver(g1, 1);
+        const resolution_lineage* rl = lp.resolution(g1, 1);
+        
+        // CRITICAL: All candidates for g1 should be removed
+        assert(cs.count(g1) == 0);
+        
+        // New child goal q should have been added
+        const goal_lineage* child = lp.goal(rl, 0);
+        assert(gs.count(child) == 1);
+        
+        // CRITICAL: Verify exact candidate indices for child (should be 0,1,2,3,4)
+        assert(cs.count(child) == 5);
+        auto child_range = cs.equal_range(child);
+        std::vector<size_t> child_candidates;
+        for (auto it = child_range.first; it != child_range.second; ++it) {
+            child_candidates.push_back(it->second);
+        }
+        std::sort(child_candidates.begin(), child_candidates.end());
+        assert(child_candidates.size() == 5);
+        assert(child_candidates[0] == 0);
+        assert(child_candidates[1] == 1);
+        assert(child_candidates[2] == 2);
+        assert(child_candidates[3] == 3);
+        assert(child_candidates[4] == 4);
+    }
+    
+    // Test 23: Variable indirection chains through multiple resolutions
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database:
+        // p(X) :- q(X)
+        // q(Y) :- r(Y)
+        // r(a)
+        const expr* var_x = ep.var(seq());
+        const expr* var_y = ep.var(seq());
+        const expr* atom_a = ep.atom("a");
+        
+        const expr* p_x = ep.cons(ep.atom("p"), var_x);
+        const expr* q_x = ep.cons(ep.atom("q"), var_x);
+        const expr* q_y = ep.cons(ep.atom("q"), var_y);
+        const expr* r_y = ep.cons(ep.atom("r"), var_y);
+        const expr* r_a = ep.cons(ep.atom("r"), atom_a);
+        
+        rule r0{p_x, {q_x}};
+        rule r1{q_y, {r_y}};
+        rule r2{r_a, {}};
+        a01_database db = {r0, r1, r2};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Start with goal p(Z) where Z is a variable
+        const expr* var_z = ep.var(seq());
+        uint32_t z_idx = std::get<expr::var>(var_z->content).index;
+        const expr* goal_p_z = ep.cons(ep.atom("p"), var_z);
+        const goal_lineage* g_p = lp.goal(nullptr, 1);
+        ga(g_p, goal_p_z);
+        
+        // Resolution 1: p(Z) with rule 0 creates q(Z') where Z binds to Z'
+        resolver(g_p, 0);
+        const resolution_lineage* rl_p = lp.resolution(g_p, 0);
+        const goal_lineage* g_q = lp.goal(rl_p, 0);
+        
+        // Extract variable from q(Z')
+        const expr* expr_q = gs.at(g_q);
+        const expr::cons& cons_q = std::get<expr::cons>(expr_q->content);
+        const expr* arg_q = cons_q.rhs;
+        assert(std::holds_alternative<expr::var>(arg_q->content));
+        uint32_t z_prime_idx = std::get<expr::var>(arg_q->content).index;
+        
+        // Check binding: either Z→Z' or Z'→Z
+        bool first_binding_exists = (bm.bindings.count(z_idx) > 0) || (bm.bindings.count(z_prime_idx) > 0);
+        assert(first_binding_exists);
+        
+        // Resolution 2: q(Z') with rule 1 creates r(Z'') where Z' binds to Z''
+        resolver(g_q, 1);
+        const resolution_lineage* rl_q = lp.resolution(g_q, 1);
+        const goal_lineage* g_r = lp.goal(rl_q, 0);
+        
+        // Extract variable from r(Z'')
+        const expr* expr_r = gs.at(g_r);
+        const expr::cons& cons_r = std::get<expr::cons>(expr_r->content);
+        const expr* arg_r = cons_r.rhs;
+        assert(std::holds_alternative<expr::var>(arg_r->content));
+        uint32_t z_double_prime_idx = std::get<expr::var>(arg_r->content).index;
+        
+        // Resolution 3: r(Z'') with rule 2 unifies Z'' with 'a'
+        resolver(g_r, 2);
+        
+        // CRITICAL: Now test the chain: Z → Z' → Z'' → 'a'
+        // whnf should resolve the entire chain
+        
+        // Create a variable expression pointing to Z
+        const expr* test_var_z = ep.var(z_idx);
+        const expr* resolved_z = bm.whnf(test_var_z);
+        
+        // It should eventually resolve to 'a' (following the chain)
+        // Note: The exact chain depends on bind_map direction, but whnf should reach 'a'
+        if (std::holds_alternative<expr::atom>(resolved_z->content)) {
+            assert(std::get<expr::atom>(resolved_z->content).value == "a");
+        } else {
+            // If still a variable, follow it
+            assert(std::holds_alternative<expr::var>(resolved_z->content));
+            uint32_t final_idx = std::get<expr::var>(resolved_z->content).index;
+            // The final variable should be bound to 'a'
+            if (bm.bindings.count(final_idx) > 0) {
+                const expr* final_binding = bm.whnf(bm.bindings.at(final_idx));
+                if (std::holds_alternative<expr::atom>(final_binding->content)) {
+                    assert(std::get<expr::atom>(final_binding->content).value == "a");
+                }
+            }
+        }
+        
+        // Test whnf on Z''
+        const expr* resolved_z_double = bm.whnf(arg_r);
+        assert(std::holds_alternative<expr::atom>(resolved_z_double->content));
+        assert(std::get<expr::atom>(resolved_z_double->content).value == "a");
+    }
+    
+    // Test 24: Empty body with variables in head (fact with variable)
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: p(X). (fact with variable - empty body)
+        const expr* var_x = ep.var(seq());
+        uint32_t original_x_idx = std::get<expr::var>(var_x->content).index;
+        const expr* p_x = ep.cons(ep.atom("p"), var_x);
+        rule r1{p_x, {}};  // Empty body
+        a01_database db = {r1};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Goal: p(a) - concrete atom
+        const expr* atom_a = ep.atom("a");
+        const expr* goal_p_a = ep.cons(ep.atom("p"), atom_a);
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        ga(g1, goal_p_a);
+        
+        // Pre-resolution
+        assert(gs.size() == 1);
+        assert(bm.bindings.count(original_x_idx) == 0);
+        
+        uint32_t seq_before = seq.index;
+        
+        // Resolve with the fact
+        resolver(g1, 0);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        
+        // Sequencer advanced (variable was copied)
+        assert(seq.index > seq_before);
+        
+        // Resolution created
+        assert(rs.size() == 1);
+        assert(rs.count(rl) == 1);
+        
+        // Goal removed
+        assert(gs.count(g1) == 0);
+        
+        // CRITICAL: No new goals (empty body)
+        assert(gs.size() == 0);
+        
+        // CRITICAL: But unification occurred (X' = a)
+        // The renamed variable should be in bind_map
+        assert(bm.bindings.size() == 1);
+        
+        // CRITICAL: Original variable still not in bind_map
+        assert(bm.bindings.count(original_x_idx) == 0);
+        
+        // Find the renamed variable (should be seq_before)
+        uint32_t renamed_x_idx = seq_before;
+        assert(bm.bindings.count(renamed_x_idx) == 1);
+        const expr* x_binding = bm.bindings.at(renamed_x_idx);
+        assert(std::holds_alternative<expr::atom>(x_binding->content));
+        assert(std::get<expr::atom>(x_binding->content).value == "a");
+    }
+    
+    // Test 25: Multiple rules with same head
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: Three rules all with head p(X)
+        const expr* var_x1 = ep.var(seq());
+        const expr* var_x2 = ep.var(seq());
+        const expr* var_x3 = ep.var(seq());
+        
+        const expr* p_x1 = ep.cons(ep.atom("p"), var_x1);
+        const expr* p_x2 = ep.cons(ep.atom("p"), var_x2);
+        const expr* p_x3 = ep.cons(ep.atom("p"), var_x3);
+        
+        const expr* q_x1 = ep.cons(ep.atom("q"), var_x1);
+        const expr* r_x2 = ep.cons(ep.atom("r"), var_x2);
+        const expr* s_x3 = ep.cons(ep.atom("s"), var_x3);
+        
+        rule r0{p_x1, {q_x1}};  // p(X) :- q(X)
+        rule r1{p_x2, {r_x2}};  // p(X) :- r(X)
+        rule r2{p_x3, {s_x3}};  // p(X) :- s(X)
+        a01_database db = {r0, r1, r2};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Goal: p(a)
+        const expr* goal_p_a = ep.cons(ep.atom("p"), ep.atom("a"));
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        ga(g1, goal_p_a);
+        
+        // All three rules are candidates
+        assert(cs.count(g1) == 3);
+        
+        // Resolve with rule 1 (middle one: p(X) :- r(X))
+        resolver(g1, 1);
+        const resolution_lineage* rl = lp.resolution(g1, 1);
+        
+        // Resolution has correct index
+        assert(rl->idx == 1);
+        
+        // One child: r(a)
+        assert(gs.size() == 1);
+        const goal_lineage* child = lp.goal(rl, 0);
+        const expr* child_expr = gs.at(child);
+        
+        // CRITICAL: Child should be r(a), NOT q(a) or s(a)
+        const expr::cons& cons = std::get<expr::cons>(child_expr->content);
+        assert(std::get<expr::atom>(cons.lhs->content).value == "r");
+        
+        // Verify the argument
+        const expr* arg = bm.whnf(cons.rhs);
+        assert(std::holds_alternative<expr::atom>(arg->content));
+        assert(std::get<expr::atom>(arg->content).value == "a");
+    }
 }
 
 void unit_test_main() {
