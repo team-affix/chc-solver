@@ -25,6 +25,6 @@ bool a01_head_elimination_detector::operator()(const goal_lineage* gl, size_t i)
     // pop the temporary frame
     t.pop();
 
-    return unified;
+    return !unified; // if not unified, then elimination should occur
     
 }
