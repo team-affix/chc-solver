@@ -17,7 +17,9 @@ struct a01_goal_resolver {
         copier&,
         bind_map&,
         lineage_pool&,
-        a01_goal_adder&);
+        a01_goal_adder&,
+        a01_avoidance_store&
+    );
     void operator()(const goal_lineage*, size_t);
 #ifndef DEBUG
 private:
@@ -30,6 +32,7 @@ private:
     bind_map& bm;
     lineage_pool& lp;
     a01_goal_adder& ga;
+    a01_avoidance_store& as;
 };
 
 #endif
