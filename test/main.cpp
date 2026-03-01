@@ -12856,7 +12856,7 @@ void test_a01_goal_resolver() {
         assert(lp.resolution_lineages.count(*rl_new) == 1);
     }
     
-    // Test 17: Complex nested expressions with deep structures
+    // Test 17: Complex nested expressions with deep structures AND variables
     {
         trail t;
         t.push();
@@ -12870,28 +12870,47 @@ void test_a01_goal_resolver() {
         a01_goal_store gs;
         a01_candidate_store cs;
         
-        // Build nested expression: p(f(g(h(a))))
-        const expr* atom_a = ep.atom("a");
-        const expr* h_a = ep.cons(ep.atom("h"), atom_a);
-        const expr* g_h_a = ep.cons(ep.atom("g"), h_a);
-        const expr* f_g_h_a = ep.cons(ep.atom("f"), g_h_a);
-        const expr* p_nested = ep.cons(ep.atom("p"), f_g_h_a);
+        // Build nested expression with VARIABLE: p(f(g(h(X))))
+        const expr* var_x = ep.var(seq());
+        uint32_t original_x_idx = std::get<expr::var>(var_x->content).index;
+        const expr* h_x = ep.cons(ep.atom("h"), var_x);
+        const expr* g_h_x = ep.cons(ep.atom("g"), h_x);
+        const expr* f_g_h_x = ep.cons(ep.atom("f"), g_h_x);
+        const expr* p_nested = ep.cons(ep.atom("p"), f_g_h_x);
         
-        // Build rule with nested expression in body: p(f(g(h(a)))) :- q(f(g(h(a))))
-        const expr* q_nested = ep.cons(ep.atom("q"), f_g_h_a);
+        // Build rule with nested expression in body: p(f(g(h(X)))) :- q(f(g(h(X))))
+        const expr* q_nested = ep.cons(ep.atom("q"), f_g_h_x);
         rule r1{p_nested, {q_nested}};
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
         a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
-        // Add goal matching the rule head
+        // Add goal with concrete value: p(f(g(h(a))))
+        const expr* atom_a = ep.atom("a");
+        const expr* h_a = ep.cons(ep.atom("h"), atom_a);
+        const expr* g_h_a = ep.cons(ep.atom("g"), h_a);
+        const expr* f_g_h_a = ep.cons(ep.atom("f"), g_h_a);
+        const expr* goal_p_nested = ep.cons(ep.atom("p"), f_g_h_a);
+        
         const goal_lineage* g1 = lp.goal(nullptr, 1);
-        ga(g1, p_nested);
+        ga(g1, goal_p_nested);
+        
+        // Store expression pool size and original pointers
+        size_t ep_size_before = ep.size();
+        const expr* original_body_expr = q_nested;
+        
+        // Pre-resolution: original variable not bound
+        assert(bm.bindings.count(original_x_idx) == 0);
+        
+        uint32_t seq_before = seq.index;
         
         // Resolve
         resolver(g1, 0);
         const resolution_lineage* rl = lp.resolution(g1, 0);
+        
+        // Sequencer advanced (variable copied)
+        assert(seq.index > seq_before);
         
         // Verify resolution created
         assert(rs.size() == 1);
@@ -12902,8 +12921,14 @@ void test_a01_goal_resolver() {
         const goal_lineage* child = lp.goal(rl, 0);
         assert(gs.count(child) == 1);
         
-        // Verify the child expression is the deeply nested structure
+        // Get the child expression
         const expr* child_expr = gs.at(child);
+        
+        // CRITICAL: Copied expression must be DIFFERENT pointer from original
+        assert(child_expr != original_body_expr);
+        
+        // CRITICAL: Expression pool grew (new expressions created during copy)
+        assert(ep.size() > ep_size_before);
         
         // Navigate through the nested structure: q(f(g(h(a))))
         assert(std::holds_alternative<expr::cons>(child_expr->content));
@@ -12911,32 +12936,34 @@ void test_a01_goal_resolver() {
         assert(std::holds_alternative<expr::atom>(cons1.lhs->content));
         assert(std::get<expr::atom>(cons1.lhs->content).value == "q");
         
-        // Get f(g(h(a)))
-        const expr* f_part = cons1.rhs;
+        // Get f(g(h(a))) after unification
+        const expr* f_part = bm.whnf(cons1.rhs);
         assert(std::holds_alternative<expr::cons>(f_part->content));
         const expr::cons& cons2 = std::get<expr::cons>(f_part->content);
         assert(std::get<expr::atom>(cons2.lhs->content).value == "f");
         
         // Get g(h(a))
-        const expr* g_part = cons2.rhs;
+        const expr* g_part = bm.whnf(cons2.rhs);
         assert(std::holds_alternative<expr::cons>(g_part->content));
         const expr::cons& cons3 = std::get<expr::cons>(g_part->content);
         assert(std::get<expr::atom>(cons3.lhs->content).value == "g");
         
         // Get h(a)
-        const expr* h_part = cons3.rhs;
+        const expr* h_part = bm.whnf(cons3.rhs);
         assert(std::holds_alternative<expr::cons>(h_part->content));
         const expr::cons& cons4 = std::get<expr::cons>(h_part->content);
         assert(std::get<expr::atom>(cons4.lhs->content).value == "h");
         
-        // Get a
-        const expr* a_part = cons4.rhs;
+        // Get a (after following all bindings)
+        const expr* a_part = bm.whnf(cons4.rhs);
         assert(std::holds_alternative<expr::atom>(a_part->content));
         assert(std::get<expr::atom>(a_part->content).value == "a");
         
-        // CRITICAL: The copier processed the deep structure correctly
-        // Since there are no variables, the copied expression might be the same
-        // as the original (expression pool interns), but the structure is verified correct
+        // CRITICAL: Original variable still not in bind_map
+        assert(bm.bindings.count(original_x_idx) == 0);
+        
+        // CRITICAL: Renamed variable IS in bind_map
+        assert(bm.bindings.size() == 1);
     }
     
     // Test 18: Large body clauses (10+ literals)
@@ -13437,37 +13464,36 @@ void test_a01_goal_resolver() {
         assert(std::holds_alternative<expr::var>(arg_r->content));
         uint32_t z_double_prime_idx = std::get<expr::var>(arg_r->content).index;
         
-        // Resolution 3: r(Z'') with rule 2 unifies Z'' with 'a'
+        // Resolution 3: r(Z'') with rule 2 (r(a)) unifies Z'' with 'a'
         resolver(g_r, 2);
         
         // CRITICAL: Now test the chain: Z → Z' → Z'' → 'a'
-        // whnf should resolve the entire chain
+        // whnf should resolve the entire chain by following bindings
         
+        // Test 1: whnf on Z'' (most recent variable in chain)
+        const expr* resolved_z_double = bm.whnf(arg_r);
+        // MUST resolve to 'a' (no fallback)
+        assert(std::holds_alternative<expr::atom>(resolved_z_double->content));
+        assert(std::get<expr::atom>(resolved_z_double->content).value == "a");
+        
+        // Test 2: whnf on Z' (middle variable in chain)
+        const expr* resolved_z_prime = bm.whnf(arg_q);
+        // MUST resolve to 'a' through the chain (no fallback)
+        assert(std::holds_alternative<expr::atom>(resolved_z_prime->content));
+        assert(std::get<expr::atom>(resolved_z_prime->content).value == "a");
+        
+        // Test 3: whnf on Z (original goal variable) - STRONGEST TEST
         // Create a variable expression pointing to Z
         const expr* test_var_z = ep.var(z_idx);
         const expr* resolved_z = bm.whnf(test_var_z);
+        // MUST resolve to 'a' through the full chain: Z → Z' → Z'' → 'a'
+        // This is the CRITICAL assertion - no fallback paths allowed
+        assert(std::holds_alternative<expr::atom>(resolved_z->content));
+        assert(std::get<expr::atom>(resolved_z->content).value == "a");
         
-        // It should eventually resolve to 'a' (following the chain)
-        // Note: The exact chain depends on bind_map direction, but whnf should reach 'a'
-        if (std::holds_alternative<expr::atom>(resolved_z->content)) {
-            assert(std::get<expr::atom>(resolved_z->content).value == "a");
-        } else {
-            // If still a variable, follow it
-            assert(std::holds_alternative<expr::var>(resolved_z->content));
-            uint32_t final_idx = std::get<expr::var>(resolved_z->content).index;
-            // The final variable should be bound to 'a'
-            if (bm.bindings.count(final_idx) > 0) {
-                const expr* final_binding = bm.whnf(bm.bindings.at(final_idx));
-                if (std::holds_alternative<expr::atom>(final_binding->content)) {
-                    assert(std::get<expr::atom>(final_binding->content).value == "a");
-                }
-            }
-        }
-        
-        // Test whnf on Z''
-        const expr* resolved_z_double = bm.whnf(arg_r);
-        assert(std::holds_alternative<expr::atom>(resolved_z_double->content));
-        assert(std::get<expr::atom>(resolved_z_double->content).value == "a");
+        // Verify the chain works by checking that each step is connected
+        // At least 3 bindings should exist (connecting the chain)
+        assert(bm.bindings.size() >= 3);
     }
     
     // Test 24: Empty body with variables in head (fact with variable)
@@ -13524,18 +13550,30 @@ void test_a01_goal_resolver() {
         assert(gs.size() == 0);
         
         // CRITICAL: But unification occurred (X' = a)
-        // The renamed variable should be in bind_map
+        // Exactly one variable should be in bind_map
         assert(bm.bindings.size() == 1);
         
         // CRITICAL: Original variable still not in bind_map
         assert(bm.bindings.count(original_x_idx) == 0);
         
-        // Find the renamed variable (should be seq_before)
-        uint32_t renamed_x_idx = seq_before;
-        assert(bm.bindings.count(renamed_x_idx) == 1);
-        const expr* x_binding = bm.bindings.at(renamed_x_idx);
+        // Extract the renamed variable from bind_map (don't assume index)
+        // There should be exactly one binding
+        auto it = bm.bindings.begin();
+        uint32_t renamed_x_idx = it->first;
+        const expr* x_binding = it->second;
+        
+        // Verify the renamed variable is different from original
+        assert(renamed_x_idx != original_x_idx);
+        
+        // Verify the binding content is 'a'
+        assert(x_binding != nullptr);
         assert(std::holds_alternative<expr::atom>(x_binding->content));
         assert(std::get<expr::atom>(x_binding->content).value == "a");
+        
+        // Double-check through whnf
+        const expr* test_var = ep.var(renamed_x_idx);
+        const expr* normalized = bm.whnf(test_var);
+        assert(normalized == atom_a);
     }
     
     // Test 25: Multiple rules with same head
