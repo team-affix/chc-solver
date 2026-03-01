@@ -11195,9 +11195,10 @@ void test_a01_goal_resolver_constructor() {
         a01_goal_store gs;
         a01_candidate_store cs;
         a01_database db;
+        a01_avoidance_store as;
         a01_goal_adder ga(gs, cs, db);
         
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         assert(&resolver.rs == &rs);
         assert(&resolver.gs == &gs);
@@ -11207,9 +11208,10 @@ void test_a01_goal_resolver_constructor() {
         assert(&resolver.bm == &bm);
         assert(&resolver.lp == &lp);
         assert(&resolver.ga == &ga);
+        assert(&resolver.as == &as);
     }
     
-    // Test 2: Construction with non-empty stores
+    // Test 2: Construction with non-empty stores including avoidances
     {
         trail t;
         expr_pool ep(t);
@@ -11221,6 +11223,7 @@ void test_a01_goal_resolver_constructor() {
         a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
+        a01_avoidance_store as;
         
         // Add some initial data to resolution store
         const goal_lineage* g0 = lp.goal(nullptr, 0);
@@ -11239,13 +11242,26 @@ void test_a01_goal_resolver_constructor() {
         rule r1{&rule_expr, {}};
         a01_database db = {r1};
         
+        // Pre-populate avoidance store with some avoidances
+        a01_decision_store avoidance1;
+        avoidance1.insert(rl0);
+        as.push_back(avoidance1);
+        
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const resolution_lineage* rl2 = lp.resolution(g2, 0);
+        a01_decision_store avoidance2;
+        avoidance2.insert(rl0);
+        avoidance2.insert(rl2);
+        as.push_back(avoidance2);
+        
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         assert(resolver.rs.size() == 1);
         assert(resolver.gs.size() == 1);
         assert(resolver.cs.size() == 2);
         assert(resolver.db.size() == 1);
+        assert(resolver.as.size() == 2);
     }
 }
 
@@ -11270,10 +11286,23 @@ void test_a01_goal_resolver() {
         a01_database db = {r_fact};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        
+        // Pre-populate avoidance store: single avoidance containing the rl we're about to create
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const resolution_lineage* rl_expected = lp.resolution(g1, 0);
+        
+        a01_decision_store avoidance1;
+        avoidance1.insert(rl_expected);
+        as.push_back(avoidance1);
+        
+        assert(as.size() == 1);
+        assert(as.front().size() == 1);
+        assert(as.front().count(rl_expected) == 1);
+        
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal "p" using goal_adder
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
         const expr* goal_p = ep.atom("p");
         ga(g1, goal_p);
         
@@ -11297,6 +11326,7 @@ void test_a01_goal_resolver() {
         
         // Get the resolution lineage that was created
         const resolution_lineage* rl = lp.resolution(g1, 0);
+        assert(rl == rl_expected); // Should be same interned instance
         
         // Check resolution lineage structure
         assert(rl != nullptr);
@@ -11306,6 +11336,11 @@ void test_a01_goal_resolver() {
         // Check resolution was added to resolution store
         assert(rs.size() == 1);
         assert(rs.count(rl) == 1);
+        
+        // CRITICAL: Verify rl was erased from all avoidances
+        assert(as.size() == 1);
+        assert(as.front().count(rl) == 0); // rl should be removed
+        assert(as.front().size() == 0);    // Avoidance now empty
         
         // Check goal was removed from goal store
         assert(gs.size() == 0);
@@ -11349,10 +11384,40 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        
+        // Pre-populate avoidance store with mixed avoidances
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const resolution_lineage* rl_expected = lp.resolution(g1, 0);
+        
+        // Create some unrelated resolutions for avoidances
+        const goal_lineage* g_other1 = lp.goal(nullptr, 100);
+        const goal_lineage* g_other2 = lp.goal(nullptr, 200);
+        const resolution_lineage* rl_other1 = lp.resolution(g_other1, 0);
+        const resolution_lineage* rl_other2 = lp.resolution(g_other2, 1);
+        
+        // Avoidance 1: contains rl_expected + another resolution
+        a01_decision_store avoidance1;
+        avoidance1.insert(rl_expected);
+        avoidance1.insert(rl_other1);
+        as.push_back(avoidance1);
+        
+        // Avoidance 2: contains only rl_expected
+        a01_decision_store avoidance2;
+        avoidance2.insert(rl_expected);
+        as.push_back(avoidance2);
+        
+        // Avoidance 3: doesn't contain rl_expected at all
+        a01_decision_store avoidance3;
+        avoidance3.insert(rl_other1);
+        avoidance3.insert(rl_other2);
+        as.push_back(avoidance3);
+        
+        assert(as.size() == 3);
+        
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal "p" using goal_adder
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
         const expr* goal_p = ep.atom("p");
         ga(g1, goal_p);
         
@@ -11369,6 +11434,7 @@ void test_a01_goal_resolver() {
         
         // Get the resolution lineage that was created
         const resolution_lineage* rl = lp.resolution(g1, 0);
+        assert(rl == rl_expected);
         
         // Check resolution lineage structure
         assert(rl != nullptr);
@@ -11409,6 +11475,26 @@ void test_a01_goal_resolver() {
         
         // Verify child goal is in lineage pool
         assert(lp.goal_lineages.count(*child_g) == 1);
+        
+        // CRITICAL: Verify avoidance store state after resolution
+        assert(as.size() == 3);
+        
+        // Avoidance 1: rl_expected removed, rl_other1 remains
+        auto it = as.begin();
+        assert(it->count(rl) == 0);
+        assert(it->count(rl_other1) == 1);
+        assert(it->size() == 1);
+        
+        // Avoidance 2: rl_expected removed, now empty
+        ++it;
+        assert(it->count(rl) == 0);
+        assert(it->size() == 0);
+        
+        // Avoidance 3: unchanged (didn't contain rl_expected)
+        ++it;
+        assert(it->count(rl_other1) == 1);
+        assert(it->count(rl_other2) == 1);
+        assert(it->size() == 2);
     }
     
     // Test 3: Resolve with rule with multiple body clauses
@@ -11434,10 +11520,14 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        
+        // Empty avoidance store for this test (baseline)
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal "p" using goal_adder
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
         const expr* goal_p = ep.atom("p");
         ga(g1, goal_p);
         
@@ -11445,6 +11535,7 @@ void test_a01_goal_resolver() {
         assert(gs.size() == 1);
         assert(cs.size() == 1);
         assert(gs.at(g1) == goal_p);
+        assert(as.size() == 0); // Empty avoidance store
         
         // Resolve g1 with rule 0
         resolver(g1, 0);
@@ -11503,6 +11594,9 @@ void test_a01_goal_resolver() {
         assert(lp.goal_lineages.count(*child_g0) == 1);
         assert(lp.goal_lineages.count(*child_g1) == 1);
         assert(lp.goal_lineages.count(*child_g2) == 1);
+        
+        // Avoidance store should still be empty
+        assert(as.size() == 0);
     }
     
     // Test 4: Resolve with variable unification - VERIFY COPYING AND RENAMING
@@ -11528,13 +11622,21 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        
+        // Pre-populate: avoidance containing the rl about to be created
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const resolution_lineage* rl_expected = lp.resolution(g1, 0);
+        a01_decision_store avoidance1;
+        avoidance1.insert(rl_expected);
+        as.push_back(avoidance1);
+        
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Record sequencer state before resolution
         uint32_t seq_before = seq.index;
         
         // Add goal "p(a)" using goal_adder
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
         const expr* atom_a = ep.atom("a");
         const expr* goal_p_a = ep.cons(ep.atom("p"), atom_a);
         ga(g1, goal_p_a);
@@ -11622,6 +11724,11 @@ void test_a01_goal_resolver() {
         
         // Verify candidate was added
         assert(cs.count(child_g) == 1);
+        
+        // CRITICAL: Verify rl was erased from avoidance
+        assert(as.size() == 1);
+        assert(as.front().count(rl) == 0);
+        assert(as.front().size() == 0);
     }
     
     // Test 5: Multiple goals with multiple candidates - resolve only one
@@ -11646,7 +11753,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r1, r2};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add two goals using goal_adder
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -11690,6 +11798,9 @@ void test_a01_goal_resolver() {
         
         // No new goals added (empty body)
         assert(gs.size() == 1);
+        
+        // Empty avoidance store (no avoidances for this test)
+        assert(as.size() == 0);
     }
     
     // Test 6: Verify lineage structure after resolution (deep tree)
@@ -11714,7 +11825,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal with specific parent lineage using goal_adder
         const resolution_lineage* parent_rl = lp.resolution(nullptr, 5);
@@ -11772,6 +11884,9 @@ void test_a01_goal_resolver() {
         // Both should have candidates
         assert(cs.count(child_g0) == 1);
         assert(cs.count(child_g1) == 1);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 7: CRITICAL - Verify copier uses consistent translation_map
@@ -11800,7 +11915,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Record sequencer state
         uint32_t seq_before = seq.index;
@@ -11923,6 +12039,9 @@ void test_a01_goal_resolver() {
         assert(lp.goal_lineages.count(*child_g0) == 1);
         assert(lp.goal_lineages.count(*child_g1) == 1);
         assert(lp.resolution_lineages.count(*rl) == 1);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 8: Database with multiple rules, resolve with non-zero index
@@ -11949,7 +12068,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r1, r2, r3};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal "q" using goal_adder (adds all rules as candidates)
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -11996,6 +12116,9 @@ void test_a01_goal_resolver() {
         
         // Verify in lineage pool
         assert(lp.goal_lineages.count(*child_g) == 1);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 9: Resolve goal that's part of an existing AND-OR tree (deep goal)
@@ -12019,7 +12142,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Create a goal that's deep in the tree (Level 0 -> Level 1 -> Level 2)
         const goal_lineage* root = lp.goal(nullptr, 0);
@@ -12081,6 +12205,9 @@ void test_a01_goal_resolver() {
         
         // Verify candidates
         assert(cs.count(new_goal) == 1);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 10: Resolve with multiple distinct variables - verify independent renaming
@@ -12111,7 +12238,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Record sequencer state
         uint32_t seq_before = seq.index;
@@ -12252,6 +12380,9 @@ void test_a01_goal_resolver() {
         // Both should be in lineage pool
         assert(lp.goal_lineages.count(*child_g0) == 1);
         assert(lp.goal_lineages.count(*child_g1) == 1);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 11: Variable-on-variable unification during resolution
@@ -12277,7 +12408,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Record sequencer state
         uint32_t seq_before = seq.index;
@@ -12368,6 +12500,9 @@ void test_a01_goal_resolver() {
         
         // Should have candidates
         assert(cs.count(child_g) == 1);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 12: Multiple database rules - resolve with middle rule to verify indexing
@@ -12401,7 +12536,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2, r3, r4};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal "r" which matches rule 2
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -12457,6 +12593,9 @@ void test_a01_goal_resolver() {
         // Verify in pools
         assert(lp.goal_lineages.count(*child_g0) == 1);
         assert(lp.goal_lineages.count(*child_g1) == 1);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 13: Multiple goals in store - resolve specific one, others untouched
@@ -12488,7 +12627,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2, r3, r4};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add 5 different goals with different lineage structures
         const goal_lineage* g0 = lp.goal(nullptr, 0);
@@ -12592,6 +12732,9 @@ void test_a01_goal_resolver() {
         assert(lp.goal_lineages.count(*child0) == 1);
         assert(lp.goal_lineages.count(*child1) == 1);
         assert(lp.resolution_lineages.count(*rl) == 1);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 14: Database indexing with variables - resolve with last rule
@@ -12630,7 +12773,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2, r3};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal "r(a)"
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -12670,6 +12814,9 @@ void test_a01_goal_resolver() {
         
         // Resolution in pool
         assert(lp.resolution_lineages.count(*rl) == 1);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 15: Multiple goals, resolve multiple times in sequence
@@ -12697,7 +12844,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add three goals
         const goal_lineage* g_p = lp.goal(nullptr, 10);
@@ -12789,6 +12937,9 @@ void test_a01_goal_resolver() {
         assert(rl_p->parent == g_p);
         assert(child_of_q->parent == rl_q);
         assert(rl_q->parent == g_q);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 16: Resolution store with pre-existing resolutions
@@ -12813,7 +12964,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Pre-populate resolution store with some existing resolutions
         const goal_lineage* g_old1 = lp.goal(nullptr, 100);
@@ -12855,6 +13007,9 @@ void test_a01_goal_resolver() {
         assert(lp.resolution_lineages.count(*rl_old1) == 1);
         assert(lp.resolution_lineages.count(*rl_old2) == 1);
         assert(lp.resolution_lineages.count(*rl_new) == 1);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 17: Complex nested expressions with deep structures AND variables
@@ -12885,7 +13040,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal with concrete value: p(f(g(h(a))))
         const expr* atom_a = ep.atom("a");
@@ -12965,6 +13121,9 @@ void test_a01_goal_resolver() {
         
         // CRITICAL: Renamed variable IS in bind_map
         assert(bm.bindings.size() == 1);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 18: Large body clauses (10+ literals)
@@ -12992,7 +13151,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -13033,6 +13193,9 @@ void test_a01_goal_resolver() {
         
         // Total: 15 children * 1 candidate each
         assert(cs.size() == 15);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 19: CRITICAL - Goal with multiple variables
@@ -13062,7 +13225,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // CRITICAL: Create goal with VARIABLES: p(X, Y) where X and Y are goal variables
         const expr* goal_var_x = ep.var(seq());
@@ -13142,6 +13306,9 @@ void test_a01_goal_resolver() {
         // Both should still be variables (not atoms)
         assert(std::holds_alternative<expr::var>(norm0->content));
         assert(std::holds_alternative<expr::var>(norm1->content));
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 20: EXTREMELY IMPORTANT - Check exact binding contents
@@ -13171,7 +13338,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Goal: p(a, b) - instantiated
         const expr* atom_a = ep.atom("a");
@@ -13245,6 +13413,9 @@ void test_a01_goal_resolver() {
         const expr* y_normalized = bm.whnf(arg1);
         assert(x_normalized == atom_a);
         assert(y_normalized == atom_b);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 21: EXTREMELY IMPORTANT - Verify copied expressions are new instances
@@ -13270,7 +13441,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Store original expression pointers
         const expr* original_head = r1.head;
@@ -13319,6 +13491,9 @@ void test_a01_goal_resolver() {
         // But the tail (variables) should be different pointers
         assert(copied_cons0.rhs != original_cons0.rhs);
         assert(copied_cons1.rhs != original_cons1.rhs);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 22: Exact candidate indices verification
@@ -13346,7 +13521,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2, r3, r4};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal p
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -13392,6 +13568,9 @@ void test_a01_goal_resolver() {
         assert(child_candidates[2] == 2);
         assert(child_candidates[3] == 3);
         assert(child_candidates[4] == 4);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 23: Variable indirection chains through multiple resolutions
@@ -13428,7 +13607,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Start with goal p(Z) where Z is a variable
         const expr* var_z = ep.var(seq());
@@ -13495,6 +13675,9 @@ void test_a01_goal_resolver() {
         // Verify the chain works by checking that each step is connected
         // At least 3 bindings should exist (connecting the chain)
         assert(bm.bindings.size() >= 3);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 24: Empty body with variables in head (fact with variable)
@@ -13519,7 +13702,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Goal: p(a) - concrete atom
         const expr* atom_a = ep.atom("a");
@@ -13575,6 +13759,9 @@ void test_a01_goal_resolver() {
         const expr* test_var = ep.var(renamed_x_idx);
         const expr* normalized = bm.whnf(test_var);
         assert(normalized == atom_a);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 25: Multiple rules with same head
@@ -13610,7 +13797,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Goal: p(a)
         const expr* goal_p_a = ep.cons(ep.atom("p"), ep.atom("a"));
@@ -13640,6 +13828,9 @@ void test_a01_goal_resolver() {
         const expr* arg = bm.whnf(cons.rhs);
         assert(std::holds_alternative<expr::atom>(arg->content));
         assert(std::get<expr::atom>(arg->content).value == "a");
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 26: Resolution sequence - parent then child (depth-first order)
@@ -13667,7 +13858,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add root goal p
         const goal_lineage* g_p = lp.goal(nullptr, 0);
@@ -13717,6 +13909,9 @@ void test_a01_goal_resolver() {
         assert(rs.count(rl_p) == 1);
         assert(rs.count(rl_q) == 1);
         assert(rs.count(rl_r) == 1);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 27: Resolution sequence - parent, independent goal, then child
@@ -13748,7 +13943,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2, r3, r4};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add two independent root goals
         const goal_lineage* g_p = lp.goal(nullptr, 0);
@@ -13834,6 +14030,9 @@ void test_a01_goal_resolver() {
         assert(rs.count(rl_q) == 1);
         assert(rs.count(rl_y) == 1);
         assert(rs.count(rl_z) == 1);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 28: Complex resolution order - branching tree
@@ -13865,7 +14064,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2, r3, r4};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Start with root p
         const goal_lineage* g_p = lp.goal(nullptr, 0);
@@ -13949,6 +14149,9 @@ void test_a01_goal_resolver() {
         
         // All 5 resolutions tracked
         assert(rs.size() == 5);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 29: Complex interleaved resolution order - 7 resolutions
@@ -13984,7 +14187,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2, r3, r4, r5, r6};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Root: a
         const goal_lineage* g_a = lp.goal(nullptr, 0);
@@ -14093,6 +14297,9 @@ void test_a01_goal_resolver() {
         
         // All 7 resolutions in store
         assert(rs.size() == 7);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 30: Large sequence - 10 resolutions with random order
@@ -14124,7 +14331,8 @@ void test_a01_goal_resolver() {
         a01_database db(rules.begin(), rules.end());
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Start with root p0
         const goal_lineage* g_p0 = lp.goal(nullptr, 0);
@@ -14189,6 +14397,9 @@ void test_a01_goal_resolver() {
         for (int i = 0; i < 10; i++) {
             assert(rs.count(resolutions[i]) == 1);
         }
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 31: Out-of-order resolution with multiple independent trees
@@ -14222,7 +14433,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2, r3, r4, r5};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Create TWO independent root goals
         const goal_lineage* g_p1 = lp.goal(nullptr, 10);
@@ -14321,6 +14533,9 @@ void test_a01_goal_resolver() {
         // Tree 1 root has idx 10, Tree 2 root has idx 20
         // All resolutions tracked
         assert(rs.size() == 6);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 32: Resolution order - breadth-first style (all siblings before children)
@@ -14356,7 +14571,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2, r3, r4, r5, r6};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Root
         const goal_lineage* g_root = lp.goal(nullptr, 0);
@@ -14450,6 +14666,9 @@ void test_a01_goal_resolver() {
         
         // All 7 resolutions tracked
         assert(rs.size() == 7);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
     
     // Test 33: Random interleaving - resolve grandchild before parent's sibling
@@ -14483,7 +14702,8 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2, r3, r4, r5};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        a01_avoidance_store as;
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Root
         const goal_lineage* g_p = lp.goal(nullptr, 0);
@@ -14570,6 +14790,9 @@ void test_a01_goal_resolver() {
         
         // All 6 resolutions
         assert(rs.size() == 6);
+        
+        // Empty avoidance store
+        assert(as.size() == 0);
     }
 }
 
