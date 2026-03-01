@@ -11190,13 +11190,15 @@ void test_a01_goal_resolver_constructor() {
         copier cp(seq, ep);
         lineage_pool lp;
         
+        a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
         a01_database db;
         a01_goal_adder ga(gs, cs, db);
         
-        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
+        assert(&resolver.rs == &rs);
         assert(&resolver.gs == &gs);
         assert(&resolver.cs == &cs);
         assert(&resolver.db == &db);
@@ -11215,10 +11217,16 @@ void test_a01_goal_resolver_constructor() {
         copier cp(seq, ep);
         lineage_pool lp;
         
+        a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
         
-        // Add some initial data
+        // Add some initial data to resolution store
+        const goal_lineage* g0 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl0 = lp.resolution(g0, 0);
+        rs.insert(rl0);
+        
+        // Add some initial data to goal store
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const expr* e1 = ep.atom("test");
         gs.insert({g1, e1});
@@ -11231,8 +11239,9 @@ void test_a01_goal_resolver_constructor() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
+        assert(resolver.rs.size() == 1);
         assert(resolver.gs.size() == 1);
         assert(resolver.cs.size() == 2);
         assert(resolver.db.size() == 1);
@@ -11250,6 +11259,7 @@ void test_a01_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
+        a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
         
@@ -11259,7 +11269,7 @@ void test_a01_goal_resolver() {
         a01_database db = {r_fact};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal "p" using goal_adder
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -11272,6 +11282,7 @@ void test_a01_goal_resolver() {
         assert(gs.count(g1) == 1);
         assert(cs.count(g1) == 1);
         assert(gs.at(g1) == goal_p);
+        assert(rs.size() == 0); // No resolutions yet
         
         // Check goal lineage structure before resolution
         assert(g1->parent == nullptr);
@@ -11281,12 +11292,19 @@ void test_a01_goal_resolver() {
         size_t bindings_before = bm.bindings.size();
         
         // Resolve g1 with rule 0
-        const resolution_lineage* rl = resolver(g1, 0);
+        resolver(g1, 0);
         
-        // Check return value: resolution lineage
+        // Get the resolution lineage that was created
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        
+        // Check resolution lineage structure
         assert(rl != nullptr);
         assert(rl->parent == g1);
         assert(rl->idx == 0);
+        
+        // Check resolution was added to resolution store
+        assert(rs.size() == 1);
+        assert(rs.count(rl) == 1);
         
         // Check goal was removed from goal store
         assert(gs.size() == 0);
@@ -11319,6 +11337,7 @@ void test_a01_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
+        a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
         
@@ -11329,7 +11348,7 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal "p" using goal_adder
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -11340,16 +11359,24 @@ void test_a01_goal_resolver() {
         assert(gs.size() == 1);
         assert(gs.at(g1) == goal_p);
         assert(cs.size() == 1); // One rule in database
+        assert(rs.size() == 0); // No resolutions yet
         assert(g1->parent == nullptr);
         assert(g1->idx == 1);
         
         // Resolve g1 with rule 0
-        const resolution_lineage* rl = resolver(g1, 0);
+        resolver(g1, 0);
         
-        // Check return value
+        // Get the resolution lineage that was created
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        
+        // Check resolution lineage structure
         assert(rl != nullptr);
         assert(rl->parent == g1);
         assert(rl->idx == 0);
+        
+        // Check resolution was added to resolution store
+        assert(rs.size() == 1);
+        assert(rs.count(rl) == 1);
         
         // Goal "p" should be removed from stores
         assert(gs.count(g1) == 0);
@@ -11393,6 +11420,7 @@ void test_a01_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
+        a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
         
@@ -11405,7 +11433,7 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal "p" using goal_adder
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -11418,7 +11446,8 @@ void test_a01_goal_resolver() {
         assert(gs.at(g1) == goal_p);
         
         // Resolve g1 with rule 0
-        const resolution_lineage* rl = resolver(g1, 0);
+        resolver(g1, 0);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
         
         // Check return value
         assert(rl != nullptr);
@@ -11485,6 +11514,7 @@ void test_a01_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
+        a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
         
@@ -11497,7 +11527,7 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Record sequencer state before resolution
         uint32_t seq_before = seq.index;
@@ -11518,7 +11548,8 @@ void test_a01_goal_resolver() {
         assert(bm.bindings.count(original_var_idx) == 0);
         
         // Resolve g1 with rule 0
-        const resolution_lineage* rl = resolver(g1, 0);
+        resolver(g1, 0);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
         
         // Check sequencer advanced (new variable was allocated for copying)
         uint32_t seq_after = seq.index;
@@ -11602,6 +11633,7 @@ void test_a01_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
+        a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
         
@@ -11613,7 +11645,7 @@ void test_a01_goal_resolver() {
         a01_database db = {r1, r2};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add two goals using goal_adder
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -11633,7 +11665,8 @@ void test_a01_goal_resolver() {
         assert(cs.count(g2) == 2);
         
         // Resolve g1 with rule 0 (first rule "p")
-        const resolution_lineage* rl = resolver(g1, 0);
+        resolver(g1, 0);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
         
         // Check return value
         assert(rl != nullptr);
@@ -11668,6 +11701,7 @@ void test_a01_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
+        a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
         
@@ -11679,7 +11713,7 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal with specific parent lineage using goal_adder
         const resolution_lineage* parent_rl = lp.resolution(nullptr, 5);
@@ -11695,7 +11729,8 @@ void test_a01_goal_resolver() {
         assert(gs.size() == 1);
         
         // Resolve g1 with rule 0
-        const resolution_lineage* rl = resolver(g1, 0);
+        resolver(g1, 0);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
         
         // Check returned resolution lineage structure
         assert(rl != nullptr);
@@ -11749,6 +11784,7 @@ void test_a01_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
+        a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
         
@@ -11763,7 +11799,7 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Record sequencer state
         uint32_t seq_before = seq.index;
@@ -11783,7 +11819,8 @@ void test_a01_goal_resolver() {
         assert(bm.bindings.count(original_var_idx) == 0);
         
         // Resolve g1 with rule 0
-        const resolution_lineage* rl = resolver(g1, 0);
+        resolver(g1, 0);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
         
         // Check sequencer advanced (new variable allocated)
         uint32_t seq_after = seq.index;
@@ -11897,6 +11934,7 @@ void test_a01_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
+        a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
         
@@ -11910,7 +11948,7 @@ void test_a01_goal_resolver() {
         a01_database db = {r1, r2, r3};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal "q" using goal_adder (adds all rules as candidates)
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -11924,7 +11962,8 @@ void test_a01_goal_resolver() {
         assert(cs.count(g1) == 3);
         
         // Resolve g1 with rule 1 (index 1) - "q :- r"
-        const resolution_lineage* rl = resolver(g1, 1);
+        resolver(g1, 1);
+        const resolution_lineage* rl = lp.resolution(g1, 1);
         
         // Check return value
         assert(rl != nullptr);
@@ -11968,6 +12007,7 @@ void test_a01_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
+        a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
         
@@ -11978,7 +12018,7 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Create a goal that's deep in the tree (Level 0 -> Level 1 -> Level 2)
         const goal_lineage* root = lp.goal(nullptr, 0);
@@ -12002,7 +12042,8 @@ void test_a01_goal_resolver() {
         assert(cs.size() == 1);
         
         // Resolve the deep goal
-        const resolution_lineage* rl = resolver(g_level2, 0);
+        resolver(g_level2, 0);
+        const resolution_lineage* rl = lp.resolution(g_level2, 0);
         
         // Check return value
         assert(rl != nullptr);
@@ -12051,6 +12092,7 @@ void test_a01_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
+        a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
         
@@ -12068,7 +12110,7 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Record sequencer state
         uint32_t seq_before = seq.index;
@@ -12091,7 +12133,8 @@ void test_a01_goal_resolver() {
         assert(bm.bindings.count(original_y_idx) == 0);
         
         // Resolve g1 with rule 0
-        const resolution_lineage* rl = resolver(g1, 0);
+        resolver(g1, 0);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
         
         // Check sequencer advanced (two new variables allocated: X' and Y')
         uint32_t seq_after = seq.index;
@@ -12220,6 +12263,7 @@ void test_a01_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
+        a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
         
@@ -12232,7 +12276,7 @@ void test_a01_goal_resolver() {
         a01_database db = {r1};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Record sequencer state
         uint32_t seq_before = seq.index;
@@ -12257,7 +12301,8 @@ void test_a01_goal_resolver() {
         
         // Resolve g1 with rule 0
         // This will unify p(X) with p(Y') where Y' is the renamed version of Y
-        const resolution_lineage* rl = resolver(g1, 0);
+        resolver(g1, 0);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
         
         // Check sequencer advanced (Y was renamed to Y')
         uint32_t seq_after = seq.index;
@@ -12334,6 +12379,7 @@ void test_a01_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
+        a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
         
@@ -12354,7 +12400,7 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2, r3, r4};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal "r" which matches rule 2
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -12367,7 +12413,8 @@ void test_a01_goal_resolver() {
         assert(cs.count(g1) == 5);
         
         // Resolve with rule 2 (middle of database)
-        const resolution_lineage* rl = resolver(g1, 2);
+        resolver(g1, 2);
+        const resolution_lineage* rl = lp.resolution(g1, 2);
         
         // Verify return value has correct index
         assert(rl != nullptr);
@@ -12421,6 +12468,7 @@ void test_a01_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
+        a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
         
@@ -12439,7 +12487,7 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2, r3, r4};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add 5 different goals with different lineage structures
         const goal_lineage* g0 = lp.goal(nullptr, 0);
@@ -12474,7 +12522,8 @@ void test_a01_goal_resolver() {
         const expr* g4_expr = gs.at(g4);
         
         // Resolve ONLY g1 (the middle one) with rule 1
-        const resolution_lineage* rl = resolver(g1, 1);
+        resolver(g1, 1);
+        const resolution_lineage* rl = lp.resolution(g1, 1);
         
         // Verify resolution lineage
         assert(rl != nullptr);
@@ -12554,6 +12603,7 @@ void test_a01_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
+        a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
         
@@ -12579,7 +12629,7 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2, r3};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal "r(a)"
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -12597,7 +12647,8 @@ void test_a01_goal_resolver() {
         size_t bindings_before = bm.bindings.size();
         
         // Resolve with rule 3 (LAST rule, index 3)
-        const resolution_lineage* rl = resolver(g1, 3);
+        resolver(g1, 3);
+        const resolution_lineage* rl = lp.resolution(g1, 3);
         
         // Verify correct rule was used
         assert(rl != nullptr);
@@ -12630,6 +12681,7 @@ void test_a01_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
+        a01_resolution_store rs;
         a01_goal_store gs;
         a01_candidate_store cs;
         
@@ -12644,7 +12696,7 @@ void test_a01_goal_resolver() {
         a01_database db = {r0, r1, r2};
         
         a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add three goals
         const goal_lineage* g_p = lp.goal(nullptr, 10);
@@ -12661,7 +12713,8 @@ void test_a01_goal_resolver() {
         assert(cs.size() == 9); // 3 goals * 3 rules
         
         // First resolution: resolve g_q with rule 1 (q :- r)
-        const resolution_lineage* rl_q = resolver(g_q, 1);
+        resolver(g_q, 1);
+        const resolution_lineage* rl_q = lp.resolution(g_q, 1);
         
         assert(rl_q->parent == g_q);
         assert(rl_q->idx == 1);
@@ -12682,7 +12735,8 @@ void test_a01_goal_resolver() {
         assert(std::get<expr::atom>(child_of_q_expr->content).value == std::string("r"));
         
         // Second resolution: resolve g_p with rule 0 (p :- q)
-        const resolution_lineage* rl_p = resolver(g_p, 0);
+        resolver(g_p, 0);
+        const resolution_lineage* rl_p = lp.resolution(g_p, 0);
         
         assert(rl_p->parent == g_p);
         assert(rl_p->idx == 0);
@@ -12704,7 +12758,8 @@ void test_a01_goal_resolver() {
         assert(std::get<expr::atom>(child_of_p_expr->content).value == std::string("q"));
         
         // Third resolution: resolve g_r with rule 2 (r - fact)
-        const resolution_lineage* rl_r = resolver(g_r, 2);
+        resolver(g_r, 2);
+        const resolution_lineage* rl_r = lp.resolution(g_r, 2);
         
         assert(rl_r->parent == g_r);
         assert(rl_r->idx == 2);
@@ -12722,11 +12777,83 @@ void test_a01_goal_resolver() {
         assert(lp.resolution_lineages.count(*rl_q) == 1);
         assert(lp.resolution_lineages.count(*rl_r) == 1);
         
+        // Verify all resolutions in resolution store
+        assert(rs.size() == 3);
+        assert(rs.count(rl_p) == 1);
+        assert(rs.count(rl_q) == 1);
+        assert(rs.count(rl_r) == 1);
+        
         // Verify lineage structures remain correct
         assert(child_of_p->parent == rl_p);
         assert(rl_p->parent == g_p);
         assert(child_of_q->parent == rl_q);
         assert(rl_q->parent == g_q);
+    }
+    
+    // Test 16: Resolution store with pre-existing resolutions
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database
+        const expr* p_expr = ep.atom("p");
+        const expr* q_expr = ep.atom("q");
+        rule r0{p_expr, {}};
+        rule r1{q_expr, {}};
+        a01_database db = {r0, r1};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Pre-populate resolution store with some existing resolutions
+        const goal_lineage* g_old1 = lp.goal(nullptr, 100);
+        const goal_lineage* g_old2 = lp.goal(nullptr, 200);
+        const resolution_lineage* rl_old1 = lp.resolution(g_old1, 5);
+        const resolution_lineage* rl_old2 = lp.resolution(g_old2, 7);
+        rs.insert(rl_old1);
+        rs.insert(rl_old2);
+        
+        // Pre-resolution: 2 existing resolutions
+        assert(rs.size() == 2);
+        assert(rs.count(rl_old1) == 1);
+        assert(rs.count(rl_old2) == 1);
+        
+        // Add a new goal and resolve it
+        const goal_lineage* g_new = lp.goal(nullptr, 1);
+        ga(g_new, p_expr);
+        
+        assert(gs.size() == 1);
+        
+        // Resolve the new goal
+        resolver(g_new, 0);
+        const resolution_lineage* rl_new = lp.resolution(g_new, 0);
+        
+        // Verify resolution store now has 3 resolutions (2 old + 1 new)
+        assert(rs.size() == 3);
+        assert(rs.count(rl_old1) == 1);  // Old ones still there
+        assert(rs.count(rl_old2) == 1);  // Old ones still there
+        assert(rs.count(rl_new) == 1);   // New one added
+        
+        // Verify new resolution has correct structure
+        assert(rl_new->parent == g_new);
+        assert(rl_new->idx == 0);
+        
+        // Goal was removed
+        assert(gs.count(g_new) == 0);
+        
+        // All resolutions in pool
+        assert(lp.resolution_lineages.count(*rl_old1) == 1);
+        assert(lp.resolution_lineages.count(*rl_old2) == 1);
+        assert(lp.resolution_lineages.count(*rl_new) == 1);
     }
 }
 
