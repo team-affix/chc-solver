@@ -8,6 +8,7 @@
 #include "../hpp/a01_defs.hpp"
 #include "../hpp/a01_goal_adder.hpp"
 #include "../hpp/a01_goal_resolver.hpp"
+#include "../hpp/a01_head_elimination_detector.hpp"
 #include "test_utils.hpp"
 
 void test_trail_constructor() {
@@ -14572,6 +14573,1038 @@ void test_a01_goal_resolver() {
     }
 }
 
+void test_a01_head_elimination_detector_constructor() {
+    // Test 1: Basic construction - should not crash
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Constructor should succeed without crashing
+        // Members are private, so we can't verify directly
+    }
+    
+    // Test 2: Construction with non-empty stores - should not crash
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Pre-populate stores
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* e1 = ep.atom("test");
+        gs.insert({g1, e1});
+        
+        const expr* p = ep.atom("p");
+        rule r1{p, {}};
+        db.push_back(r1);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Constructor should succeed with pre-populated stores
+        // Verify stores still contain data (not modified by constructor)
+        assert(gs.size() == 1);
+        assert(db.size() == 1);
+    }
+}
+
+void test_a01_head_elimination_detector() {
+    // Test 1: Unification succeeds - candidate should NOT be eliminated
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: p(a)
+        const expr* atom_a = ep.atom("a");
+        const expr* p_a = ep.cons(ep.atom("p"), atom_a);
+        rule r0{p_a, {}};
+        db.push_back(r0);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal: p(a) - matches perfectly
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        gs.insert({g1, p_a});
+        
+        // Pre-call state
+        size_t trail_depth_before = t.depth();
+        size_t bindings_before = bm.bindings.size();
+        assert(bindings_before == 0);
+        
+        // Test unification
+        bool should_eliminate = detector(g1, 0);
+        
+        // CRITICAL: Should NOT eliminate (unification succeeded)
+        assert(should_eliminate == false);
+        
+        // CRITICAL: Trail depth unchanged
+        assert(t.depth() == trail_depth_before);
+        
+        // CRITICAL: Bindings unchanged (rolled back)
+        assert(bm.bindings.size() == bindings_before);
+        assert(bm.bindings.size() == 0);
+        
+        // Goal store unchanged
+        assert(gs.size() == 1);
+        assert(gs.at(g1) == p_a);
+    }
+    
+    // Test 2: Unification fails - candidate SHOULD be eliminated
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: p(a)
+        const expr* atom_a = ep.atom("a");
+        const expr* p_a = ep.cons(ep.atom("p"), atom_a);
+        rule r0{p_a, {}};
+        db.push_back(r0);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal: p(b) - does NOT match
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* atom_b = ep.atom("b");
+        const expr* p_b = ep.cons(ep.atom("p"), atom_b);
+        gs.insert({g1, p_b});
+        
+        // Pre-call state
+        size_t trail_depth_before = t.depth();
+        size_t bindings_before = bm.bindings.size();
+        
+        // Test unification
+        bool should_eliminate = detector(g1, 0);
+        
+        // CRITICAL: SHOULD eliminate (unification failed)
+        assert(should_eliminate == true);
+        
+        // CRITICAL: Trail depth unchanged
+        assert(t.depth() == trail_depth_before);
+        
+        // CRITICAL: Bindings unchanged
+        assert(bm.bindings.size() == bindings_before);
+        
+        // Goal store unchanged
+        assert(gs.size() == 1);
+        assert(gs.at(g1) == p_b);
+    }
+    
+    // Test 3: Variable in rule head - unification succeeds
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: p(X) - variable in head
+        const expr* var_x = ep.var(seq());
+        uint32_t x_idx = std::get<expr::var>(var_x->content).index;
+        const expr* p_x = ep.cons(ep.atom("p"), var_x);
+        rule r0{p_x, {}};
+        db.push_back(r0);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal: p(a) - should unify with p(X)
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* p_a = ep.cons(ep.atom("p"), ep.atom("a"));
+        gs.insert({g1, p_a});
+        
+        // Pre-call state
+        size_t trail_depth_before = t.depth();
+        size_t bindings_before = bm.bindings.size();
+        assert(bindings_before == 0);
+        assert(bm.bindings.count(x_idx) == 0);
+        
+        // Test
+        bool should_eliminate = detector(g1, 0);
+        
+        // Should NOT eliminate (X can unify with a)
+        assert(should_eliminate == false);
+        
+        // Trail unchanged
+        assert(t.depth() == trail_depth_before);
+        
+        // CRITICAL: Bindings rolled back - X should NOT be in bind_map
+        assert(bm.bindings.size() == bindings_before);
+        assert(bm.bindings.count(x_idx) == 0);
+        
+        // Stores unchanged
+        assert(gs.size() == 1);
+        assert(db.size() == 1);
+    }
+    
+    // Test 4: Multiple independent calls - no state leakage
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: three rules
+        const expr* p_a = ep.cons(ep.atom("p"), ep.atom("a"));
+        const expr* p_b = ep.cons(ep.atom("p"), ep.atom("b"));
+        const expr* q_c = ep.cons(ep.atom("q"), ep.atom("c"));
+        
+        rule r0{p_a, {}};
+        rule r1{p_b, {}};
+        rule r2{q_c, {}};
+        db.push_back(r0);
+        db.push_back(r1);
+        db.push_back(r2);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goals
+        const goal_lineage* g_pa = lp.goal(nullptr, 1);
+        gs.insert({g_pa, p_a});
+        const goal_lineage* g_pb = lp.goal(nullptr, 2);
+        gs.insert({g_pb, p_b});
+        
+        size_t trail_depth = t.depth();
+        
+        // Call 1: p(a) vs p(a) - should NOT eliminate
+        bool result1 = detector(g_pa, 0);
+        assert(result1 == false);
+        assert(t.depth() == trail_depth);
+        assert(bm.bindings.size() == 0);
+        
+        // Call 2: p(a) vs p(b) - SHOULD eliminate
+        bool result2 = detector(g_pa, 1);
+        assert(result2 == true);
+        assert(t.depth() == trail_depth);
+        assert(bm.bindings.size() == 0);
+        
+        // Call 3: p(b) vs p(a) - SHOULD eliminate
+        bool result3 = detector(g_pb, 0);
+        assert(result3 == true);
+        assert(t.depth() == trail_depth);
+        assert(bm.bindings.size() == 0);
+        
+        // Call 4: p(b) vs p(b) - should NOT eliminate
+        bool result4 = detector(g_pb, 1);
+        assert(result4 == false);
+        assert(t.depth() == trail_depth);
+        assert(bm.bindings.size() == 0);
+        
+        // Call 5: p(a) vs q(c) - SHOULD eliminate (different predicate)
+        bool result5 = detector(g_pa, 2);
+        assert(result5 == true);
+        assert(t.depth() == trail_depth);
+        assert(bm.bindings.size() == 0);
+        
+        // CRITICAL: All calls independent, no state leakage
+        assert(gs.size() == 2);
+        assert(db.size() == 3);
+    }
+    
+    // Test 5: Complex unification - p(X, X) patterns
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: p(X, X) - same variable twice
+        const expr* var_x = ep.var(seq());
+        uint32_t x_idx = std::get<expr::var>(var_x->content).index;
+        const expr* p_x_x = ep.cons(ep.atom("p"), ep.cons(var_x, var_x));
+        rule r0{p_x_x, {}};
+        db.push_back(r0);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal 1: p(a, a) - SHOULD unify (X=a)
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* atom_a = ep.atom("a");
+        const expr* p_a_a = ep.cons(ep.atom("p"), ep.cons(atom_a, atom_a));
+        gs.insert({g1, p_a_a});
+        
+        assert(bm.bindings.count(x_idx) == 0);
+        
+        bool result1 = detector(g1, 0);
+        
+        // Should NOT eliminate (X=a works)
+        assert(result1 == false);
+        
+        // CRITICAL: X still not in bind_map after call
+        assert(bm.bindings.count(x_idx) == 0);
+        assert(bm.bindings.size() == 0);
+        
+        // Goal 2: p(a, b) - should NOT unify (X can't be both a and b)
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const expr* atom_b = ep.atom("b");
+        const expr* p_a_b = ep.cons(ep.atom("p"), ep.cons(atom_a, atom_b));
+        gs.insert({g2, p_a_b});
+        
+        bool result2 = detector(g2, 0);
+        
+        // SHOULD eliminate (X=a and X=b conflicts)
+        assert(result2 == true);
+        
+        // Still no bindings leaked
+        assert(bm.bindings.count(x_idx) == 0);
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 6: Multiple variables - independent bindings
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: p(X, Y) - two independent variables
+        const expr* var_x = ep.var(seq());
+        const expr* var_y = ep.var(seq());
+        uint32_t x_idx = std::get<expr::var>(var_x->content).index;
+        uint32_t y_idx = std::get<expr::var>(var_y->content).index;
+        const expr* p_xy = ep.cons(ep.atom("p"), ep.cons(var_x, var_y));
+        rule r0{p_xy, {}};
+        db.push_back(r0);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal: p(a, b)
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* p_ab = ep.cons(ep.atom("p"), ep.cons(ep.atom("a"), ep.atom("b")));
+        gs.insert({g1, p_ab});
+        
+        // Pre-call
+        assert(bm.bindings.count(x_idx) == 0);
+        assert(bm.bindings.count(y_idx) == 0);
+        size_t trail_depth = t.depth();
+        
+        // Test
+        bool result = detector(g1, 0);
+        
+        // Should NOT eliminate (X=a, Y=b works)
+        assert(result == false);
+        
+        // CRITICAL: Both variables still not in bind_map
+        assert(bm.bindings.count(x_idx) == 0);
+        assert(bm.bindings.count(y_idx) == 0);
+        assert(bm.bindings.size() == 0);
+        assert(t.depth() == trail_depth);
+    }
+    
+    // Test 7: Variable in goal - variable-on-variable unification
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: p(X)
+        const expr* var_x = ep.var(seq());
+        uint32_t x_idx = std::get<expr::var>(var_x->content).index;
+        const expr* p_x = ep.cons(ep.atom("p"), var_x);
+        rule r0{p_x, {}};
+        db.push_back(r0);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal: p(Y) where Y is also a variable
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* var_y = ep.var(seq());
+        uint32_t y_idx = std::get<expr::var>(var_y->content).index;
+        const expr* p_y = ep.cons(ep.atom("p"), var_y);
+        gs.insert({g1, p_y});
+        
+        // Pre-call: neither variable bound
+        assert(bm.bindings.count(x_idx) == 0);
+        assert(bm.bindings.count(y_idx) == 0);
+        
+        // Test
+        bool result = detector(g1, 0);
+        
+        // Should NOT eliminate (X and Y can unify)
+        assert(result == false);
+        
+        // CRITICAL: Both variables still not bound (rolled back)
+        assert(bm.bindings.count(x_idx) == 0);
+        assert(bm.bindings.count(y_idx) == 0);
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 8: Multiple calls with existing bindings in bind_map
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: p(X)
+        const expr* var_x = ep.var(seq());
+        uint32_t x_idx = std::get<expr::var>(var_x->content).index;
+        const expr* p_x = ep.cons(ep.atom("p"), var_x);
+        rule r0{p_x, {}};
+        db.push_back(r0);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Pre-bind some other variable
+        const expr* var_z = ep.var(seq());
+        uint32_t z_idx = std::get<expr::var>(var_z->content).index;
+        const expr* atom_other = ep.atom("other");
+        bm.bind(z_idx, atom_other);
+        
+        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.count(z_idx) == 1);
+        
+        // Goal: p(a)
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* p_a = ep.cons(ep.atom("p"), ep.atom("a"));
+        gs.insert({g1, p_a});
+        
+        // Test
+        bool result = detector(g1, 0);
+        
+        // Should NOT eliminate
+        assert(result == false);
+        
+        // CRITICAL: Pre-existing binding still there, nothing new added
+        assert(bm.bindings.size() == 1);
+        assert(bm.bindings.count(z_idx) == 1);
+        assert(bm.bindings.count(x_idx) == 0);
+        
+        // The pre-existing binding unchanged
+        assert(bm.bindings.at(z_idx) == atom_other);
+    }
+    
+    // Test 9: Deep nested expressions - unification succeeds
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: p(f(g(X)))
+        const expr* var_x = ep.var(seq());
+        uint32_t x_idx = std::get<expr::var>(var_x->content).index;
+        const expr* g_x = ep.cons(ep.atom("g"), var_x);
+        const expr* f_g_x = ep.cons(ep.atom("f"), g_x);
+        const expr* p_nested = ep.cons(ep.atom("p"), f_g_x);
+        rule r0{p_nested, {}};
+        db.push_back(r0);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal: p(f(g(a)))
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* atom_a = ep.atom("a");
+        const expr* g_a = ep.cons(ep.atom("g"), atom_a);
+        const expr* f_g_a = ep.cons(ep.atom("f"), g_a);
+        const expr* goal_p = ep.cons(ep.atom("p"), f_g_a);
+        gs.insert({g1, goal_p});
+        
+        // Pre-call
+        assert(bm.bindings.count(x_idx) == 0);
+        size_t trail_depth = t.depth();
+        
+        // Test
+        bool result = detector(g1, 0);
+        
+        // Should NOT eliminate (deep unification X=a succeeds)
+        assert(result == false);
+        
+        // CRITICAL: X still not bound after rollback
+        assert(bm.bindings.count(x_idx) == 0);
+        assert(t.depth() == trail_depth);
+    }
+    
+    // Test 10: Deep nested expressions - unification fails
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: p(f(g(a)))
+        const expr* g_a = ep.cons(ep.atom("g"), ep.atom("a"));
+        const expr* f_g_a = ep.cons(ep.atom("f"), g_a);
+        const expr* p_fga = ep.cons(ep.atom("p"), f_g_a);
+        rule r0{p_fga, {}};
+        db.push_back(r0);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal: p(f(g(b))) - 'b' instead of 'a'
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* g_b = ep.cons(ep.atom("g"), ep.atom("b"));
+        const expr* f_g_b = ep.cons(ep.atom("f"), g_b);
+        const expr* goal_p = ep.cons(ep.atom("p"), f_g_b);
+        gs.insert({g1, goal_p});
+        
+        size_t trail_depth = t.depth();
+        
+        // Test
+        bool result = detector(g1, 0);
+        
+        // SHOULD eliminate (a ≠ b)
+        assert(result == true);
+        assert(t.depth() == trail_depth);
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 11: Same variable multiple times - conflicting values
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: p(X, X, X) - same variable 3 times
+        const expr* var_x = ep.var(seq());
+        uint32_t x_idx = std::get<expr::var>(var_x->content).index;
+        const expr* p_xxx = ep.cons(ep.atom("p"), 
+                            ep.cons(var_x, 
+                            ep.cons(var_x, var_x)));
+        rule r0{p_xxx, {}};
+        db.push_back(r0);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal 1: p(a, a, a) - should unify (X=a consistently)
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* atom_a = ep.atom("a");
+        const expr* p_aaa = ep.cons(ep.atom("p"), 
+                            ep.cons(atom_a, 
+                            ep.cons(atom_a, atom_a)));
+        gs.insert({g1, p_aaa});
+        
+        bool result1 = detector(g1, 0);
+        assert(result1 == false); // Should NOT eliminate
+        assert(bm.bindings.count(x_idx) == 0);
+        
+        // Goal 2: p(a, a, b) - should NOT unify (X=a and X=b conflict)
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const expr* atom_b = ep.atom("b");
+        const expr* p_aab = ep.cons(ep.atom("p"), 
+                            ep.cons(atom_a, 
+                            ep.cons(atom_a, atom_b)));
+        gs.insert({g2, p_aab});
+        
+        bool result2 = detector(g2, 0);
+        assert(result2 == true); // SHOULD eliminate
+        assert(bm.bindings.count(x_idx) == 0);
+        
+        // Goal 3: p(a, b, a) - should NOT unify
+        const goal_lineage* g3 = lp.goal(nullptr, 3);
+        const expr* p_aba = ep.cons(ep.atom("p"), 
+                            ep.cons(atom_a, 
+                            ep.cons(atom_b, atom_a)));
+        gs.insert({g3, p_aba});
+        
+        bool result3 = detector(g3, 0);
+        assert(result3 == true); // SHOULD eliminate
+        assert(bm.bindings.count(x_idx) == 0);
+        
+        // CRITICAL: All calls independent
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 12: Multiple variables with variable goal
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: p(X, Y)
+        const expr* var_x = ep.var(seq());
+        const expr* var_y = ep.var(seq());
+        uint32_t x_idx = std::get<expr::var>(var_x->content).index;
+        uint32_t y_idx = std::get<expr::var>(var_y->content).index;
+        const expr* p_xy = ep.cons(ep.atom("p"), ep.cons(var_x, var_y));
+        rule r0{p_xy, {}};
+        db.push_back(r0);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal: p(A, B) where A and B are also variables
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* var_a = ep.var(seq());
+        const expr* var_b = ep.var(seq());
+        uint32_t a_idx = std::get<expr::var>(var_a->content).index;
+        uint32_t b_idx = std::get<expr::var>(var_b->content).index;
+        const expr* p_ab = ep.cons(ep.atom("p"), ep.cons(var_a, var_b));
+        gs.insert({g1, p_ab});
+        
+        // Pre-call: no variables bound
+        assert(bm.bindings.count(x_idx) == 0);
+        assert(bm.bindings.count(y_idx) == 0);
+        assert(bm.bindings.count(a_idx) == 0);
+        assert(bm.bindings.count(b_idx) == 0);
+        
+        // Test
+        bool result = detector(g1, 0);
+        
+        // Should NOT eliminate (variable-on-variable unification succeeds)
+        assert(result == false);
+        
+        // CRITICAL: All four variables still not bound
+        assert(bm.bindings.count(x_idx) == 0);
+        assert(bm.bindings.count(y_idx) == 0);
+        assert(bm.bindings.count(a_idx) == 0);
+        assert(bm.bindings.count(b_idx) == 0);
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 13: Different predicates - immediate failure
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: p(a)
+        const expr* p_a = ep.cons(ep.atom("p"), ep.atom("a"));
+        rule r0{p_a, {}};
+        db.push_back(r0);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal: q(a) - different predicate
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* q_a = ep.cons(ep.atom("q"), ep.atom("a"));
+        gs.insert({g1, q_a});
+        
+        // Test
+        bool result = detector(g1, 0);
+        
+        // SHOULD eliminate (different predicates)
+        assert(result == true);
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 14: Arity mismatch
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: p(a, b)
+        const expr* p_ab = ep.cons(ep.atom("p"), ep.cons(ep.atom("a"), ep.atom("b")));
+        rule r0{p_ab, {}};
+        db.push_back(r0);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal: p(a) - different arity
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* p_a = ep.cons(ep.atom("p"), ep.atom("a"));
+        gs.insert({g1, p_a});
+        
+        // Test
+        bool result = detector(g1, 0);
+        
+        // SHOULD eliminate (arity mismatch)
+        assert(result == true);
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 15: Multiple database entries - test different indices
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: multiple rules with variables
+        const expr* var_x = ep.var(seq());
+        const expr* var_y = ep.var(seq());
+        const expr* var_z = ep.var(seq());
+        uint32_t x_idx = std::get<expr::var>(var_x->content).index;
+        uint32_t y_idx = std::get<expr::var>(var_y->content).index;
+        uint32_t z_idx = std::get<expr::var>(var_z->content).index;
+        
+        const expr* p_x = ep.cons(ep.atom("p"), var_x);
+        const expr* p_y = ep.cons(ep.atom("p"), var_y);
+        const expr* q_z = ep.cons(ep.atom("q"), var_z);
+        
+        rule r0{p_x, {}};  // p(X)
+        rule r1{p_y, {}};  // p(Y) - same head, different variable
+        rule r2{q_z, {}};  // q(Z)
+        db.push_back(r0);
+        db.push_back(r1);
+        db.push_back(r2);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal: p(a)
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* p_a = ep.cons(ep.atom("p"), ep.atom("a"));
+        gs.insert({g1, p_a});
+        
+        // Test all three rules
+        bool result0 = detector(g1, 0);  // p(X) vs p(a)
+        assert(result0 == false);        // Should NOT eliminate
+        assert(bm.bindings.count(x_idx) == 0);
+        
+        bool result1 = detector(g1, 1);  // p(Y) vs p(a)
+        assert(result1 == false);        // Should NOT eliminate
+        assert(bm.bindings.count(y_idx) == 0);
+        
+        bool result2 = detector(g1, 2);  // q(Z) vs p(a)
+        assert(result2 == true);         // SHOULD eliminate (different predicate)
+        assert(bm.bindings.count(z_idx) == 0);
+        
+        // CRITICAL: All calls independent, no cross-contamination
+        assert(bm.bindings.size() == 0);
+        assert(bm.bindings.count(x_idx) == 0);
+        assert(bm.bindings.count(y_idx) == 0);
+        assert(bm.bindings.count(z_idx) == 0);
+    }
+    
+    // Test 16: Stress test - many calls in sequence
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: 10 rules with different patterns
+        std::vector<const expr*> vars;
+        for (int i = 0; i < 10; i++) {
+            vars.push_back(ep.var(seq()));
+        }
+        
+        // Create rules: p0(X0), p1(X1), ..., p9(X9)
+        for (int i = 0; i < 10; i++) {
+            const expr* p = ep.cons(ep.atom("p" + std::to_string(i)), vars[i]);
+            rule r{p, {}};
+            db.push_back(r);
+        }
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal: p5(a) - will match rule 5 only
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* p5_a = ep.cons(ep.atom("p5"), ep.atom("a"));
+        gs.insert({g1, p5_a});
+        
+        size_t trail_depth = t.depth();
+        
+        // Test all 10 rules
+        for (size_t i = 0; i < 10; i++) {
+            bool result = detector(g1, i);
+            
+            if (i == 5) {
+                // Rule 5: p5(X5) should match p5(a)
+                assert(result == false);
+            } else {
+                // All others: different predicates
+                assert(result == true);
+            }
+            
+            // CRITICAL: After each call, state unchanged
+            assert(t.depth() == trail_depth);
+            assert(bm.bindings.size() == 0);
+            
+            // Verify all original variables still not bound
+            for (int j = 0; j < 10; j++) {
+                uint32_t var_idx = std::get<expr::var>(vars[j]->content).index;
+                assert(bm.bindings.count(var_idx) == 0);
+            }
+        }
+    }
+    
+    // Test 17: Trail depth verification with nested pushes
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: p(a)
+        const expr* p_a = ep.cons(ep.atom("p"), ep.atom("a"));
+        rule r0{p_a, {}};
+        db.push_back(r0);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal: p(a)
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        gs.insert({g1, p_a});
+        
+        // Start at depth 1
+        assert(t.depth() == 1);
+        
+        // Call detector (internally does push/pop)
+        bool result1 = detector(g1, 0);
+        assert(result1 == false);
+        assert(t.depth() == 1); // Back to 1
+        
+        // Push another frame
+        t.push();
+        assert(t.depth() == 2);
+        
+        // Call detector again
+        bool result2 = detector(g1, 0);
+        assert(result2 == false);
+        assert(t.depth() == 2); // Still at 2
+        
+        // Pop
+        t.pop();
+        assert(t.depth() == 1);
+        
+        // Call detector at depth 1 again
+        bool result3 = detector(g1, 0);
+        assert(result3 == false);
+        assert(t.depth() == 1);
+    }
+    
+    // Test 18: Complex variables - same variable in rule and goal
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: p(X, Y, X) - X appears twice
+        const expr* var_x = ep.var(seq());
+        const expr* var_y = ep.var(seq());
+        uint32_t x_idx = std::get<expr::var>(var_x->content).index;
+        uint32_t y_idx = std::get<expr::var>(var_y->content).index;
+        const expr* p_xyx = ep.cons(ep.atom("p"), 
+                            ep.cons(var_x, 
+                            ep.cons(var_y, var_x)));
+        rule r0{p_xyx, {}};
+        db.push_back(r0);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal: p(A, B, A) where A and B are goal variables
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* var_a = ep.var(seq());
+        const expr* var_b = ep.var(seq());
+        uint32_t a_idx = std::get<expr::var>(var_a->content).index;
+        uint32_t b_idx = std::get<expr::var>(var_b->content).index;
+        const expr* p_aba = ep.cons(ep.atom("p"), 
+                            ep.cons(var_a, 
+                            ep.cons(var_b, var_a)));
+        gs.insert({g1, p_aba});
+        
+        // Pre-call: no variables bound
+        assert(bm.bindings.count(x_idx) == 0);
+        assert(bm.bindings.count(y_idx) == 0);
+        assert(bm.bindings.count(a_idx) == 0);
+        assert(bm.bindings.count(b_idx) == 0);
+        
+        // Test - complex variable-on-variable unification
+        bool result = detector(g1, 0);
+        
+        // Should NOT eliminate (X=A, Y=B, and consistency X=A maintained)
+        assert(result == false);
+        
+        // CRITICAL: All variables still unbound after rollback
+        assert(bm.bindings.count(x_idx) == 0);
+        assert(bm.bindings.count(y_idx) == 0);
+        assert(bm.bindings.count(a_idx) == 0);
+        assert(bm.bindings.count(b_idx) == 0);
+        assert(bm.bindings.size() == 0);
+    }
+    
+    // Test 19: CRITICAL - Verify bind_map exact state preservation
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Pre-bind some variables to create initial state
+        const expr* var_pre1 = ep.var(seq());
+        const expr* var_pre2 = ep.var(seq());
+        uint32_t pre1_idx = std::get<expr::var>(var_pre1->content).index;
+        uint32_t pre2_idx = std::get<expr::var>(var_pre2->content).index;
+        bm.bind(pre1_idx, ep.atom("existing1"));
+        bm.bind(pre2_idx, ep.atom("existing2"));
+        
+        assert(bm.bindings.size() == 2);
+        const expr* binding1_before = bm.bindings.at(pre1_idx);
+        const expr* binding2_before = bm.bindings.at(pre2_idx);
+        
+        // Database: p(X, Y)
+        const expr* var_x = ep.var(seq());
+        const expr* var_y = ep.var(seq());
+        uint32_t x_idx = std::get<expr::var>(var_x->content).index;
+        uint32_t y_idx = std::get<expr::var>(var_y->content).index;
+        const expr* p_xy = ep.cons(ep.atom("p"), ep.cons(var_x, var_y));
+        rule r0{p_xy, {}};
+        db.push_back(r0);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal: p(a, b)
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* p_ab = ep.cons(ep.atom("p"), ep.cons(ep.atom("a"), ep.atom("b")));
+        gs.insert({g1, p_ab});
+        
+        // Test
+        bool result = detector(g1, 0);
+        
+        // Should NOT eliminate
+        assert(result == false);
+        
+        // CRITICAL: Exact binding state preserved
+        assert(bm.bindings.size() == 2);  // Still only 2
+        assert(bm.bindings.count(pre1_idx) == 1);
+        assert(bm.bindings.count(pre2_idx) == 1);
+        assert(bm.bindings.count(x_idx) == 0);  // Rule vars not added
+        assert(bm.bindings.count(y_idx) == 0);
+        
+        // CRITICAL: Exact same pointer values
+        assert(bm.bindings.at(pre1_idx) == binding1_before);
+        assert(bm.bindings.at(pre2_idx) == binding2_before);
+    }
+    
+    // Test 20: Occurs check failure
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_database db;
+        
+        // Database: p(X) where X is a variable
+        const expr* var_x = ep.var(seq());
+        uint32_t x_idx = std::get<expr::var>(var_x->content).index;
+        const expr* p_x = ep.cons(ep.atom("p"), var_x);
+        rule r0{p_x, {}};
+        db.push_back(r0);
+        
+        a01_head_elimination_detector detector(t, bm, gs, db);
+        
+        // Goal: p(f(X)) - X occurs inside its own binding (occurs check)
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* f_x = ep.cons(ep.atom("f"), var_x);
+        const expr* p_fx = ep.cons(ep.atom("p"), f_x);
+        gs.insert({g1, p_fx});
+        
+        // Test - this attempts to unify X with f(X), which should fail
+        bool result = detector(g1, 0);
+        
+        // SHOULD eliminate (occurs check failure)
+        assert(result == true);
+        
+        // Variable still not bound
+        assert(bm.bindings.count(x_idx) == 0);
+        assert(bm.bindings.size() == 0);
+    }
+}
+
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
 
@@ -14609,6 +15642,8 @@ void unit_test_main() {
     TEST(test_a01_goal_adder);
     TEST(test_a01_goal_resolver_constructor);
     TEST(test_a01_goal_resolver);
+    TEST(test_a01_head_elimination_detector_constructor);
+    TEST(test_a01_head_elimination_detector);
 }
 
 int main() {
