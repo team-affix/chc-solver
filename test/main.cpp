@@ -13640,6 +13640,936 @@ void test_a01_goal_resolver() {
         assert(std::holds_alternative<expr::atom>(arg->content));
         assert(std::get<expr::atom>(arg->content).value == "a");
     }
+    
+    // Test 26: Resolution sequence - parent then child (depth-first order)
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: chained rules
+        const expr* p = ep.atom("p");
+        const expr* q = ep.atom("q");
+        const expr* r = ep.atom("r");
+        
+        rule r0{p, {q}};      // p :- q
+        rule r1{q, {r}};      // q :- r
+        rule r2{r, {}};       // r
+        a01_database db = {r0, r1, r2};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Add root goal p
+        const goal_lineage* g_p = lp.goal(nullptr, 0);
+        ga(g_p, p);
+        
+        // Resolution 1: p with rule 0 → creates q
+        resolver(g_p, 0);
+        const resolution_lineage* rl_p = lp.resolution(g_p, 0);
+        const goal_lineage* g_q = lp.goal(rl_p, 0);
+        
+        // Verify lineage: g_q → rl_p → g_p → nullptr
+        assert(g_q->parent == rl_p);
+        assert(rl_p->parent == g_p);
+        assert(g_p->parent == nullptr);
+        
+        // Resolution 2: q with rule 1 → creates r (child immediately after parent)
+        resolver(g_q, 1);
+        const resolution_lineage* rl_q = lp.resolution(g_q, 1);
+        const goal_lineage* g_r = lp.goal(rl_q, 0);
+        
+        // CRITICAL: Verify full lineage chain: g_r → rl_q → g_q → rl_p → g_p → nullptr
+        assert(g_r->parent == rl_q);
+        assert(g_r->idx == 0);
+        assert(rl_q->parent == g_q);
+        assert(rl_q->idx == 1);
+        assert(g_q->parent == rl_p);
+        assert(g_q->idx == 0);
+        assert(rl_p->parent == g_p);
+        assert(rl_p->idx == 0);
+        assert(g_p->parent == nullptr);
+        assert(g_p->idx == 0);
+        
+        // Resolution 3: r with rule 2
+        resolver(g_r, 2);
+        const resolution_lineage* rl_r = lp.resolution(g_r, 2);
+        
+        // Verify lineage still correct after third resolution
+        assert(rl_r->parent == g_r);
+        assert(g_r->parent == rl_q);
+        assert(rl_q->parent == g_q);
+        assert(g_q->parent == rl_p);
+        assert(rl_p->parent == g_p);
+        assert(g_p->parent == nullptr);
+        
+        // Verify all in stores
+        assert(rs.size() == 3);
+        assert(rs.count(rl_p) == 1);
+        assert(rs.count(rl_q) == 1);
+        assert(rs.count(rl_r) == 1);
+    }
+    
+    // Test 27: Resolution sequence - parent, independent goal, then child
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database
+        const expr* p = ep.atom("p");
+        const expr* q = ep.atom("q");
+        const expr* x = ep.atom("x");
+        const expr* y = ep.atom("y");
+        const expr* z = ep.atom("z");
+        
+        rule r0{p, {q}};      // p :- q
+        rule r1{q, {}};       // q
+        rule r2{x, {y}};      // x :- y (independent branch)
+        rule r3{y, {z}};      // y :- z
+        rule r4{z, {}};       // z
+        a01_database db = {r0, r1, r2, r3, r4};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Add two independent root goals
+        const goal_lineage* g_p = lp.goal(nullptr, 0);
+        ga(g_p, p);
+        const goal_lineage* g_x = lp.goal(nullptr, 1);
+        ga(g_x, x);
+        
+        assert(gs.size() == 2);
+        
+        // Resolution 1: p with rule 0 → creates child q
+        resolver(g_p, 0);
+        const resolution_lineage* rl_p = lp.resolution(g_p, 0);
+        const goal_lineage* g_q = lp.goal(rl_p, 0);
+        
+        // Verify lineage for first branch: g_q → rl_p → g_p → nullptr
+        assert(g_q->parent == rl_p);
+        assert(rl_p->parent == g_p);
+        assert(g_p->parent == nullptr);
+        
+        // Resolution 2: x (independent goal) with rule 2 → creates y
+        resolver(g_x, 2);
+        const resolution_lineage* rl_x = lp.resolution(g_x, 2);
+        const goal_lineage* g_y = lp.goal(rl_x, 0);
+        
+        // CRITICAL: Verify lineage for second branch: g_y → rl_x → g_x → nullptr
+        assert(g_y->parent == rl_x);
+        assert(rl_x->parent == g_x);
+        assert(g_x->parent == nullptr);
+        
+        // CRITICAL: First branch lineage should be UNCHANGED
+        assert(g_q->parent == rl_p);
+        assert(rl_p->parent == g_p);
+        assert(g_p->parent == nullptr);
+        
+        // Resolution 3: q (child of first branch) with rule 1
+        resolver(g_q, 1);
+        const resolution_lineage* rl_q = lp.resolution(g_q, 1);
+        
+        // CRITICAL: Verify first branch lineage still correct after resolving child
+        assert(rl_q->parent == g_q);
+        assert(g_q->parent == rl_p);
+        assert(rl_p->parent == g_p);
+        assert(g_p->parent == nullptr);
+        
+        // CRITICAL: Second branch lineage should STILL be unchanged
+        assert(g_y->parent == rl_x);
+        assert(rl_x->parent == g_x);
+        assert(g_x->parent == nullptr);
+        
+        // Resolution 4: y (child of second branch)
+        resolver(g_y, 3);
+        const resolution_lineage* rl_y = lp.resolution(g_y, 3);
+        const goal_lineage* g_z = lp.goal(rl_y, 0);
+        
+        // Verify second branch lineage: g_z → rl_y → g_y → rl_x → g_x → nullptr
+        assert(g_z->parent == rl_y);
+        assert(rl_y->parent == g_y);
+        assert(g_y->parent == rl_x);
+        assert(rl_x->parent == g_x);
+        assert(g_x->parent == nullptr);
+        
+        // First branch still unchanged
+        assert(rl_q->parent == g_q);
+        assert(g_q->parent == rl_p);
+        assert(rl_p->parent == g_p);
+        
+        // Resolution 5: z (leaf of second branch)
+        resolver(g_z, 4);
+        const resolution_lineage* rl_z = lp.resolution(g_z, 4);
+        
+        // Full second branch: rl_z → g_z → rl_y → g_y → rl_x → g_x → nullptr
+        assert(rl_z->parent == g_z);
+        assert(g_z->parent == rl_y);
+        assert(rl_y->parent == g_y);
+        assert(g_y->parent == rl_x);
+        assert(rl_x->parent == g_x);
+        assert(g_x->parent == nullptr);
+        
+        // All resolutions tracked
+        assert(rs.size() == 5);
+        assert(rs.count(rl_p) == 1);
+        assert(rs.count(rl_x) == 1);
+        assert(rs.count(rl_q) == 1);
+        assert(rs.count(rl_y) == 1);
+        assert(rs.count(rl_z) == 1);
+    }
+    
+    // Test 28: Complex resolution order - branching tree
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database
+        const expr* p = ep.atom("p");
+        const expr* q = ep.atom("q");
+        const expr* r = ep.atom("r");
+        const expr* s = ep.atom("s");
+        const expr* t_atom = ep.atom("t");
+        
+        rule r0{p, {q, r}};   // p :- q, r (2 children)
+        rule r1{q, {s}};      // q :- s
+        rule r2{r, {t_atom}};  // r :- t
+        rule r3{s, {}};       // s
+        rule r4{t_atom, {}};  // t
+        a01_database db = {r0, r1, r2, r3, r4};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Start with root p
+        const goal_lineage* g_p = lp.goal(nullptr, 0);
+        ga(g_p, p);
+        
+        // Resolution 1: p → creates q and r (two children)
+        resolver(g_p, 0);
+        const resolution_lineage* rl_p = lp.resolution(g_p, 0);
+        const goal_lineage* g_q = lp.goal(rl_p, 0);
+        const goal_lineage* g_r = lp.goal(rl_p, 1);
+        
+        // Verify both children have same parent
+        assert(g_q->parent == rl_p);
+        assert(g_q->idx == 0);
+        assert(g_r->parent == rl_p);
+        assert(g_r->idx == 1);
+        assert(rl_p->parent == g_p);
+        
+        // Resolution 2: r (right child) BEFORE q (left child)
+        resolver(g_r, 2);
+        const resolution_lineage* rl_r = lp.resolution(g_r, 2);
+        const goal_lineage* g_t = lp.goal(rl_r, 0);
+        
+        // Verify right branch: g_t → rl_r → g_r → rl_p → g_p → nullptr
+        assert(g_t->parent == rl_r);
+        assert(rl_r->parent == g_r);
+        assert(g_r->parent == rl_p);
+        assert(rl_p->parent == g_p);
+        assert(g_p->parent == nullptr);
+        
+        // CRITICAL: Left branch (g_q) should be UNCHANGED
+        assert(g_q->parent == rl_p);
+        assert(rl_p->parent == g_p);
+        
+        // Resolution 3: q (left child) AFTER resolving right child
+        resolver(g_q, 1);
+        const resolution_lineage* rl_q = lp.resolution(g_q, 1);
+        const goal_lineage* g_s = lp.goal(rl_q, 0);
+        
+        // CRITICAL: Verify left branch lineage: g_s → rl_q → g_q → rl_p → g_p → nullptr
+        // This should be correct even though we resolved right branch first
+        assert(g_s->parent == rl_q);
+        assert(rl_q->parent == g_q);
+        assert(g_q->parent == rl_p);
+        assert(rl_p->parent == g_p);
+        assert(g_p->parent == nullptr);
+        
+        // CRITICAL: Right branch lineage should still be correct
+        assert(g_t->parent == rl_r);
+        assert(rl_r->parent == g_r);
+        assert(g_r->parent == rl_p);
+        
+        // Both branches share the same resolution parent (rl_p)
+        assert(g_q->parent == rl_p);
+        assert(g_r->parent == rl_p);
+        
+        // Resolution 4: t (leaf of right branch)
+        resolver(g_t, 4);
+        const resolution_lineage* rl_t = lp.resolution(g_t, 4);
+        
+        // Resolution 5: s (leaf of left branch)
+        resolver(g_s, 3);
+        const resolution_lineage* rl_s = lp.resolution(g_s, 3);
+        
+        // Verify final lineages for both branches
+        // Right: rl_t → g_t → rl_r → g_r → rl_p → g_p → nullptr
+        assert(rl_t->parent == g_t);
+        assert(g_t->parent == rl_r);
+        assert(rl_r->parent == g_r);
+        assert(g_r->parent == rl_p);
+        assert(rl_p->parent == g_p);
+        assert(g_p->parent == nullptr);
+        
+        // Left: rl_s → g_s → rl_q → g_q → rl_p → g_p → nullptr
+        assert(rl_s->parent == g_s);
+        assert(g_s->parent == rl_q);
+        assert(rl_q->parent == g_q);
+        assert(g_q->parent == rl_p);
+        assert(rl_p->parent == g_p);
+        assert(g_p->parent == nullptr);
+        
+        // All 5 resolutions tracked
+        assert(rs.size() == 5);
+    }
+    
+    // Test 29: Complex interleaved resolution order - 7 resolutions
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database with various rules
+        const expr* a = ep.atom("a");
+        const expr* b = ep.atom("b");
+        const expr* c = ep.atom("c");
+        const expr* d = ep.atom("d");
+        const expr* e = ep.atom("e");
+        const expr* f = ep.atom("f");
+        const expr* g = ep.atom("g");
+        
+        rule r0{a, {b, c}};   // a :- b, c
+        rule r1{b, {d}};      // b :- d
+        rule r2{c, {e}};      // c :- e
+        rule r3{d, {}};       // d
+        rule r4{e, {f, g}};   // e :- f, g
+        rule r5{f, {}};       // f
+        rule r6{g, {}};       // g
+        a01_database db = {r0, r1, r2, r3, r4, r5, r6};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Root: a
+        const goal_lineage* g_a = lp.goal(nullptr, 0);
+        ga(g_a, a);
+        
+        // Res 1: a → {b, c}
+        resolver(g_a, 0);
+        const resolution_lineage* rl_a = lp.resolution(g_a, 0);
+        const goal_lineage* g_b = lp.goal(rl_a, 0);
+        const goal_lineage* g_c = lp.goal(rl_a, 1);
+        
+        // Lineages after res 1
+        assert(g_b->parent == rl_a);
+        assert(g_c->parent == rl_a);
+        assert(rl_a->parent == g_a);
+        assert(g_a->parent == nullptr);
+        
+        // Res 2: c → {e} (resolve RIGHT child first)
+        resolver(g_c, 2);
+        const resolution_lineage* rl_c = lp.resolution(g_c, 2);
+        const goal_lineage* g_e = lp.goal(rl_c, 0);
+        
+        // Right branch: g_e → rl_c → g_c → rl_a → g_a → nullptr
+        assert(g_e->parent == rl_c);
+        assert(rl_c->parent == g_c);
+        assert(g_c->parent == rl_a);
+        assert(rl_a->parent == g_a);
+        
+        // CRITICAL: Left branch (g_b) unchanged
+        assert(g_b->parent == rl_a);
+        
+        // Res 3: e → {f, g} (continue on right branch)
+        resolver(g_e, 4);
+        const resolution_lineage* rl_e = lp.resolution(g_e, 4);
+        const goal_lineage* g_f = lp.goal(rl_e, 0);
+        const goal_lineage* g_g = lp.goal(rl_e, 1);
+        
+        // Right branch splits: both g_f and g_g → rl_e → g_e → rl_c → g_c → rl_a → g_a
+        assert(g_f->parent == rl_e);
+        assert(g_g->parent == rl_e);
+        assert(rl_e->parent == g_e);
+        assert(g_e->parent == rl_c);
+        assert(rl_c->parent == g_c);
+        assert(g_c->parent == rl_a);
+        
+        // CRITICAL: Left branch still unchanged
+        assert(g_b->parent == rl_a);
+        assert(rl_a->parent == g_a);
+        
+        // Res 4: b → {d} (NOW resolve left child - was waiting)
+        resolver(g_b, 1);
+        const resolution_lineage* rl_b = lp.resolution(g_b, 1);
+        const goal_lineage* g_d = lp.goal(rl_b, 0);
+        
+        // CRITICAL: Left branch lineage: g_d → rl_b → g_b → rl_a → g_a → nullptr
+        // Should be correct even though we resolved many other things first
+        assert(g_d->parent == rl_b);
+        assert(rl_b->parent == g_b);
+        assert(g_b->parent == rl_a);
+        assert(rl_a->parent == g_a);
+        assert(g_a->parent == nullptr);
+        
+        // CRITICAL: Right branch still correct
+        assert(g_f->parent == rl_e);
+        assert(g_g->parent == rl_e);
+        assert(rl_e->parent == g_e);
+        assert(g_e->parent == rl_c);
+        assert(g_c->parent == rl_a);
+        
+        // Res 5: f (leaf of right-left branch)
+        resolver(g_f, 5);
+        const resolution_lineage* rl_f = lp.resolution(g_f, 5);
+        
+        // Res 6: g (leaf of right-right branch)
+        resolver(g_g, 6);
+        const resolution_lineage* rl_g = lp.resolution(g_g, 6);
+        
+        // Res 7: d (leaf of left branch)
+        resolver(g_d, 3);
+        const resolution_lineage* rl_d = lp.resolution(g_d, 3);
+        
+        // FINAL VERIFICATION: All lineages correct after 7 resolutions
+        
+        // Right-left leaf: rl_f → g_f → rl_e → g_e → rl_c → g_c → rl_a → g_a → nullptr
+        assert(rl_f->parent == g_f);
+        assert(g_f->parent == rl_e);
+        assert(rl_e->parent == g_e);
+        assert(g_e->parent == rl_c);
+        assert(rl_c->parent == g_c);
+        assert(g_c->parent == rl_a);
+        assert(rl_a->parent == g_a);
+        assert(g_a->parent == nullptr);
+        
+        // Right-right leaf: rl_g → g_g → rl_e → g_e → rl_c → g_c → rl_a → g_a → nullptr
+        assert(rl_g->parent == g_g);
+        assert(g_g->parent == rl_e);
+        // (rest same as right-left)
+        
+        // Left leaf: rl_d → g_d → rl_b → g_b → rl_a → g_a → nullptr
+        assert(rl_d->parent == g_d);
+        assert(g_d->parent == rl_b);
+        assert(rl_b->parent == g_b);
+        assert(g_b->parent == rl_a);
+        assert(rl_a->parent == g_a);
+        assert(g_a->parent == nullptr);
+        
+        // All 7 resolutions in store
+        assert(rs.size() == 7);
+    }
+    
+    // Test 30: Large sequence - 10 resolutions with random order
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: chain of 10 rules
+        std::vector<const expr*> atoms;
+        for (int i = 0; i < 10; i++) {
+            atoms.push_back(ep.atom("p" + std::to_string(i)));
+        }
+        
+        std::vector<rule> rules;
+        for (int i = 0; i < 9; i++) {
+            rules.push_back(rule{atoms[i], {atoms[i+1]}});  // p0 :- p1, p1 :- p2, ...
+        }
+        rules.push_back(rule{atoms[9], {}});  // p9 (fact)
+        
+        a01_database db(rules.begin(), rules.end());
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Start with root p0
+        const goal_lineage* g_p0 = lp.goal(nullptr, 0);
+        ga(g_p0, atoms[0]);
+        
+        // Store all goal lineages and resolution lineages
+        std::vector<const goal_lineage*> goals;
+        std::vector<const resolution_lineage*> resolutions;
+        
+        goals.push_back(g_p0);
+        
+        // Resolve in order: p0, p1, p2, ..., p9
+        for (int i = 0; i < 10; i++) {
+            const goal_lineage* current_goal = goals[i];
+            
+            // Resolve current goal
+            resolver(current_goal, i);
+            const resolution_lineage* rl = lp.resolution(current_goal, i);
+            resolutions.push_back(rl);
+            
+            // Verify resolution parent and index
+            assert(rl->parent == current_goal);
+            assert(rl->idx == (size_t)i);
+            
+            // If not the last rule, a child goal was created
+            if (i < 9) {
+                const goal_lineage* child = lp.goal(rl, 0);
+                goals.push_back(child);
+                assert(child->parent == rl);
+                assert(child->idx == 0);
+            }
+        }
+        
+        // CRITICAL: Verify full chain from leaf to root
+        // Start at p9's resolution (deepest) and walk back to root
+        const resolution_lineage* current_rl = resolutions[9];
+        const goal_lineage* current_g = goals[9];
+        
+        // Walk backward verifying the chain
+        for (int i = 9; i >= 0; i--) {
+            assert(current_rl == resolutions[i]);
+            assert(current_g == goals[i]);
+            assert(current_rl->parent == current_g);
+            assert(current_rl->idx == (size_t)i);
+            
+            if (i > 0) {
+                // Not root, should have resolution parent
+                const resolution_lineage* parent_rl = resolutions[i-1];
+                assert(current_g->parent == parent_rl);
+                assert(current_g->idx == 0);
+                current_g = goals[i-1];
+                current_rl = parent_rl;
+            } else {
+                // Root goal
+                assert(current_g->parent == nullptr);
+                assert(current_g->idx == 0);
+            }
+        }
+        
+        // All 10 resolutions tracked
+        assert(rs.size() == 10);
+        for (int i = 0; i < 10; i++) {
+            assert(rs.count(resolutions[i]) == 1);
+        }
+    }
+    
+    // Test 31: Out-of-order resolution with multiple independent trees
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database
+        const expr* p1 = ep.atom("p1");
+        const expr* p2 = ep.atom("p2");
+        const expr* p3 = ep.atom("p3");
+        const expr* q1 = ep.atom("q1");
+        const expr* q2 = ep.atom("q2");
+        const expr* q3 = ep.atom("q3");
+        
+        rule r0{p1, {p2}};    // p1 :- p2
+        rule r1{p2, {p3}};    // p2 :- p3
+        rule r2{p3, {}};      // p3
+        rule r3{q1, {q2}};    // q1 :- q2
+        rule r4{q2, {q3}};    // q2 :- q3
+        rule r5{q3, {}};      // q3
+        a01_database db = {r0, r1, r2, r3, r4, r5};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Create TWO independent root goals
+        const goal_lineage* g_p1 = lp.goal(nullptr, 10);
+        ga(g_p1, p1);
+        const goal_lineage* g_q1 = lp.goal(nullptr, 20);
+        ga(g_q1, q1);
+        
+        // Resolution order: p1, q1, q2, p2, q3, p3
+        // (alternating between two trees)
+        
+        // Res 1: p1 → p2 (tree 1, level 1)
+        resolver(g_p1, 0);
+        const resolution_lineage* rl_p1 = lp.resolution(g_p1, 0);
+        const goal_lineage* g_p2 = lp.goal(rl_p1, 0);
+        
+        assert(g_p2->parent == rl_p1);
+        assert(rl_p1->parent == g_p1);
+        assert(g_p1->parent == nullptr);
+        assert(g_p1->idx == 10);
+        
+        // Res 2: q1 → q2 (tree 2, level 1)
+        resolver(g_q1, 3);
+        const resolution_lineage* rl_q1 = lp.resolution(g_q1, 3);
+        const goal_lineage* g_q2 = lp.goal(rl_q1, 0);
+        
+        assert(g_q2->parent == rl_q1);
+        assert(rl_q1->parent == g_q1);
+        assert(g_q1->parent == nullptr);
+        assert(g_q1->idx == 20);
+        
+        // CRITICAL: Tree 1 unchanged after resolving tree 2
+        assert(g_p2->parent == rl_p1);
+        assert(rl_p1->parent == g_p1);
+        
+        // Res 3: q2 → q3 (tree 2, level 2)
+        resolver(g_q2, 4);
+        const resolution_lineage* rl_q2 = lp.resolution(g_q2, 4);
+        const goal_lineage* g_q3 = lp.goal(rl_q2, 0);
+        
+        assert(g_q3->parent == rl_q2);
+        assert(rl_q2->parent == g_q2);
+        assert(g_q2->parent == rl_q1);
+        assert(rl_q1->parent == g_q1);
+        assert(g_q1->parent == nullptr);
+        
+        // CRITICAL: Tree 1 still unchanged
+        assert(g_p2->parent == rl_p1);
+        assert(rl_p1->parent == g_p1);
+        assert(g_p1->parent == nullptr);
+        
+        // Res 4: p2 → p3 (back to tree 1, level 2)
+        resolver(g_p2, 1);
+        const resolution_lineage* rl_p2 = lp.resolution(g_p2, 1);
+        const goal_lineage* g_p3 = lp.goal(rl_p2, 0);
+        
+        // CRITICAL: Tree 1 full chain: g_p3 → rl_p2 → g_p2 → rl_p1 → g_p1 → nullptr
+        assert(g_p3->parent == rl_p2);
+        assert(rl_p2->parent == g_p2);
+        assert(g_p2->parent == rl_p1);
+        assert(rl_p1->parent == g_p1);
+        assert(g_p1->parent == nullptr);
+        
+        // CRITICAL: Tree 2 unchanged
+        assert(g_q3->parent == rl_q2);
+        assert(rl_q2->parent == g_q2);
+        assert(g_q2->parent == rl_q1);
+        assert(rl_q1->parent == g_q1);
+        
+        // Res 5: q3 (tree 2 leaf)
+        resolver(g_q3, 5);
+        const resolution_lineage* rl_q3 = lp.resolution(g_q3, 5);
+        
+        // Tree 2 complete: rl_q3 → g_q3 → rl_q2 → g_q2 → rl_q1 → g_q1 → nullptr
+        assert(rl_q3->parent == g_q3);
+        assert(g_q3->parent == rl_q2);
+        assert(rl_q2->parent == g_q2);
+        assert(g_q2->parent == rl_q1);
+        assert(rl_q1->parent == g_q1);
+        assert(g_q1->parent == nullptr);
+        assert(g_q1->idx == 20);
+        
+        // Res 6: p3 (tree 1 leaf)
+        resolver(g_p3, 2);
+        const resolution_lineage* rl_p3 = lp.resolution(g_p3, 2);
+        
+        // CRITICAL: Tree 1 complete: rl_p3 → g_p3 → rl_p2 → g_p2 → rl_p1 → g_p1 → nullptr
+        assert(rl_p3->parent == g_p3);
+        assert(g_p3->parent == rl_p2);
+        assert(rl_p2->parent == g_p2);
+        assert(g_p2->parent == rl_p1);
+        assert(rl_p1->parent == g_p1);
+        assert(g_p1->parent == nullptr);
+        assert(g_p1->idx == 10);
+        
+        // CRITICAL: Both trees coexist with correct independent lineages
+        // Tree 1 root has idx 10, Tree 2 root has idx 20
+        // All resolutions tracked
+        assert(rs.size() == 6);
+    }
+    
+    // Test 32: Resolution order - breadth-first style (all siblings before children)
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database
+        const expr* root = ep.atom("root");
+        const expr* a = ep.atom("a");
+        const expr* b = ep.atom("b");
+        const expr* c = ep.atom("c");
+        const expr* a1 = ep.atom("a1");
+        const expr* b1 = ep.atom("b1");
+        const expr* c1 = ep.atom("c1");
+        
+        rule r0{root, {a, b, c}};  // root :- a, b, c (3 children)
+        rule r1{a, {a1}};          // a :- a1
+        rule r2{b, {b1}};          // b :- b1
+        rule r3{c, {c1}};          // c :- c1
+        rule r4{a1, {}};           // a1
+        rule r5{b1, {}};           // b1
+        rule r6{c1, {}};           // c1
+        a01_database db = {r0, r1, r2, r3, r4, r5, r6};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Root
+        const goal_lineage* g_root = lp.goal(nullptr, 0);
+        ga(g_root, root);
+        
+        // Res 1: root → {a, b, c}
+        resolver(g_root, 0);
+        const resolution_lineage* rl_root = lp.resolution(g_root, 0);
+        const goal_lineage* g_a = lp.goal(rl_root, 0);
+        const goal_lineage* g_b = lp.goal(rl_root, 1);
+        const goal_lineage* g_c = lp.goal(rl_root, 2);
+        
+        // All three children share same parent
+        assert(g_a->parent == rl_root);
+        assert(g_a->idx == 0);
+        assert(g_b->parent == rl_root);
+        assert(g_b->idx == 1);
+        assert(g_c->parent == rl_root);
+        assert(g_c->idx == 2);
+        
+        // Res 2: a → a1 (first sibling)
+        resolver(g_a, 1);
+        const resolution_lineage* rl_a = lp.resolution(g_a, 1);
+        const goal_lineage* g_a1 = lp.goal(rl_a, 0);
+        
+        // Res 3: b → b1 (second sibling)
+        resolver(g_b, 2);
+        const resolution_lineage* rl_b = lp.resolution(g_b, 2);
+        const goal_lineage* g_b1 = lp.goal(rl_b, 0);
+        
+        // Res 4: c → c1 (third sibling)
+        resolver(g_c, 3);
+        const resolution_lineage* rl_c = lp.resolution(g_c, 3);
+        const goal_lineage* g_c1 = lp.goal(rl_c, 0);
+        
+        // CRITICAL: After resolving all siblings, verify each branch maintains lineage
+        
+        // Branch A: g_a1 → rl_a → g_a → rl_root → g_root → nullptr
+        assert(g_a1->parent == rl_a);
+        assert(rl_a->parent == g_a);
+        assert(g_a->parent == rl_root);
+        assert(rl_root->parent == g_root);
+        assert(g_root->parent == nullptr);
+        
+        // Branch B: g_b1 → rl_b → g_b → rl_root → g_root → nullptr
+        assert(g_b1->parent == rl_b);
+        assert(rl_b->parent == g_b);
+        assert(g_b->parent == rl_root);
+        assert(rl_root->parent == g_root);
+        
+        // Branch C: g_c1 → rl_c → g_c → rl_root → g_root → nullptr
+        assert(g_c1->parent == rl_c);
+        assert(rl_c->parent == g_c);
+        assert(g_c->parent == rl_root);
+        assert(rl_root->parent == g_root);
+        
+        // CRITICAL: All three branches share same rl_root
+        assert(g_a->parent == rl_root);
+        assert(g_b->parent == rl_root);
+        assert(g_c->parent == rl_root);
+        
+        // Res 5-7: Resolve all three leaf goals
+        resolver(g_a1, 4);
+        const resolution_lineage* rl_a1 = lp.resolution(g_a1, 4);
+        
+        resolver(g_b1, 5);
+        const resolution_lineage* rl_b1 = lp.resolution(g_b1, 5);
+        
+        resolver(g_c1, 6);
+        const resolution_lineage* rl_c1 = lp.resolution(g_c1, 6);
+        
+        // Final verification - all three branches still have correct lineages
+        assert(rl_a1->parent == g_a1);
+        assert(g_a1->parent == rl_a);
+        assert(rl_a->parent == g_a);
+        assert(g_a->parent == rl_root);
+        
+        assert(rl_b1->parent == g_b1);
+        assert(g_b1->parent == rl_b);
+        assert(rl_b->parent == g_b);
+        assert(g_b->parent == rl_root);
+        
+        assert(rl_c1->parent == g_c1);
+        assert(g_c1->parent == rl_c);
+        assert(rl_c->parent == g_c);
+        assert(g_c->parent == rl_root);
+        
+        // All share same root
+        assert(rl_root->parent == g_root);
+        assert(g_root->parent == nullptr);
+        
+        // All 7 resolutions tracked
+        assert(rs.size() == 7);
+    }
+    
+    // Test 33: Random interleaving - resolve grandchild before parent's sibling
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database creating deep tree
+        const expr* p = ep.atom("p");
+        const expr* q = ep.atom("q");
+        const expr* r = ep.atom("r");
+        const expr* s = ep.atom("s");
+        const expr* t_atom = ep.atom("t");
+        const expr* u = ep.atom("u");
+        
+        rule r0{p, {q, r}};   // p :- q, r
+        rule r1{q, {s}};      // q :- s
+        rule r2{r, {t_atom}};  // r :- t
+        rule r3{s, {u}};      // s :- u
+        rule r4{t_atom, {}};  // t
+        rule r5{u, {}};       // u
+        a01_database db = {r0, r1, r2, r3, r4, r5};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Root
+        const goal_lineage* g_p = lp.goal(nullptr, 0);
+        ga(g_p, p);
+        
+        // Res 1: p → {q, r}
+        resolver(g_p, 0);
+        const resolution_lineage* rl_p = lp.resolution(g_p, 0);
+        const goal_lineage* g_q = lp.goal(rl_p, 0);
+        const goal_lineage* g_r = lp.goal(rl_p, 1);
+        
+        // Res 2: q → {s} (left branch level 2)
+        resolver(g_q, 1);
+        const resolution_lineage* rl_q = lp.resolution(g_q, 1);
+        const goal_lineage* g_s = lp.goal(rl_q, 0);
+        
+        // Res 3: s → {u} (left branch level 3, going deep before touching right)
+        resolver(g_s, 3);
+        const resolution_lineage* rl_s = lp.resolution(g_s, 3);
+        const goal_lineage* g_u = lp.goal(rl_s, 0);
+        
+        // Verify left branch (went 3 levels deep): g_u → rl_s → g_s → rl_q → g_q → rl_p → g_p
+        assert(g_u->parent == rl_s);
+        assert(rl_s->parent == g_s);
+        assert(g_s->parent == rl_q);
+        assert(rl_q->parent == g_q);
+        assert(g_q->parent == rl_p);
+        assert(rl_p->parent == g_p);
+        assert(g_p->parent == nullptr);
+        
+        // CRITICAL: Right branch (g_r) should be untouched at level 1
+        assert(g_r->parent == rl_p);
+        assert(rl_p->parent == g_p);
+        
+        // Res 4: r → {t} (NOW resolve right branch)
+        resolver(g_r, 2);
+        const resolution_lineage* rl_r = lp.resolution(g_r, 2);
+        const goal_lineage* g_t = lp.goal(rl_r, 0);
+        
+        // CRITICAL: Right branch: g_t → rl_r → g_r → rl_p → g_p → nullptr
+        // Should have correct lineage even though left branch went 3 levels deep first
+        assert(g_t->parent == rl_r);
+        assert(rl_r->parent == g_r);
+        assert(g_r->parent == rl_p);
+        assert(rl_p->parent == g_p);
+        assert(g_p->parent == nullptr);
+        
+        // CRITICAL: Left branch still correct after resolving right
+        assert(g_u->parent == rl_s);
+        assert(rl_s->parent == g_s);
+        assert(g_s->parent == rl_q);
+        assert(rl_q->parent == g_q);
+        assert(g_q->parent == rl_p);
+        
+        // Both branches share rl_p and g_p
+        assert(g_q->parent == rl_p);
+        assert(g_r->parent == rl_p);
+        
+        // Res 5: u (left leaf)
+        resolver(g_u, 5);
+        const resolution_lineage* rl_u = lp.resolution(g_u, 5);
+        
+        // Res 6: t (right leaf)
+        resolver(g_t, 4);
+        const resolution_lineage* rl_t = lp.resolution(g_t, 4);
+        
+        // Final verification: both branches have complete lineages to root
+        // Left: rl_u → g_u → rl_s → g_s → rl_q → g_q → rl_p → g_p → nullptr
+        assert(rl_u->parent == g_u);
+        assert(g_u->parent == rl_s);
+        assert(rl_s->parent == g_s);
+        assert(g_s->parent == rl_q);
+        assert(rl_q->parent == g_q);
+        assert(g_q->parent == rl_p);
+        assert(rl_p->parent == g_p);
+        assert(g_p->parent == nullptr);
+        
+        // Right: rl_t → g_t → rl_r → g_r → rl_p → g_p → nullptr
+        assert(rl_t->parent == g_t);
+        assert(g_t->parent == rl_r);
+        assert(rl_r->parent == g_r);
+        assert(g_r->parent == rl_p);
+        assert(rl_p->parent == g_p);
+        
+        // All 6 resolutions
+        assert(rs.size() == 6);
+    }
 }
 
 void unit_test_main() {
