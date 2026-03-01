@@ -11475,7 +11475,7 @@ void test_a01_goal_resolver() {
         assert(lp.goal_lineages.count(*child_g2) == 1);
     }
     
-    // Test 4: Resolve with variable unification
+    // Test 4: Resolve with variable unification - VERIFY COPYING AND RENAMING
     {
         trail t;
         t.push();
@@ -11488,7 +11488,7 @@ void test_a01_goal_resolver() {
         a01_goal_store gs;
         a01_candidate_store cs;
         
-        // Database: rule "p(X) :- q(X)" where X is variable 0
+        // Database: rule "p(X) :- q(X)" where X is an original variable
         const expr* var_x = ep.var(seq());
         uint32_t original_var_idx = std::get<expr::var>(var_x->content).index;
         const expr* p_x = ep.cons(ep.atom("p"), var_x);
@@ -11498,6 +11498,9 @@ void test_a01_goal_resolver() {
         
         a01_goal_adder ga(gs, cs, db);
         a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        
+        // Record sequencer state before resolution
+        uint32_t seq_before = seq.index;
         
         // Add goal "p(a)" using goal_adder
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -11511,8 +11514,15 @@ void test_a01_goal_resolver() {
         assert(cs.size() == 1);
         size_t bindings_before = bm.bindings.size();
         
+        // CRITICAL: Original variable should NOT be in bind_map yet
+        assert(bm.bindings.count(original_var_idx) == 0);
+        
         // Resolve g1 with rule 0
         const resolution_lineage* rl = resolver(g1, 0);
+        
+        // Check sequencer advanced (new variable was allocated for copying)
+        uint32_t seq_after = seq.index;
+        assert(seq_after > seq_before); // At least one new variable was created
         
         // Check return value
         assert(rl != nullptr);
@@ -11533,9 +11543,23 @@ void test_a01_goal_resolver() {
         assert(child_g->parent == rl);
         assert(child_g->idx == 0);
         
-        // Get the child goal expression
+        // Get the child goal expression (this is the copied body literal)
         const expr* child_expr = gs.at(child_g);
         assert(child_expr != nullptr);
+        assert(std::holds_alternative<expr::cons>(child_expr->content));
+        
+        // Extract the variable from the copied expression before normalization
+        const expr::cons& child_cons_raw = std::get<expr::cons>(child_expr->content);
+        const expr* child_arg_raw = child_cons_raw.rhs;
+        
+        // This should be a RENAMED variable (not the original)
+        if (std::holds_alternative<expr::var>(child_arg_raw->content)) {
+            uint32_t renamed_var_idx = std::get<expr::var>(child_arg_raw->content).index;
+            // CRITICAL: Renamed variable should be DIFFERENT from original
+            assert(renamed_var_idx != original_var_idx);
+            // CRITICAL: Renamed variable SHOULD be in bind_map (bound to "a")
+            assert(bm.bindings.count(renamed_var_idx) == 1);
+        }
         
         // Normalize to get final form after unification
         const expr* normalized_child = bm.whnf(child_expr);
@@ -11556,6 +11580,10 @@ void test_a01_goal_resolver() {
         // Unification should have created bindings (the renamed var bound to "a")
         size_t bindings_after = bm.bindings.size();
         assert(bindings_after > bindings_before);
+        
+        // CRITICAL: Original variable should STILL NOT be in bind_map
+        // (only the renamed copy should be bound)
+        assert(bm.bindings.count(original_var_idx) == 0);
         
         // Verify child is in lineage pool
         assert(lp.goal_lineages.count(*child_g) == 1);
@@ -11710,7 +11738,8 @@ void test_a01_goal_resolver() {
         assert(cs.count(child_g1) == 1);
     }
     
-    // Test 7: Verify copier uses consistent translation_map - same variable X in multiple literals
+    // Test 7: CRITICAL - Verify copier uses consistent translation_map
+    // Same variable X in original rule must map to same renamed variable in all occurrences
     {
         trail t;
         t.push();
@@ -11736,6 +11765,9 @@ void test_a01_goal_resolver() {
         a01_goal_adder ga(gs, cs, db);
         a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
         
+        // Record sequencer state
+        uint32_t seq_before = seq.index;
+        
         // Add goal "p(a)" using goal_adder
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const expr* atom_a = ep.atom("a");
@@ -11747,8 +11779,15 @@ void test_a01_goal_resolver() {
         assert(cs.size() == 1);
         size_t bindings_before = bm.bindings.size();
         
+        // CRITICAL: Original variable should NOT be in bind_map
+        assert(bm.bindings.count(original_var_idx) == 0);
+        
         // Resolve g1 with rule 0
         const resolution_lineage* rl = resolver(g1, 0);
+        
+        // Check sequencer advanced (new variable allocated)
+        uint32_t seq_after = seq.index;
+        assert(seq_after > seq_before);
         
         // Check return value
         assert(rl != nullptr);
@@ -11758,7 +11797,7 @@ void test_a01_goal_resolver() {
         // Goal removed
         assert(gs.count(g1) == 0);
         
-        // Two new goals should be added: q(a) and r(a)
+        // Two new goals should be added: q(X') and r(X') where X' is the renamed variable
         assert(gs.size() == 2);
         const goal_lineage* child_g0 = lp.goal(rl, 0);
         const goal_lineage* child_g1 = lp.goal(rl, 1);
@@ -11767,11 +11806,46 @@ void test_a01_goal_resolver() {
         assert(gs.count(child_g0) == 1);
         assert(gs.count(child_g1) == 1);
         
-        // Get the expressions for both goals
+        // Get the RAW (not normalized) expressions for both goals
         const expr* expr0 = gs.at(child_g0);
         const expr* expr1 = gs.at(child_g1);
         
-        // Normalize both expressions
+        // Both should be cons cells
+        assert(std::holds_alternative<expr::cons>(expr0->content));
+        assert(std::holds_alternative<expr::cons>(expr1->content));
+        
+        // Extract the argument variables from BOTH expressions (before whnf)
+        const expr::cons& cons0_raw = std::get<expr::cons>(expr0->content);
+        const expr::cons& cons1_raw = std::get<expr::cons>(expr1->content);
+        const expr* arg0_raw = cons0_raw.rhs;
+        const expr* arg1_raw = cons1_raw.rhs;
+        
+        // CRITICAL CHECK: Both arguments should be THE SAME RENAMED VARIABLE
+        // This verifies the translation_map was consistent across both body literals
+        uint32_t renamed_var_idx_0 = 0;
+        uint32_t renamed_var_idx_1 = 0;
+        
+        if (std::holds_alternative<expr::var>(arg0_raw->content)) {
+            renamed_var_idx_0 = std::get<expr::var>(arg0_raw->content).index;
+            // Should NOT be the original variable
+            assert(renamed_var_idx_0 != original_var_idx);
+        }
+        
+        if (std::holds_alternative<expr::var>(arg1_raw->content)) {
+            renamed_var_idx_1 = std::get<expr::var>(arg1_raw->content).index;
+            // Should NOT be the original variable
+            assert(renamed_var_idx_1 != original_var_idx);
+        }
+        
+        // CRITICAL: Both should be the SAME renamed variable
+        // This proves translation_map was consistent!
+        assert(renamed_var_idx_0 == renamed_var_idx_1);
+        assert(renamed_var_idx_0 != 0); // Should have found a variable
+        
+        // Both renamed variables should be bound in bind_map to "a"
+        assert(bm.bindings.count(renamed_var_idx_0) == 1);
+        
+        // Normalize both expressions to verify they both become "a"
         const expr* norm0 = bm.whnf(expr0);
         const expr* norm1 = bm.whnf(expr1);
         
@@ -11787,7 +11861,7 @@ void test_a01_goal_resolver() {
         assert(std::holds_alternative<expr::atom>(cons1.lhs->content));
         assert(std::get<expr::atom>(cons1.lhs->content).value == std::string("r"));
         
-        // Check arguments normalize to "a" - this verifies consistent translation
+        // Check arguments normalize to "a" - this verifies the binding worked
         const expr* arg0 = bm.whnf(cons0.rhs);
         const expr* arg1 = bm.whnf(cons1.rhs);
         
@@ -11796,13 +11870,12 @@ void test_a01_goal_resolver() {
         assert(std::holds_alternative<expr::atom>(arg1->content));
         assert(std::get<expr::atom>(arg1->content).value == std::string("a"));
         
-        // CRITICAL: The same variable X in the original rule should be renamed
-        // to the same new variable in both body literals. This is verified by
-        // the fact that both q(X') and r(X') unified with the same binding X'=a
-        
         // Unification created bindings
         size_t bindings_after = bm.bindings.size();
         assert(bindings_after > bindings_before);
+        
+        // CRITICAL: Original variable should STILL NOT be in bind_map
+        assert(bm.bindings.count(original_var_idx) == 0);
         
         // Both should have candidates
         assert(cs.count(child_g0) == 1);
@@ -11968,7 +12041,7 @@ void test_a01_goal_resolver() {
         assert(cs.count(new_goal) == 1);
     }
     
-    // Test 10: Resolve with complex unification - multiple distinct variables
+    // Test 10: Resolve with multiple distinct variables - verify independent renaming
     {
         trail t;
         t.push();
@@ -11987,6 +12060,7 @@ void test_a01_goal_resolver() {
         const expr* var_y = ep.var(seq());
         uint32_t original_x_idx = std::get<expr::var>(var_x->content).index;
         uint32_t original_y_idx = std::get<expr::var>(var_y->content).index;
+        assert(original_x_idx != original_y_idx); // Sanity check
         const expr* p_xy = ep.cons(ep.atom("p"), ep.cons(var_x, var_y));
         const expr* q_x = ep.cons(ep.atom("q"), var_x);
         const expr* r_y = ep.cons(ep.atom("r"), var_y);
@@ -11995,6 +12069,9 @@ void test_a01_goal_resolver() {
         
         a01_goal_adder ga(gs, cs, db);
         a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        
+        // Record sequencer state
+        uint32_t seq_before = seq.index;
         
         // Add goal "p(a, b)" using goal_adder
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -12009,8 +12086,18 @@ void test_a01_goal_resolver() {
         assert(cs.size() == 1);
         size_t bindings_before = bm.bindings.size();
         
+        // CRITICAL: Original variables should NOT be in bind_map
+        assert(bm.bindings.count(original_x_idx) == 0);
+        assert(bm.bindings.count(original_y_idx) == 0);
+        
         // Resolve g1 with rule 0
         const resolution_lineage* rl = resolver(g1, 0);
+        
+        // Check sequencer advanced (two new variables allocated: X' and Y')
+        uint32_t seq_after = seq.index;
+        assert(seq_after > seq_before);
+        // Should have allocated at least 2 new variables
+        assert(seq_after >= seq_before + 2);
         
         // Check return value
         assert(rl != nullptr);
@@ -12024,7 +12111,7 @@ void test_a01_goal_resolver() {
         // Resolution should be in pool
         assert(lp.resolution_lineages.count(*rl) == 1);
         
-        // Two new goals should be added: q(a) and r(b)
+        // Two new goals should be added: q(X') and r(Y') where X' and Y' are renamed
         assert(gs.size() == 2);
         const goal_lineage* child_g0 = lp.goal(rl, 0);
         const goal_lineage* child_g1 = lp.goal(rl, 1);
@@ -12037,9 +12124,45 @@ void test_a01_goal_resolver() {
         assert(child_g1->parent == rl);
         assert(child_g1->idx == 1);
         
-        // Get goal expressions
+        // Get RAW goal expressions (before normalization)
         const expr* expr0 = gs.at(child_g0);
         const expr* expr1 = gs.at(child_g1);
+        
+        // Extract variables from raw expressions
+        assert(std::holds_alternative<expr::cons>(expr0->content));
+        assert(std::holds_alternative<expr::cons>(expr1->content));
+        const expr::cons& cons0_raw = std::get<expr::cons>(expr0->content);
+        const expr::cons& cons1_raw = std::get<expr::cons>(expr1->content);
+        const expr* arg0_raw = cons0_raw.rhs;
+        const expr* arg1_raw = cons1_raw.rhs;
+        
+        // Extract renamed variable indices
+        uint32_t renamed_x_idx = 0;
+        uint32_t renamed_y_idx = 0;
+        
+        if (std::holds_alternative<expr::var>(arg0_raw->content)) {
+            renamed_x_idx = std::get<expr::var>(arg0_raw->content).index;
+            // Should NOT be the original X
+            assert(renamed_x_idx != original_x_idx);
+            assert(renamed_x_idx != original_y_idx);
+        }
+        
+        if (std::holds_alternative<expr::var>(arg1_raw->content)) {
+            renamed_y_idx = std::get<expr::var>(arg1_raw->content).index;
+            // Should NOT be the original Y
+            assert(renamed_y_idx != original_y_idx);
+            assert(renamed_y_idx != original_x_idx);
+        }
+        
+        // CRITICAL: The two renamed variables should be DIFFERENT
+        // (X and Y were distinct, so X' and Y' should also be distinct)
+        assert(renamed_x_idx != renamed_y_idx);
+        assert(renamed_x_idx != 0);
+        assert(renamed_y_idx != 0);
+        
+        // Both renamed variables should be in bind_map
+        assert(bm.bindings.count(renamed_x_idx) == 1);
+        assert(bm.bindings.count(renamed_y_idx) == 1);
         
         // Normalize both
         const expr* norm0 = bm.whnf(expr0);
@@ -12068,12 +12191,14 @@ void test_a01_goal_resolver() {
         assert(std::holds_alternative<expr::atom>(arg1->content));
         assert(std::get<expr::atom>(arg1->content).value == std::string("b"));
         
-        // CRITICAL: This verifies that X was bound to "a" and Y was bound to "b"
-        // separately, and the translation_map was consistent
-        
         // Unification created bindings (X'=a and Y'=b)
         size_t bindings_after = bm.bindings.size();
         assert(bindings_after > bindings_before);
+        assert(bindings_after >= bindings_before + 2); // At least 2 new bindings
+        
+        // CRITICAL: Original variables should STILL NOT be in bind_map
+        assert(bm.bindings.count(original_x_idx) == 0);
+        assert(bm.bindings.count(original_y_idx) == 0);
         
         // Both should have candidates
         assert(cs.count(child_g0) == 1);
@@ -12083,6 +12208,120 @@ void test_a01_goal_resolver() {
         // Both should be in lineage pool
         assert(lp.goal_lineages.count(*child_g0) == 1);
         assert(lp.goal_lineages.count(*child_g1) == 1);
+    }
+    
+    // Test 11: Variable-on-variable unification during resolution
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: rule "p(Y) :- q(Y)" where Y is a variable in the rule
+        const expr* var_y = ep.var(seq());
+        uint32_t original_y_idx = std::get<expr::var>(var_y->content).index;
+        const expr* p_y = ep.cons(ep.atom("p"), var_y);
+        const expr* q_y = ep.cons(ep.atom("q"), var_y);
+        rule r1{p_y, {q_y}};
+        a01_database db = {r1};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        
+        // Record sequencer state
+        uint32_t seq_before = seq.index;
+        
+        // Create goal "p(X)" where X is ALSO a variable (not a constant!)
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* var_x = ep.var(seq());
+        uint32_t goal_var_x_idx = std::get<expr::var>(var_x->content).index;
+        const expr* goal_p_x = ep.cons(ep.atom("p"), var_x);
+        ga(g1, goal_p_x);
+        
+        // Pre-resolution
+        assert(gs.size() == 1);
+        assert(gs.at(g1) == goal_p_x);
+        assert(cs.size() == 1);
+        size_t bindings_before = bm.bindings.size();
+        
+        // CRITICAL: Neither the original rule variable nor the goal variable
+        // should be in bind_map yet
+        assert(bm.bindings.count(original_y_idx) == 0);
+        assert(bm.bindings.count(goal_var_x_idx) == 0);
+        
+        // Resolve g1 with rule 0
+        // This will unify p(X) with p(Y') where Y' is the renamed version of Y
+        const resolution_lineage* rl = resolver(g1, 0);
+        
+        // Check sequencer advanced (Y was renamed to Y')
+        uint32_t seq_after = seq.index;
+        assert(seq_after > seq_before);
+        
+        // Check return value
+        assert(rl != nullptr);
+        assert(rl->parent == g1);
+        assert(rl->idx == 0);
+        
+        // Goal removed
+        assert(gs.count(g1) == 0);
+        assert(cs.count(g1) == 0);
+        
+        // Resolution should be in pool
+        assert(lp.resolution_lineages.count(*rl) == 1);
+        
+        // One new goal should be added: q(Y') or q(X) depending on binding direction
+        assert(gs.size() == 1);
+        const goal_lineage* child_g = lp.goal(rl, 0);
+        assert(gs.count(child_g) == 1);
+        
+        // Get the RAW child goal expression
+        const expr* child_expr = gs.at(child_g);
+        assert(std::holds_alternative<expr::cons>(child_expr->content));
+        const expr::cons& child_cons = std::get<expr::cons>(child_expr->content);
+        
+        // Head should be "q"
+        assert(std::holds_alternative<expr::atom>(child_cons.lhs->content));
+        assert(std::get<expr::atom>(child_cons.lhs->content).value == std::string("q"));
+        
+        // Tail should be a variable
+        const expr* child_arg = child_cons.rhs;
+        assert(std::holds_alternative<expr::var>(child_arg->content));
+        uint32_t child_var_idx = std::get<expr::var>(child_arg->content).index;
+        
+        // The child variable should be the renamed Y' (not the original Y)
+        assert(child_var_idx != original_y_idx);
+        
+        // CRITICAL: Variable-on-variable unification occurred
+        // Either X=Y' or Y'=X, but at least one should be in bind_map
+        // The unification should have created a binding between X and Y'
+        size_t bindings_after = bm.bindings.size();
+        assert(bindings_after > bindings_before);
+        
+        // At least one of the variables should be bound
+        bool x_bound = bm.bindings.count(goal_var_x_idx) > 0;
+        bool y_prime_bound = bm.bindings.count(child_var_idx) > 0;
+        assert(x_bound || y_prime_bound);
+        
+        // If we normalize the child argument, it should give us a variable
+        // (either X or Y' depending on binding direction)
+        const expr* normalized_arg = bm.whnf(child_arg);
+        assert(std::holds_alternative<expr::var>(normalized_arg->content));
+        
+        // CRITICAL: Original rule variable Y should STILL NOT be in bind_map
+        assert(bm.bindings.count(original_y_idx) == 0);
+        
+        // Verify in pools
+        assert(lp.goal_lineages.count(*child_g) == 1);
+        assert(lp.resolution_lineages.count(*rl) == 1);
+        
+        // Should have candidates
+        assert(cs.count(child_g) == 1);
     }
 }
 
