@@ -1,9 +1,9 @@
 #include "../hpp/a01_goal_adder.hpp"
 
 a01_goal_adder::a01_goal_adder(
-    std::map<const goal_lineage*, const expr*>& g,
-    std::multimap<const goal_lineage*, size_t>& c,
-    const std::vector<rule>& d)
+    a01_goal_store& g,
+    a01_candidate_store& c,
+    const a01_database& d)
     : goals(g), candidates(c), database(d)
 {
 }

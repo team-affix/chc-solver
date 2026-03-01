@@ -3,20 +3,20 @@
 
 #include "lineage.hpp"
 #include "expr.hpp"
-#include "rule.hpp"
+#include "a01_defs.hpp"
 
 struct a01_goal_adder {
     a01_goal_adder(
-        std::map<const goal_lineage*, const expr*>&,
-        std::multimap<const goal_lineage*, size_t>&,
-        const std::vector<rule>&);
+        a01_goal_store&,
+        a01_candidate_store&,
+        const a01_database&);
     void operator()(const goal_lineage*, const expr*);
 #ifndef DEBUG
 private:
 #endif
-    std::map<const goal_lineage*, const expr*>& goals;
-    std::multimap<const goal_lineage*, size_t>& candidates;
-    const std::vector<rule>& database;
+    a01_goal_store& goals;
+    a01_candidate_store& candidates;
+    const a01_database& database;
 };
 
 #endif
