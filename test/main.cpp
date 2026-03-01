@@ -5,6 +5,7 @@
 #include "../hpp/copier.hpp"
 #include "../hpp/normalizer.hpp"
 #include "../hpp/rule.hpp"
+#include "../hpp/a01_goal_adder.hpp"
 #include "test_utils.hpp"
 
 void test_trail_constructor() {
@@ -10697,91 +10698,484 @@ void test_normalizer() {
     }
 }
 
-void test_algo1() {
-    trail t;
-    sequencer vars(t);
-    expr_pool ep(t);
-    bind_map bm(t);
-    lineage_pool lp;
-
-    // avoidance store
-    std::set<std::set<const resolution_lineage*>> as;
+void test_a01_goal_adder_constructor() {
+    // Test 1: Basic construction with empty stores and empty database
+    {
+        std::map<const goal_lineage*, const expr*> goals;
+        std::multimap<const goal_lineage*, size_t> candidates;
+        std::vector<rule> database;
+        
+        a01_goal_adder adder(goals, candidates, database);
+        
+        assert(adder.goals.size() == 0);
+        assert(adder.candidates.size() == 0);
+        assert(adder.database.size() == 0);
+    }
     
-    // required by cdcl_eliminator, resolution store
-    std::set<const resolution_lineage*> rs;
-
-    // decision store
-    std::set<const resolution_lineage*> ds;
+    // Test 2: Construction with empty stores but non-empty database
+    {
+        std::map<const goal_lineage*, const expr*> goals;
+        std::multimap<const goal_lineage*, size_t> candidates;
+        
+        expr::atom a1{"p"};
+        expr e1{a1};
+        rule r1{&e1, {}};
+        
+        expr::atom a2{"q"};
+        expr e2{a2};
+        rule r2{&e2, {}};
+        
+        std::vector<rule> database = {r1, r2};
+        
+        a01_goal_adder adder(goals, candidates, database);
+        
+        assert(adder.goals.size() == 0);
+        assert(adder.candidates.size() == 0);
+        assert(adder.database.size() == 2);
+    }
     
-    // goal store
-    std::map<const goal_lineage*, const expr*> gs;
+    // Test 3: Construction with non-empty stores
+    {
+        std::map<const goal_lineage*, const expr*> goals;
+        std::multimap<const goal_lineage*, size_t> candidates;
+        
+        goal_lineage g1{nullptr, 1};
+        expr::atom a1{"test"};
+        expr e1{a1};
+        goals.insert({&g1, &e1});
+        candidates.insert({&g1, 0});
+        candidates.insert({&g1, 1});
+        
+        expr::atom a2{"p"};
+        expr e2{a2};
+        rule r1{&e2, {}};
+        std::vector<rule> database = {r1};
+        
+        a01_goal_adder adder(goals, candidates, database);
+        
+        assert(adder.goals.size() == 1);
+        assert(adder.candidates.size() == 2);
+        assert(adder.database.size() == 1);
+    }
     
-    // goal candidate store
-    std::multimap<const goal_lineage*, size_t> gcs;
+    // Test 4: Verify references are stored correctly (modification propagates)
+    {
+        std::map<const goal_lineage*, const expr*> goals;
+        std::multimap<const goal_lineage*, size_t> candidates;
+        std::vector<rule> database;
+        
+        a01_goal_adder adder(goals, candidates, database);
+        
+        // Add to the stores directly
+        goal_lineage g1{nullptr, 1};
+        expr::atom a1{"test"};
+        expr e1{a1};
+        goals.insert({&g1, &e1});
+        
+        // Verify the adder sees the change
+        assert(adder.goals.size() == 1);
+    }
+}
 
-    // detecting if a goal has no candidatese is as simple as checking if gcs.count(goal) == 0.
-
-    // each time a goal is added, we add it to the goal store (gs), and we also add the whole database as candidates for the goal.
-
-    // each time we resolve a goal, we add the resolution to the resolution store (rs), remove the goal from the goal store as well as all entries from the gcs. Then, we add all the subgoals of the resolutions to gs and gcs.
-
-    // for decisions, we need a decider. It will make a resolution.
-    // dec = mgt_decider(gs, gcs, simulation)
-    // choice = dec()
-
-    std::vector<const rule*> db;
+void test_a01_goal_adder() {
+    // Test 1: Add goal with empty database - no candidates added
+    {
+        std::map<const goal_lineage*, const expr*> goals;
+        std::multimap<const goal_lineage*, size_t> candidates;
+        std::vector<rule> database;
+        
+        a01_goal_adder adder(goals, candidates, database);
+        
+        goal_lineage g1{nullptr, 1};
+        expr::atom a1{"goal1"};
+        expr e1{a1};
+        
+        adder(&g1, &e1);
+        
+        assert(goals.size() == 1);
+        assert(goals.count(&g1) == 1);
+        assert(goals.at(&g1) == &e1);
+        assert(candidates.size() == 0);  // No candidates since database is empty
+    }
     
-    // for initializing the set of candidates for a goal, we need a querier.
-    // querier = uncached_querier(db)
-
-    // maybe we have a goal_adder that takes in by DI gs and gcs, and manages the goal addition system (no trail needed since we do restarts)
-    // ga = trivial_goal_adder(gs, gcs, db)
-    // ga(goal)
-
-    // maybe we have a goal_resolver which requires rs, gs, gcs, ga (no trail needed since we do restarts)
-    // gr = trivial_goal_resolver(rs, gs, gcs, ga)
-
-    // maybe we have a head_elimination_detector which requires trail, bind_map, gs (const&), database
-    // he = trivial_head_elimination_detector(t, bm, gss, db)
-    // eliminate = he(lin, rule_index)
-
-    // we have a cdcl_elimination_detector which requires as, rs
-    // ce = trivial_cdcl_elimination_detector(as, rs)
-    // eliminate = ce(lin, rule_index)
-
-    // we have a unit_propagation_detector which requires gcs
-    // up = unit_propagation_detector(gcs)
-    // candidate = up(lin)
-
-    // soln_detector (sd) requires just gs
-    // sd = solution_detector(gs)
-
-    // conflict_detector (cd) requires gs and gcs
-    // cd = conflict_detector(gs, gcs)
+    // Test 2: Add goal with single rule in database
+    {
+        std::map<const goal_lineage*, const expr*> goals;
+        std::multimap<const goal_lineage*, size_t> candidates;
+        
+        expr::atom a_rule{"rule_head"};
+        expr e_rule{a_rule};
+        rule r1{&e_rule, {}};
+        std::vector<rule> database = {r1};
+        
+        a01_goal_adder adder(goals, candidates, database);
+        
+        goal_lineage g1{nullptr, 1};
+        expr::atom a1{"goal1"};
+        expr e1{a1};
+        
+        adder(&g1, &e1);
+        
+        assert(goals.size() == 1);
+        assert(goals.at(&g1) == &e1);
+        assert(candidates.size() == 1);  // 1 candidate for 1 rule
+        assert(candidates.count(&g1) == 1);
+        
+        // Verify the candidate is rule index 0
+        auto it = candidates.find(&g1);
+        assert(it != candidates.end());
+        assert(it->second == 0);
+    }
     
-    // our main algorithm handles the reaching of the fixpoint
-    // while(!cd() && !sd()) {
-    //     if (std::erase_if(gcs, [&he](const auto& entry) { return he(entry.first, entry.second); }))
-    //         continue;
-    //     if (std::erase_if(gcs, [&ce](const auto& entry) { return ce(entry.first, entry.second); }))
-    //         continue;
-    //     bool propagated = false;
-    //     for (const auto& lin : gs) {
-    //         if (size_t candidate = up(lin)) {
-    //             gr(lin, candidate);
-    //             propagated = true;
-    //         }
-    //     }
-    //     if (propagated)
-    //         continue;
-    //     auto [lin, candidate] = dec();
-    //     gr(lin, candidate);
-    // }
-    // if (sd())
-    //     return true;
-    // if (cd()) { as.insert(ds); return false; }
-    //     
+    // Test 3: Add goal with multiple rules - all should become candidates
+    {
+        std::map<const goal_lineage*, const expr*> goals;
+        std::multimap<const goal_lineage*, size_t> candidates;
+        
+        // Create simple rules
+        expr::atom a1{"p"};
+        expr e1{a1};
+        rule r1{&e1, {}};
+        
+        expr::atom a2{"q"};
+        expr e2{a2};
+        rule r2{&e2, {}};
+        
+        expr::atom a3{"r"};
+        expr e3{a3};
+        rule r3{&e3, {}};
+        
+        std::vector<rule> database = {r1, r2, r3};
+        
+        a01_goal_adder adder(goals, candidates, database);
+        
+        goal_lineage g1{nullptr, 10};
+        expr::atom goal_atom{"test_goal"};
+        expr goal_expr{goal_atom};
+        
+        adder(&g1, &goal_expr);
+        
+        assert(goals.size() == 1);
+        assert(goals.at(&g1) == &goal_expr);
+        assert(candidates.size() == 3);  // All 3 rules are candidates
+        assert(candidates.count(&g1) == 3);
+        
+        // Verify all rule indices (0, 1, 2) are present
+        auto range = candidates.equal_range(&g1);
+        std::vector<size_t> indices;
+        for (auto it = range.first; it != range.second; ++it) {
+            indices.push_back(it->second);
+        }
+        std::sort(indices.begin(), indices.end());
+        assert(indices.size() == 3);
+        assert(indices[0] == 0);
+        assert(indices[1] == 1);
+        assert(indices[2] == 2);
+    }
     
+    // Test 4: Add goal with complex rules (rules with body)
+    {
+        std::map<const goal_lineage*, const expr*> goals;
+        std::multimap<const goal_lineage*, size_t> candidates;
+        
+        // Rule 1: p :- q, r (complex)
+        expr::atom a_p{"p"};
+        expr e_p{a_p};
+        expr::atom a_q{"q"};
+        expr e_q{a_q};
+        expr::atom a_r{"r"};
+        expr e_r{a_r};
+        rule r1{&e_p, {&e_q, &e_r}};
+        
+        // Rule 2: s (simple fact)
+        expr::atom a_s{"s"};
+        expr e_s{a_s};
+        rule r2{&e_s, {}};
+        
+        std::vector<rule> database = {r1, r2};
+        
+        a01_goal_adder adder(goals, candidates, database);
+        
+        goal_lineage g1{nullptr, 5};
+        expr::atom goal_atom{"my_goal"};
+        expr goal_expr{goal_atom};
+        
+        adder(&g1, &goal_expr);
+        
+        assert(goals.size() == 1);
+        assert(candidates.size() == 2);
+        assert(candidates.count(&g1) == 2);
+        
+        // Verify both rule indices are present
+        auto range = candidates.equal_range(&g1);
+        std::vector<size_t> indices;
+        for (auto it = range.first; it != range.second; ++it) {
+            indices.push_back(it->second);
+        }
+        std::sort(indices.begin(), indices.end());
+        assert(indices[0] == 0);
+        assert(indices[1] == 1);
+    }
+    
+    // Test 5: Add multiple different goals to same stores
+    {
+        std::map<const goal_lineage*, const expr*> goals;
+        std::multimap<const goal_lineage*, size_t> candidates;
+        
+        expr::atom a1{"rule1"};
+        expr e1{a1};
+        rule r1{&e1, {}};
+        
+        expr::atom a2{"rule2"};
+        expr e2{a2};
+        rule r2{&e2, {}};
+        
+        std::vector<rule> database = {r1, r2};
+        
+        a01_goal_adder adder(goals, candidates, database);
+        
+        // Add first goal
+        goal_lineage g1{nullptr, 1};
+        expr::atom goal1_atom{"goal1"};
+        expr goal1_expr{goal1_atom};
+        adder(&g1, &goal1_expr);
+        
+        assert(goals.size() == 1);
+        assert(candidates.size() == 2);
+        
+        // Add second goal
+        goal_lineage g2{nullptr, 2};
+        expr::atom goal2_atom{"goal2"};
+        expr goal2_expr{goal2_atom};
+        adder(&g2, &goal2_expr);
+        
+        assert(goals.size() == 2);
+        assert(candidates.size() == 4);  // 2 goals * 2 rules
+        assert(candidates.count(&g1) == 2);
+        assert(candidates.count(&g2) == 2);
+        assert(goals.at(&g1) == &goal1_expr);
+        assert(goals.at(&g2) == &goal2_expr);
+    }
+    
+    // Test 6: Add goal with goal_lineage that has parent
+    {
+        std::map<const goal_lineage*, const expr*> goals;
+        std::multimap<const goal_lineage*, size_t> candidates;
+        
+        expr::atom a1{"rule1"};
+        expr e1{a1};
+        rule r1{&e1, {}};
+        std::vector<rule> database = {r1};
+        
+        a01_goal_adder adder(goals, candidates, database);
+        
+        // Create goal_lineage with parent
+        resolution_lineage parent{nullptr, 5};
+        goal_lineage g1{&parent, 10};
+        expr::atom goal_atom{"child_goal"};
+        expr goal_expr{goal_atom};
+        
+        adder(&g1, &goal_expr);
+        
+        assert(goals.size() == 1);
+        assert(goals.at(&g1) == &goal_expr);
+        assert(candidates.size() == 1);
+        assert(candidates.count(&g1) == 1);
+    }
+    
+    // Test 7: Add goal with complex nested expr
+    {
+        std::map<const goal_lineage*, const expr*> goals;
+        std::multimap<const goal_lineage*, size_t> candidates;
+        
+        expr::atom a1{"rule1"};
+        expr e1{a1};
+        rule r1{&e1, {}};
+        
+        expr::atom a2{"rule2"};
+        expr e2{a2};
+        rule r2{&e2, {}};
+        
+        std::vector<rule> database = {r1, r2};
+        
+        a01_goal_adder adder(goals, candidates, database);
+        
+        // Create nested goal expression: cons(var(0), atom("test"))
+        expr::var v1{0};
+        expr e_v1{v1};
+        expr::atom a_test{"test"};
+        expr e_test{a_test};
+        expr::cons c1{&e_v1, &e_test};
+        expr goal_expr{c1};
+        
+        goal_lineage g1{nullptr, 7};
+        
+        adder(&g1, &goal_expr);
+        
+        assert(goals.size() == 1);
+        assert(goals.at(&g1) == &goal_expr);
+        assert(candidates.size() == 2);
+    }
+    
+    // Test 8: Large database - verify all indices are added
+    {
+        std::map<const goal_lineage*, const expr*> goals;
+        std::multimap<const goal_lineage*, size_t> candidates;
+        
+        // Create 10 rules
+        expr::atom atoms[10] = {
+            expr::atom{"r0"}, expr::atom{"r1"}, expr::atom{"r2"}, expr::atom{"r3"}, expr::atom{"r4"},
+            expr::atom{"r5"}, expr::atom{"r6"}, expr::atom{"r7"}, expr::atom{"r8"}, expr::atom{"r9"}
+        };
+        expr exprs[10] = {
+            expr{atoms[0]}, expr{atoms[1]}, expr{atoms[2]}, expr{atoms[3]}, expr{atoms[4]},
+            expr{atoms[5]}, expr{atoms[6]}, expr{atoms[7]}, expr{atoms[8]}, expr{atoms[9]}
+        };
+        rule rules[10] = {
+            rule{&exprs[0], {}}, rule{&exprs[1], {}}, rule{&exprs[2], {}}, rule{&exprs[3], {}}, rule{&exprs[4], {}},
+            rule{&exprs[5], {}}, rule{&exprs[6], {}}, rule{&exprs[7], {}}, rule{&exprs[8], {}}, rule{&exprs[9], {}}
+        };
+        std::vector<rule> database = {
+            rules[0], rules[1], rules[2], rules[3], rules[4],
+            rules[5], rules[6], rules[7], rules[8], rules[9]
+        };
+        
+        a01_goal_adder adder(goals, candidates, database);
+        
+        goal_lineage g1{nullptr, 100};
+        expr::atom goal_atom{"big_goal"};
+        expr goal_expr{goal_atom};
+        
+        adder(&g1, &goal_expr);
+        
+        assert(goals.size() == 1);
+        assert(candidates.size() == 10);  // All 10 rules
+        assert(candidates.count(&g1) == 10);
+        
+        // Verify all indices 0-9 are present
+        auto range = candidates.equal_range(&g1);
+        std::vector<size_t> indices;
+        for (auto it = range.first; it != range.second; ++it) {
+            indices.push_back(it->second);
+        }
+        std::sort(indices.begin(), indices.end());
+        assert(indices.size() == 10);
+        for (size_t i = 0; i < 10; ++i) {
+            assert(indices[i] == i);
+        }
+    }
+    
+    // Test 9: Add multiple goals with same database
+    {
+        std::map<const goal_lineage*, const expr*> goals;
+        std::multimap<const goal_lineage*, size_t> candidates;
+        
+        expr::atom a1{"rule1"};
+        expr e1{a1};
+        rule r1{&e1, {}};
+        
+        expr::atom a2{"rule2"};
+        expr e2{a2};
+        rule r2{&e2, {}};
+        
+        expr::atom a3{"rule3"};
+        expr e3{a3};
+        rule r3{&e3, {}};
+        
+        std::vector<rule> database = {r1, r2, r3};
+        
+        a01_goal_adder adder(goals, candidates, database);
+        
+        // Add first goal
+        goal_lineage g1{nullptr, 1};
+        expr::atom goal1_atom{"goal1"};
+        expr goal1_expr{goal1_atom};
+        adder(&g1, &goal1_expr);
+        
+        assert(goals.size() == 1);
+        assert(candidates.size() == 3);
+        assert(candidates.count(&g1) == 3);
+        
+        // Add second goal
+        goal_lineage g2{nullptr, 2};
+        expr::atom goal2_atom{"goal2"};
+        expr goal2_expr{goal2_atom};
+        adder(&g2, &goal2_expr);
+        
+        assert(goals.size() == 2);
+        assert(candidates.size() == 6);  // 2 goals * 3 rules = 6 total
+        assert(candidates.count(&g1) == 3);
+        assert(candidates.count(&g2) == 3);
+        
+        // Add third goal
+        goal_lineage g3{nullptr, 3};
+        expr::atom goal3_atom{"goal3"};
+        expr goal3_expr{goal3_atom};
+        adder(&g3, &goal3_expr);
+        
+        assert(goals.size() == 3);
+        assert(candidates.size() == 9);  // 3 goals * 3 rules = 9 total
+        assert(candidates.count(&g1) == 3);
+        assert(candidates.count(&g2) == 3);
+        assert(candidates.count(&g3) == 3);
+    }
+    
+    // Test 10: Verify candidates are correct indices for complex database
+    {
+        std::map<const goal_lineage*, const expr*> goals;
+        std::multimap<const goal_lineage*, size_t> candidates;
+        
+        // Create varied rules: some simple, some with bodies
+        expr::atom a1{"fact"};
+        expr e1{a1};
+        rule r1{&e1, {}};  // Simple fact
+        
+        expr::atom a2{"head"};
+        expr e2{a2};
+        expr::atom a3{"body1"};
+        expr e3{a3};
+        expr::atom a4{"body2"};
+        expr e4{a4};
+        rule r2{&e2, {&e3, &e4}};  // Rule with body
+        
+        expr::var v1{0};
+        expr e5{v1};
+        expr::atom a5{"pred"};
+        expr e6{a5};
+        expr::cons c1{&e6, &e5};
+        expr e7{c1};
+        rule r3{&e7, {}};  // Rule with nested expr
+        
+        std::vector<rule> database = {r1, r2, r3};
+        
+        a01_goal_adder adder(goals, candidates, database);
+        
+        goal_lineage g1{nullptr, 42};
+        expr::atom goal_atom{"complex_goal"};
+        expr::var v_goal{1};
+        expr e_var{v_goal};
+        expr e_atom{goal_atom};
+        expr::cons c_goal{&e_atom, &e_var};
+        expr goal_expr{c_goal};
+        
+        adder(&g1, &goal_expr);
+        
+        assert(goals.size() == 1);
+        assert(goals.at(&g1) == &goal_expr);
+        assert(candidates.size() == 3);
+        
+        // Extract and verify all candidate indices
+        auto range = candidates.equal_range(&g1);
+        std::vector<size_t> indices;
+        for (auto it = range.first; it != range.second; ++it) {
+            indices.push_back(it->second);
+        }
+        std::sort(indices.begin(), indices.end());
+        assert(indices.size() == 3);
+        assert(indices[0] == 0);
+        assert(indices[1] == 1);
+        assert(indices[2] == 2);
+    }
 }
 
 void unit_test_main() {
@@ -10817,6 +11211,8 @@ void unit_test_main() {
     TEST(test_copier);
     TEST(test_normalizer_constructor);
     TEST(test_normalizer);
+    TEST(test_a01_goal_adder_constructor);
+    TEST(test_a01_goal_adder);
 }
 
 int main() {
