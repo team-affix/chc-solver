@@ -12323,6 +12323,411 @@ void test_a01_goal_resolver() {
         // Should have candidates
         assert(cs.count(child_g) == 1);
     }
+    
+    // Test 12: Multiple database rules - resolve with middle rule to verify indexing
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: 5 different rules with different heads and bodies
+        // We'll resolve using rule at index 2 (middle)
+        const expr* p_expr = ep.atom("p");
+        const expr* q_expr = ep.atom("q");
+        const expr* r_expr = ep.atom("r");
+        const expr* s_expr = ep.atom("s");
+        const expr* t_expr = ep.atom("t");
+        const expr* u_expr = ep.atom("u");
+        
+        rule r0{p_expr, {}};                    // Rule 0: p
+        rule r1{q_expr, {r_expr}};              // Rule 1: q :- r
+        rule r2{r_expr, {s_expr, t_expr}};      // Rule 2: r :- s, t  <-- We'll use this one
+        rule r3{s_expr, {u_expr}};              // Rule 3: s :- u
+        rule r4{t_expr, {}};                    // Rule 4: t
+        a01_database db = {r0, r1, r2, r3, r4};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        
+        // Add goal "r" which matches rule 2
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        ga(g1, r_expr);
+        
+        // Pre-resolution: goal has all 5 rules as candidates
+        assert(gs.size() == 1);
+        assert(gs.at(g1) == r_expr);
+        assert(cs.size() == 5);
+        assert(cs.count(g1) == 5);
+        
+        // Resolve with rule 2 (middle of database)
+        const resolution_lineage* rl = resolver(g1, 2);
+        
+        // Verify return value has correct index
+        assert(rl != nullptr);
+        assert(rl->parent == g1);
+        assert(rl->idx == 2);  // CRITICAL: Must be index 2, not 0 or 1
+        
+        // Goal removed
+        assert(gs.count(g1) == 0);
+        assert(cs.count(g1) == 0);
+        
+        // Resolution in pool
+        assert(lp.resolution_lineages.count(*rl) == 1);
+        
+        // Two new goals should be added from rule 2's body: s and t
+        assert(gs.size() == 2);
+        const goal_lineage* child_g0 = lp.goal(rl, 0);
+        const goal_lineage* child_g1 = lp.goal(rl, 1);
+        
+        // Verify lineage structure
+        assert(child_g0->parent == rl);
+        assert(child_g0->idx == 0);
+        assert(child_g1->parent == rl);
+        assert(child_g1->idx == 1);
+        
+        // Verify expressions are from rule 2's body (s and t, NOT r or u)
+        const expr* expr0 = gs.at(child_g0);
+        const expr* expr1 = gs.at(child_g1);
+        
+        assert(std::holds_alternative<expr::atom>(expr0->content));
+        assert(std::get<expr::atom>(expr0->content).value == std::string("s"));
+        assert(std::holds_alternative<expr::atom>(expr1->content));
+        assert(std::get<expr::atom>(expr1->content).value == std::string("t"));
+        
+        // Both children should have all 5 database rules as candidates
+        assert(cs.size() == 10); // 2 goals * 5 rules each
+        assert(cs.count(child_g0) == 5);
+        assert(cs.count(child_g1) == 5);
+        
+        // Verify in pools
+        assert(lp.goal_lineages.count(*child_g0) == 1);
+        assert(lp.goal_lineages.count(*child_g1) == 1);
+    }
+    
+    // Test 13: Multiple goals in store - resolve specific one, others untouched
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: simple rules for various predicates
+        const expr* p_expr = ep.atom("p");
+        const expr* q_expr = ep.atom("q");
+        const expr* r_expr = ep.atom("r");
+        const expr* s_expr = ep.atom("s");
+        const expr* t_expr = ep.atom("t");
+        
+        rule r0{p_expr, {q_expr}};              // p :- q
+        rule r1{q_expr, {r_expr, s_expr}};      // q :- r, s  <-- We'll resolve with this
+        rule r2{r_expr, {}};                    // r
+        rule r3{s_expr, {}};                    // s
+        rule r4{t_expr, {}};                    // t
+        a01_database db = {r0, r1, r2, r3, r4};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        
+        // Add 5 different goals with different lineage structures
+        const goal_lineage* g0 = lp.goal(nullptr, 0);
+        ga(g0, p_expr);
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        ga(g1, q_expr);  // <-- We'll resolve THIS one
+        
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        ga(g2, r_expr);
+        
+        const resolution_lineage* rl_other = lp.resolution(nullptr, 99);
+        const goal_lineage* g3 = lp.goal(rl_other, 3);
+        ga(g3, s_expr);
+        
+        const goal_lineage* g4 = lp.goal(nullptr, 4);
+        ga(g4, t_expr);
+        
+        // Pre-resolution: 5 goals, each with 5 candidates
+        assert(gs.size() == 5);
+        assert(gs.at(g0) == p_expr);
+        assert(gs.at(g1) == q_expr);
+        assert(gs.at(g2) == r_expr);
+        assert(gs.at(g3) == s_expr);
+        assert(gs.at(g4) == t_expr);
+        assert(cs.size() == 25); // 5 goals * 5 rules each
+        
+        // Record the exact expressions for later comparison
+        const expr* g0_expr = gs.at(g0);
+        const expr* g2_expr = gs.at(g2);
+        const expr* g3_expr = gs.at(g3);
+        const expr* g4_expr = gs.at(g4);
+        
+        // Resolve ONLY g1 (the middle one) with rule 1
+        const resolution_lineage* rl = resolver(g1, 1);
+        
+        // Verify resolution lineage
+        assert(rl != nullptr);
+        assert(rl->parent == g1);
+        assert(rl->idx == 1);
+        
+        // CRITICAL: g1 should be removed, ALL OTHERS should remain
+        assert(gs.count(g1) == 0);
+        assert(gs.count(g0) == 1);  // Still there
+        assert(gs.count(g2) == 1);  // Still there
+        assert(gs.count(g3) == 1);  // Still there
+        assert(gs.count(g4) == 1);  // Still there
+        
+        // CRITICAL: Expressions of remaining goals should be UNCHANGED
+        assert(gs.at(g0) == g0_expr);  // Same pointer
+        assert(gs.at(g2) == g2_expr);  // Same pointer
+        assert(gs.at(g3) == g3_expr);  // Same pointer
+        assert(gs.at(g4) == g4_expr);  // Same pointer
+        
+        // g1's candidates removed, others remain
+        assert(cs.count(g1) == 0);
+        assert(cs.count(g0) == 5);  // Still has all candidates
+        assert(cs.count(g2) == 5);  // Still has all candidates
+        assert(cs.count(g3) == 5);  // Still has all candidates
+        assert(cs.count(g4) == 5);  // Still has all candidates
+        
+        // Two new goals added as children of g1's resolution (rule 1: q :- r, s)
+        const goal_lineage* child0 = lp.goal(rl, 0);
+        const goal_lineage* child1 = lp.goal(rl, 1);
+        
+        assert(gs.count(child0) == 1);
+        assert(gs.count(child1) == 1);
+        
+        // Total goals: 4 original (g0, g2, g3, g4) + 2 new (child0, child1) = 6
+        assert(gs.size() == 6);
+        
+        // Verify new children have correct expressions (from rule 1's body: r, s)
+        const expr* child0_expr = gs.at(child0);
+        const expr* child1_expr = gs.at(child1);
+        
+        assert(std::holds_alternative<expr::atom>(child0_expr->content));
+        assert(std::get<expr::atom>(child0_expr->content).value == std::string("r"));
+        assert(std::holds_alternative<expr::atom>(child1_expr->content));
+        assert(std::get<expr::atom>(child1_expr->content).value == std::string("s"));
+        
+        // Verify lineage structure: new children are under rl, which is under g1
+        assert(child0->parent == rl);
+        assert(child0->idx == 0);
+        assert(child1->parent == rl);
+        assert(child1->idx == 1);
+        assert(rl->parent == g1);
+        
+        // New children should have candidates
+        assert(cs.count(child0) == 5);
+        assert(cs.count(child1) == 5);
+        
+        // Total candidates: 4 old goals * 5 + 2 new goals * 5 = 30
+        assert(cs.size() == 30);
+        
+        // Verify all goals are in lineage pool
+        assert(lp.goal_lineages.count(*g0) == 1);
+        assert(lp.goal_lineages.count(*g2) == 1);
+        assert(lp.goal_lineages.count(*g3) == 1);
+        assert(lp.goal_lineages.count(*g4) == 1);
+        assert(lp.goal_lineages.count(*child0) == 1);
+        assert(lp.goal_lineages.count(*child1) == 1);
+        assert(lp.resolution_lineages.count(*rl) == 1);
+    }
+    
+    // Test 14: Database indexing with variables - resolve with last rule
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: rules with variables at different indices
+        const expr* var0 = ep.var(seq());
+        const expr* var1 = ep.var(seq());
+        const expr* var2 = ep.var(seq());
+        
+        const expr* p_expr = ep.atom("p");
+        const expr* q_expr = ep.atom("q");
+        const expr* r_expr = ep.atom("r");
+        
+        const expr* p_v0 = ep.cons(p_expr, var0);
+        const expr* q_v0 = ep.cons(q_expr, var0);
+        const expr* q_v1 = ep.cons(q_expr, var1);
+        const expr* r_v1 = ep.cons(r_expr, var1);
+        const expr* r_v2 = ep.cons(r_expr, var2);
+        
+        rule r0{p_v0, {q_v0}};                  // Rule 0: p(X) :- q(X)
+        rule r1{p_expr, {}};                    // Rule 1: p
+        rule r2{q_v1, {r_v1}};                  // Rule 2: q(Y) :- r(Y)
+        rule r3{r_v2, {}};                      // Rule 3: r(Z)  <-- We'll use this (last)
+        a01_database db = {r0, r1, r2, r3};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        
+        // Add goal "r(a)"
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* atom_a = ep.atom("a");
+        const expr* goal_r_a = ep.cons(r_expr, atom_a);
+        ga(g1, goal_r_a);
+        
+        // Pre-resolution
+        assert(gs.size() == 1);
+        assert(gs.at(g1) == goal_r_a);
+        assert(cs.size() == 4);
+        
+        // Record sequencer and bindings before
+        uint32_t seq_before = seq.index;
+        size_t bindings_before = bm.bindings.size();
+        
+        // Resolve with rule 3 (LAST rule, index 3)
+        const resolution_lineage* rl = resolver(g1, 3);
+        
+        // Verify correct rule was used
+        assert(rl != nullptr);
+        assert(rl->parent == g1);
+        assert(rl->idx == 3);  // CRITICAL: Must be 3 (last rule)
+        
+        // Sequencer should have advanced (var2 was copied)
+        assert(seq.index > seq_before);
+        
+        // Goal removed
+        assert(gs.count(g1) == 0);
+        
+        // Rule 3 has empty body, so no new goals
+        assert(gs.size() == 0);
+        
+        // Unification should have occurred (r(Z') with r(a))
+        assert(bm.bindings.size() > bindings_before);
+        
+        // Resolution in pool
+        assert(lp.resolution_lineages.count(*rl) == 1);
+    }
+    
+    // Test 15: Multiple goals, resolve multiple times in sequence
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database
+        const expr* p_expr = ep.atom("p");
+        const expr* q_expr = ep.atom("q");
+        const expr* r_expr = ep.atom("r");
+        
+        rule r0{p_expr, {q_expr}};      // p :- q
+        rule r1{q_expr, {r_expr}};      // q :- r
+        rule r2{r_expr, {}};            // r
+        a01_database db = {r0, r1, r2};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(gs, cs, db, cp, bm, lp, ga);
+        
+        // Add three goals
+        const goal_lineage* g_p = lp.goal(nullptr, 10);
+        ga(g_p, p_expr);
+        
+        const goal_lineage* g_q = lp.goal(nullptr, 20);
+        ga(g_q, q_expr);
+        
+        const goal_lineage* g_r = lp.goal(nullptr, 30);
+        ga(g_r, r_expr);
+        
+        // Pre-resolution: 3 goals
+        assert(gs.size() == 3);
+        assert(cs.size() == 9); // 3 goals * 3 rules
+        
+        // First resolution: resolve g_q with rule 1 (q :- r)
+        const resolution_lineage* rl_q = resolver(g_q, 1);
+        
+        assert(rl_q->parent == g_q);
+        assert(rl_q->idx == 1);
+        
+        // g_q removed, g_p and g_r remain
+        assert(gs.count(g_q) == 0);
+        assert(gs.count(g_p) == 1);
+        assert(gs.count(g_r) == 1);
+        
+        // One new goal from q's resolution
+        const goal_lineage* child_of_q = lp.goal(rl_q, 0);
+        assert(gs.count(child_of_q) == 1);
+        assert(gs.size() == 3); // g_p, g_r, child_of_q
+        
+        // Verify child_of_q has correct expression (r)
+        const expr* child_of_q_expr = gs.at(child_of_q);
+        assert(std::holds_alternative<expr::atom>(child_of_q_expr->content));
+        assert(std::get<expr::atom>(child_of_q_expr->content).value == std::string("r"));
+        
+        // Second resolution: resolve g_p with rule 0 (p :- q)
+        const resolution_lineage* rl_p = resolver(g_p, 0);
+        
+        assert(rl_p->parent == g_p);
+        assert(rl_p->idx == 0);
+        
+        // g_p removed, g_r and child_of_q remain
+        assert(gs.count(g_p) == 0);
+        assert(gs.count(g_q) == 0);  // Still gone from first resolution
+        assert(gs.count(g_r) == 1);
+        assert(gs.count(child_of_q) == 1);
+        
+        // One new goal from p's resolution
+        const goal_lineage* child_of_p = lp.goal(rl_p, 0);
+        assert(gs.count(child_of_p) == 1);
+        assert(gs.size() == 3); // g_r, child_of_q, child_of_p
+        
+        // Verify child_of_p has correct expression (q)
+        const expr* child_of_p_expr = gs.at(child_of_p);
+        assert(std::holds_alternative<expr::atom>(child_of_p_expr->content));
+        assert(std::get<expr::atom>(child_of_p_expr->content).value == std::string("q"));
+        
+        // Third resolution: resolve g_r with rule 2 (r - fact)
+        const resolution_lineage* rl_r = resolver(g_r, 2);
+        
+        assert(rl_r->parent == g_r);
+        assert(rl_r->idx == 2);
+        
+        // g_r removed, only children remain
+        assert(gs.count(g_r) == 0);
+        assert(gs.count(child_of_q) == 1);
+        assert(gs.count(child_of_p) == 1);
+        assert(gs.size() == 2); // child_of_q, child_of_p
+        
+        // No new goals from g_r (empty body)
+        
+        // Verify all resolutions in pool
+        assert(lp.resolution_lineages.count(*rl_p) == 1);
+        assert(lp.resolution_lineages.count(*rl_q) == 1);
+        assert(lp.resolution_lineages.count(*rl_r) == 1);
+        
+        // Verify lineage structures remain correct
+        assert(child_of_p->parent == rl_p);
+        assert(rl_p->parent == g_p);
+        assert(child_of_q->parent == rl_q);
+        assert(rl_q->parent == g_q);
+    }
 }
 
 void unit_test_main() {
