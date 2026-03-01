@@ -4,6 +4,7 @@
 #include "lineage.hpp"
 #include "expr.hpp"
 #include "rule.hpp"
+#include <list>
 
 using a01_goal_store = std::map<const goal_lineage*, const expr*>;
 using a01_candidate_store = std::multimap<const goal_lineage*, size_t>;
