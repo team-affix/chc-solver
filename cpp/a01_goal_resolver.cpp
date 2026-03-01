@@ -2,7 +2,6 @@
 #include "../hpp/a01_goal_resolver.hpp"
 
 a01_goal_resolver::a01_goal_resolver(
-    a01_resolution_store& r,
     a01_goal_store& g,
     a01_candidate_store& c,
     const a01_database& d,
@@ -10,11 +9,11 @@ a01_goal_resolver::a01_goal_resolver(
     bind_map& b,
     lineage_pool& l,
     a01_goal_adder& a)
-    : rs(r), gs(g), cs(c), db(d), cp(copier), bm(b), lp(l), ga(a)
+    : gs(g), cs(c), db(d), cp(copier), bm(b), lp(l), ga(a)
 {
 }
 
-void a01_goal_resolver::operator()(const goal_lineage* gl, size_t i)
+const resolution_lineage* a01_goal_resolver::operator()(const goal_lineage* gl, size_t i)
 {
     // get the goal expression
     const expr* goal_expr = gs.at(gl);
@@ -27,9 +26,6 @@ void a01_goal_resolver::operator()(const goal_lineage* gl, size_t i)
 
     // construct the resolution lineage
     const resolution_lineage* rl = lp.resolution(gl, i);
-
-    // add the resolution to the resolutions store
-    rs.insert(rl);
 
     // get the rule in the db
     const rule& r = db.at(i);
@@ -55,5 +51,7 @@ void a01_goal_resolver::operator()(const goal_lineage* gl, size_t i)
         const goal_lineage* child_gl = lp.goal(rl, j);
         ga(child_gl, e);
     }
+
+    return rl;
 }
     

@@ -10,7 +10,6 @@
 
 struct a01_goal_resolver {
     a01_goal_resolver(
-        a01_resolution_store&,
         a01_goal_store&,
         a01_candidate_store&,
         const a01_database&,
@@ -18,11 +17,10 @@ struct a01_goal_resolver {
         bind_map&,
         lineage_pool&,
         a01_goal_adder&);
-    void operator()(const goal_lineage*, size_t);
+    const resolution_lineage* operator()(const goal_lineage*, size_t);
 #ifndef DEBUG
 private:
 #endif
-    a01_resolution_store& rs;
     a01_goal_store& gs;
     a01_candidate_store& cs;
     const a01_database& db;
