@@ -3,7 +3,7 @@
 a01_goal_adder::a01_goal_adder(
     std::map<const goal_lineage*, const expr*>& g,
     std::multimap<const goal_lineage*, size_t>& c,
-    const std::vector<const rule*>& d)
+    const std::vector<rule>& d)
     : goals(g), candidates(c), database(d)
 {
 }
