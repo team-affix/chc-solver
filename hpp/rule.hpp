@@ -7,6 +7,7 @@
 struct rule {
     const expr* head;
     std::list<const expr*> body;
+    auto operator<=>(const rule&) const = default;
 };
 
 #endif
