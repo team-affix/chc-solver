@@ -5,7 +5,9 @@
 #include "../hpp/copier.hpp"
 #include "../hpp/normalizer.hpp"
 #include "../hpp/rule.hpp"
+#include "../hpp/a01_defs.hpp"
 #include "../hpp/a01_goal_adder.hpp"
+#include "../hpp/a01_goal_resolver.hpp"
 #include "test_utils.hpp"
 
 void test_trail_constructor() {
@@ -11178,6 +11180,583 @@ void test_a01_goal_adder() {
     }
 }
 
+void test_a01_goal_resolver_constructor() {
+    // Test 1: Basic construction with all required references
+    {
+        trail t;
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        a01_database db;
+        a01_goal_adder ga(gs, cs, db);
+        
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        assert(&resolver.rs == &rs);
+        assert(&resolver.gs == &gs);
+        assert(&resolver.cs == &cs);
+        assert(&resolver.db == &db);
+        assert(&resolver.cp == &cp);
+        assert(&resolver.bm == &bm);
+        assert(&resolver.lp == &lp);
+        assert(&resolver.ga == &ga);
+    }
+    
+    // Test 2: Construction with non-empty stores
+    {
+        trail t;
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Add some initial data
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* e1 = ep.atom("test");
+        gs.insert({g1, e1});
+        cs.insert({g1, 0});
+        cs.insert({g1, 1});
+        
+        expr::atom a1{"rule1"};
+        expr rule_expr{a1};
+        rule r1{&rule_expr, {}};
+        a01_database db = {r1};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        assert(resolver.gs.size() == 1);
+        assert(resolver.cs.size() == 2);
+        assert(resolver.db.size() == 1);
+    }
+}
+
+void test_a01_goal_resolver() {
+    // Test 1: Resolve with simple fact (empty body) - no new goals
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: single fact "p"
+        const expr* p_expr = ep.atom("p");
+        rule r_fact{p_expr, {}};
+        a01_database db = {r_fact};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Add goal "p" using goal_adder
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* goal_p = ep.atom("p");
+        ga(g1, goal_p);
+        
+        assert(gs.size() == 1);
+        assert(cs.size() == 1);
+        assert(rs.size() == 0);
+        
+        // Resolve g1 with rule 0
+        resolver(g1, 0);
+        
+        // Goal should be removed
+        assert(gs.size() == 0);
+        assert(gs.count(g1) == 0);
+        
+        // Candidates should be removed
+        assert(cs.size() == 0);
+        assert(cs.count(g1) == 0);
+        
+        // Resolution should be added
+        assert(rs.size() == 1);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        assert(rs.count(rl) == 1);
+        
+        // No new goals since body is empty
+        assert(gs.size() == 0);
+    }
+    
+    // Test 2: Resolve with rule with single body clause
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: rule "p :- q"
+        const expr* p_expr = ep.atom("p");
+        const expr* q_expr = ep.atom("q");
+        rule r1{p_expr, {q_expr}};
+        a01_database db = {r1};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Add goal "p" using goal_adder
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* goal_p = ep.atom("p");
+        ga(g1, goal_p);
+        
+        // Resolve g1 with rule 0
+        resolver(g1, 0);
+        
+        // Goal "p" should be removed
+        assert(gs.count(g1) == 0);
+        assert(cs.count(g1) == 0);
+        
+        // Resolution should be added
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        assert(rs.count(rl) == 1);
+        
+        // One new goal "q" should be added as child of resolution
+        assert(gs.size() == 1);
+        const goal_lineage* child_g = lp.goal(rl, 0);
+        assert(gs.count(child_g) == 1);
+        
+        // New goal should have been added via goal_adder, so it has candidates
+        assert(cs.size() == 1);
+        assert(cs.count(child_g) == 1);
+    }
+    
+    // Test 3: Resolve with rule with multiple body clauses
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: rule "p :- q, r, s"
+        const expr* p_expr = ep.atom("p");
+        const expr* q_expr = ep.atom("q");
+        const expr* r_expr = ep.atom("r");
+        const expr* s_expr = ep.atom("s");
+        rule r1{p_expr, {q_expr, r_expr, s_expr}};
+        a01_database db = {r1};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Add goal "p" using goal_adder
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* goal_p = ep.atom("p");
+        ga(g1, goal_p);
+        
+        // Resolve g1 with rule 0
+        resolver(g1, 0);
+        
+        // Goal "p" should be removed
+        assert(gs.count(g1) == 0);
+        assert(cs.count(g1) == 0);
+        
+        // Resolution should be added
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        assert(rs.count(rl) == 1);
+        
+        // Three new goals should be added: q, r, s
+        assert(gs.size() == 3);
+        const goal_lineage* child_g0 = lp.goal(rl, 0);
+        const goal_lineage* child_g1 = lp.goal(rl, 1);
+        const goal_lineage* child_g2 = lp.goal(rl, 2);
+        
+        assert(gs.count(child_g0) == 1);
+        assert(gs.count(child_g1) == 1);
+        assert(gs.count(child_g2) == 1);
+        
+        // Each new goal should have candidates (via goal_adder)
+        assert(cs.size() == 3);
+        assert(cs.count(child_g0) == 1);
+        assert(cs.count(child_g1) == 1);
+        assert(cs.count(child_g2) == 1);
+    }
+    
+    // Test 4: Resolve with variable unification
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: rule "p(X) :- q(X)"
+        const expr* var_x = ep.var(seq());
+        const expr* p_x = ep.cons(ep.atom("p"), var_x);
+        const expr* q_x = ep.cons(ep.atom("q"), var_x);
+        rule r1{p_x, {q_x}};
+        a01_database db = {r1};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Add goal "p(a)" using goal_adder
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* goal_p_a = ep.cons(ep.atom("p"), ep.atom("a"));
+        ga(g1, goal_p_a);
+        
+        size_t bindings_before = bm.bindings.size();
+        
+        // Resolve g1 with rule 0
+        resolver(g1, 0);
+        
+        // Goal should be removed
+        assert(gs.count(g1) == 0);
+        
+        // Resolution should be added
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        assert(rs.count(rl) == 1);
+        
+        // One new goal "q(a)" should be added
+        assert(gs.size() == 1);
+        const goal_lineage* child_g = lp.goal(rl, 0);
+        assert(gs.count(child_g) == 1);
+        
+        // Unification should have created at least one binding (X = a)
+        assert(bm.bindings.size() > bindings_before);
+    }
+    
+    // Test 5: Multiple goals with multiple candidates
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: two facts
+        const expr* p_expr = ep.atom("p");
+        const expr* q_expr = ep.atom("q");
+        rule r1{p_expr, {}};
+        rule r2{q_expr, {}};
+        a01_database db = {r1, r2};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Add two goals using goal_adder
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* goal1 = ep.atom("p");
+        ga(g1, goal1);
+        
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const expr* goal2 = ep.atom("q");
+        ga(g2, goal2);
+        
+        assert(gs.size() == 2);
+        assert(cs.size() == 4);
+        
+        // Resolve g1 with rule 0
+        resolver(g1, 0);
+        
+        // g1 should be removed, g2 should remain
+        assert(gs.count(g1) == 0);
+        assert(gs.count(g2) == 1);
+        assert(gs.size() == 1);
+        
+        // g1 candidates removed, g2 candidates remain
+        assert(cs.count(g1) == 0);
+        assert(cs.count(g2) == 2);
+        assert(cs.size() == 2);
+        
+        // One resolution added
+        assert(rs.size() == 1);
+    }
+    
+    // Test 6: Verify lineage structure after resolution
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: rule "p :- q, r"
+        const expr* p_expr = ep.atom("p");
+        const expr* q_expr = ep.atom("q");
+        const expr* r_expr = ep.atom("r");
+        rule r1{p_expr, {q_expr, r_expr}};
+        a01_database db = {r1};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Add goal with specific parent lineage using goal_adder
+        const resolution_lineage* parent_rl = lp.resolution(nullptr, 5);
+        const goal_lineage* g1 = lp.goal(parent_rl, 10);
+        const expr* goal_p = ep.atom("p");
+        ga(g1, goal_p);
+        
+        // Resolve g1 with rule 0
+        resolver(g1, 0);
+        
+        // Check resolution lineage structure
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        assert(rs.count(rl) == 1);
+        assert(rl->parent == g1);
+        assert(rl->idx == 0);
+        
+        // Check new goal lineages structure
+        const goal_lineage* child_g0 = lp.goal(rl, 0);
+        const goal_lineage* child_g1 = lp.goal(rl, 1);
+        
+        assert(child_g0->parent == rl);
+        assert(child_g0->idx == 0);
+        assert(child_g1->parent == rl);
+        assert(child_g1->idx == 1);
+        
+        assert(gs.count(child_g0) == 1);
+        assert(gs.count(child_g1) == 1);
+    }
+    
+    // Test 7: Verify copier uses consistent translation_map
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: rule "p(X) :- q(X), r(X)"
+        const expr* var_x = ep.var(seq());
+        const expr* p_x = ep.cons(ep.atom("p"), var_x);
+        const expr* q_x = ep.cons(ep.atom("q"), var_x);
+        const expr* r_x = ep.cons(ep.atom("r"), var_x);
+        rule r1{p_x, {q_x, r_x}};
+        a01_database db = {r1};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Add goal "p(a)" using goal_adder
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* goal_p_a = ep.cons(ep.atom("p"), ep.atom("a"));
+        ga(g1, goal_p_a);
+        
+        // Resolve g1 with rule 0
+        resolver(g1, 0);
+        
+        // Two new goals should be added: q(a) and r(a)
+        assert(gs.size() == 2);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        const goal_lineage* child_g0 = lp.goal(rl, 0);
+        const goal_lineage* child_g1 = lp.goal(rl, 1);
+        
+        // Both should be in goals
+        assert(gs.count(child_g0) == 1);
+        assert(gs.count(child_g1) == 1);
+        
+        // Both should have candidates
+        assert(cs.count(child_g0) == 1);
+        assert(cs.count(child_g1) == 1);
+    }
+    
+    // Test 8: Database with multiple rules, resolve with non-zero index
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: multiple rules
+        const expr* p_expr = ep.atom("p");
+        const expr* q_expr = ep.atom("q");
+        const expr* r_expr = ep.atom("r");
+        rule r1{p_expr, {}};
+        rule r2{q_expr, {r_expr}};
+        rule r3{r_expr, {}};
+        a01_database db = {r1, r2, r3};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Add goal "q" using goal_adder (adds all rules as candidates)
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* goal_q = ep.atom("q");
+        ga(g1, goal_q);
+        
+        assert(cs.size() == 3);
+        
+        // Resolve g1 with rule 1 (index 1)
+        resolver(g1, 1);
+        
+        // Goal removed
+        assert(gs.count(g1) == 0);
+        assert(cs.count(g1) == 0);
+        
+        // Resolution with idx=1 should be added
+        const resolution_lineage* rl = lp.resolution(g1, 1);
+        assert(rs.count(rl) == 1);
+        assert(rl->idx == 1);
+        
+        // One new goal "r" should be added
+        assert(gs.size() == 1);
+        const goal_lineage* child_g = lp.goal(rl, 0);
+        assert(gs.count(child_g) == 1);
+        
+        // New goal has all database rules as candidates
+        assert(cs.size() == 3);
+        assert(cs.count(child_g) == 3);
+    }
+    
+    // Test 9: Resolve goal that's part of an existing AND-OR tree
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: rule "p :- q"
+        const expr* p_expr = ep.atom("p");
+        const expr* q_expr = ep.atom("q");
+        rule r1{p_expr, {q_expr}};
+        a01_database db = {r1};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Create a goal that's deep in the tree
+        const goal_lineage* root = lp.goal(nullptr, 0);
+        const resolution_lineage* r_level1 = lp.resolution(root, 0);
+        const goal_lineage* g_level2 = lp.goal(r_level1, 0);
+        
+        const expr* goal_p = ep.atom("p");
+        ga(g_level2, goal_p);
+        
+        // Resolve the deep goal
+        resolver(g_level2, 0);
+        
+        // Goal removed
+        assert(gs.count(g_level2) == 0);
+        
+        // Resolution created as child of g_level2
+        const resolution_lineage* rl = lp.resolution(g_level2, 0);
+        assert(rs.count(rl) == 1);
+        assert(rl->parent == g_level2);
+        
+        // New goal created as child of new resolution
+        const goal_lineage* new_goal = lp.goal(rl, 0);
+        assert(gs.count(new_goal) == 1);
+        assert(new_goal->parent == rl);
+    }
+    
+    // Test 10: Resolve with complex unification scenario
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        copier cp(seq, ep);
+        lineage_pool lp;
+        
+        a01_resolution_store rs;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Database: rule "p(X, Y) :- q(X), r(Y)"
+        const expr* var_x = ep.var(seq());
+        const expr* var_y = ep.var(seq());
+        const expr* p_xy = ep.cons(ep.atom("p"), ep.cons(var_x, var_y));
+        const expr* q_x = ep.cons(ep.atom("q"), var_x);
+        const expr* r_y = ep.cons(ep.atom("r"), var_y);
+        rule r1{p_xy, {q_x, r_y}};
+        a01_database db = {r1};
+        
+        a01_goal_adder ga(gs, cs, db);
+        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
+        
+        // Add goal "p(a, b)" using goal_adder
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const expr* goal_p_ab = ep.cons(ep.atom("p"), ep.cons(ep.atom("a"), ep.atom("b")));
+        ga(g1, goal_p_ab);
+        
+        // Resolve g1 with rule 0
+        resolver(g1, 0);
+        
+        // Goal removed
+        assert(gs.count(g1) == 0);
+        
+        // Resolution added
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        assert(rs.count(rl) == 1);
+        
+        // Two new goals should be added
+        assert(gs.size() == 2);
+        const goal_lineage* child_g0 = lp.goal(rl, 0);
+        const goal_lineage* child_g1 = lp.goal(rl, 1);
+        assert(gs.count(child_g0) == 1);
+        assert(gs.count(child_g1) == 1);
+    }
+}
+
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
 
@@ -11213,6 +11792,8 @@ void unit_test_main() {
     TEST(test_normalizer);
     TEST(test_a01_goal_adder_constructor);
     TEST(test_a01_goal_adder);
+    TEST(test_a01_goal_resolver_constructor);
+    TEST(test_a01_goal_resolver);
 }
 
 int main() {
