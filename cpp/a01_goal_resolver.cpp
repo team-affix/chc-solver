@@ -59,10 +59,10 @@ void a01_goal_resolver::operator()(const goal_lineage* gl, size_t i)
 
     // erase this resolution from each avoidance
     for (auto it = as.begin(); it != as.end();) {
-        if (it->second.erase(rl)) {
+        if (it->count(rl)) {
             // efficiently extract and reinsert the node with the new size
             auto node = as.extract(it++);
-            node.key() = node.mapped().size();
+            node.value().erase(rl);
             as.insert(std::move(node));
             continue;
         }
