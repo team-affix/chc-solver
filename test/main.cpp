@@ -11245,14 +11245,14 @@ void test_a01_goal_resolver_constructor() {
         // Pre-populate avoidance store with some avoidances
         a01_decision_store avoidance1;
         avoidance1.insert(rl0);
-        as.push_back(avoidance1);
+        as.insert(avoidance1);
         
         const goal_lineage* g2 = lp.goal(nullptr, 2);
         const resolution_lineage* rl2 = lp.resolution(g2, 0);
         a01_decision_store avoidance2;
         avoidance2.insert(rl0);
         avoidance2.insert(rl2);
-        as.push_back(avoidance2);
+        as.insert(avoidance2);
         
         a01_goal_adder ga(gs, cs, db);
         a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
@@ -11294,11 +11294,11 @@ void test_a01_goal_resolver() {
         
         a01_decision_store avoidance1;
         avoidance1.insert(rl_expected);
-        as.push_back(avoidance1);
+        as.insert(avoidance1);
         
         assert(as.size() == 1);
-        assert(as.front().size() == 1);
-        assert(as.front().count(rl_expected) == 1);
+        assert(as.begin()->size() == 1);
+        assert(as.begin()->count(rl_expected) == 1);
         
         a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
@@ -11339,8 +11339,8 @@ void test_a01_goal_resolver() {
         
         // CRITICAL: Verify rl was erased from all avoidances
         assert(as.size() == 1);
-        assert(as.front().count(rl) == 0); // rl should be removed
-        assert(as.front().size() == 0);    // Avoidance now empty
+        assert(as.begin()->count(rl) == 0); // rl should be removed
+        assert(as.begin()->size() == 0);    // Avoidance now empty
         
         // Check goal was removed from goal store
         assert(gs.size() == 0);
@@ -11400,18 +11400,18 @@ void test_a01_goal_resolver() {
         a01_decision_store avoidance1;
         avoidance1.insert(rl_expected);
         avoidance1.insert(rl_other1);
-        as.push_back(avoidance1);
+        as.insert(avoidance1);
         
         // Avoidance 2: contains only rl_expected
         a01_decision_store avoidance2;
         avoidance2.insert(rl_expected);
-        as.push_back(avoidance2);
+        as.insert(avoidance2);
         
         // Avoidance 3: doesn't contain rl_expected at all
         a01_decision_store avoidance3;
         avoidance3.insert(rl_other1);
         avoidance3.insert(rl_other2);
-        as.push_back(avoidance3);
+        as.insert(avoidance3);
         
         assert(as.size() == 3);
         
@@ -11479,22 +11479,37 @@ void test_a01_goal_resolver() {
         // CRITICAL: Verify avoidance store state after resolution
         assert(as.size() == 3);
         
-        // Avoidance 1: rl_expected removed, rl_other1 remains
-        auto it = as.begin();
-        assert(it->count(rl) == 0);
-        assert(it->count(rl_other1) == 1);
-        assert(it->size() == 1);
+        // Count avoidances by size and content (order not guaranteed by std::set)
+        int empty_count = 0;
+        int size_one_count = 0;
+        int size_two_count = 0;
+        bool found_rl_other1_only = false;
+        bool found_rl_other1_and_rl_other2 = false;
         
-        // Avoidance 2: rl_expected removed, now empty
-        ++it;
-        assert(it->count(rl) == 0);
-        assert(it->size() == 0);
+        for (const auto& avoidance : as) {
+            assert(avoidance.count(rl) == 0); // rl should be gone from all
+            
+            if (avoidance.size() == 0) {
+                empty_count++;
+            } else if (avoidance.size() == 1) {
+                size_one_count++;
+                if (avoidance.count(rl_other1) == 1) {
+                    found_rl_other1_only = true;
+                }
+            } else if (avoidance.size() == 2) {
+                size_two_count++;
+                if (avoidance.count(rl_other1) == 1 && avoidance.count(rl_other2) == 1) {
+                    found_rl_other1_and_rl_other2 = true;
+                }
+            }
+        }
         
-        // Avoidance 3: unchanged (didn't contain rl_expected)
-        ++it;
-        assert(it->count(rl_other1) == 1);
-        assert(it->count(rl_other2) == 1);
-        assert(it->size() == 2);
+        // Verify we have the expected avoidances
+        assert(empty_count == 1);      // One became empty (was {rl})
+        assert(size_one_count == 1);   // One has {rl_other1} (was {rl, rl_other1})
+        assert(size_two_count == 1);   // One unchanged {rl_other1, rl_other2}
+        assert(found_rl_other1_only);
+        assert(found_rl_other1_and_rl_other2);
     }
     
     // Test 3: Resolve with rule with multiple body clauses
@@ -11629,7 +11644,7 @@ void test_a01_goal_resolver() {
         const resolution_lineage* rl_expected = lp.resolution(g1, 0);
         a01_decision_store avoidance1;
         avoidance1.insert(rl_expected);
-        as.push_back(avoidance1);
+        as.insert(avoidance1);
         
         a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
@@ -11727,8 +11742,8 @@ void test_a01_goal_resolver() {
         
         // CRITICAL: Verify rl was erased from avoidance
         assert(as.size() == 1);
-        assert(as.front().count(rl) == 0);
-        assert(as.front().size() == 0);
+        assert(as.begin()->count(rl) == 0);
+        assert(as.begin()->size() == 0);
     }
     
     // Test 5: Multiple goals with multiple candidates - resolve only one
