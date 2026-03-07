@@ -162,6 +162,54 @@ void init_ep_6(expr_pool& ep, lineage_pool& lp, a01_database& db, a01_goal_store
     ga(lp.goal(nullptr, 0), ep.atom("a"));
 }
 
+void init_ep_7(expr_pool& ep, lineage_pool& lp, a01_database& db, a01_goal_store& gs, a01_candidate_store& cs) {
+    // a :- b, c.
+    // a :- d.
+    // b.
+    // c.
+    // d.
+    // :- a.
+    
+    // edit database
+    db.push_back(rule{ep.atom("a"), {ep.atom("b"), ep.atom("c")}});
+    db.push_back(rule{ep.atom("a"), {ep.atom("d")}});
+    db.push_back(rule{ep.atom("b"), {}});
+    db.push_back(rule{ep.atom("c"), {}});
+    db.push_back(rule{ep.atom("d"), {}});
+
+    // construct goal adder
+    a01_goal_adder ga(gs, cs, db);
+
+    // edit goal store
+    ga(lp.goal(nullptr, 0), ep.atom("a"));
+}
+
+struct example_problem {
+    a01_database db;
+    a01_goal_store gs;
+};
+
+example_problem make_ep_8(expr_pool& ep, lineage_pool& lp) {
+    // a :- b, c.
+    // a :- d.
+    // b.
+    // c.
+    // d.
+    // :- a.
+    example_problem p;
+    // edit database
+    p.db.push_back(rule{ep.atom("a"), {ep.atom("b"), ep.atom("c")}});
+    p.db.push_back(rule{ep.atom("a"), {ep.atom("d")}});
+    p.db.push_back(rule{ep.atom("b"), {}});
+    p.db.push_back(rule{ep.atom("c"), {}});
+    p.db.push_back(rule{ep.atom("d"), {}});
+
+    // edit goal store
+    p.gs.insert({lp.goal(nullptr, 0), ep.atom("a")});
+
+    return p;
+}
+
 void a01() {
     trail t;
     bind_map bm(t);
@@ -195,7 +243,15 @@ void a01() {
     t.push();
 
     // CHOOSE EXAMPLE PROBLEM
-    init_ep_6(ep, lp, db, gs_main, cs_main);
+    {
+        example_problem epm = make_ep_8(ep, lp);
+        // extract db
+        db = epm.db;
+        // extract gs
+        a01_goal_adder ga_main(gs_main, cs_main, db);
+        for (const auto& [gl, ge] : epm.gs)
+            ga_main(gl, ge);
+    }
     
     constexpr size_t ITERATIONS_BEFORE_CDCL = 1000;
     constexpr double EXPLORATION_CONSTANT = 1.414;
