@@ -12,6 +12,7 @@
 #include "../hpp/unit_propagation_detector.hpp"
 #include "../hpp/solution_detector.hpp"
 #include "../hpp/conflict_detector.hpp"
+#include "../hpp/a01_cdcl_elimination_detector.hpp"
 #include "test_utils.hpp"
 
 void test_trail_constructor() {
@@ -17559,6 +17560,783 @@ void test_conflict_detector() {
     }
 }
 
+void test_a01_cdcl_elimination_detector_constructor() {
+    // Test 1: Basic construction with empty stores
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // Verify references stored
+        assert(&detector.as == &as);
+        assert(&detector.lp == &lp);
+    }
+    
+    // Test 2: Construction with non-empty avoidance store
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        // Pre-populate avoidance store
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const resolution_lineage* rl1 = lp.resolution(g1, 0);
+        const resolution_lineage* rl2 = lp.resolution(g2, 0);
+        
+        a01_decision_store avoidance1;
+        avoidance1.insert(rl1);
+        avoidance1.insert(rl2);
+        as.insert(avoidance1);
+        
+        a01_decision_store avoidance2;
+        avoidance2.insert(rl1);
+        as.insert(avoidance2);
+        
+        assert(as.size() == 2);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // Verify references and stores unchanged
+        assert(&detector.as == &as);
+        assert(&detector.lp == &lp);
+        assert(detector.as.size() == 2);
+    }
+}
+
+void test_a01_cdcl_elimination_detector() {
+    // Test 1: Empty avoidance store - no eliminations
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        assert(as.empty());
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // Test arbitrary goal/index combination
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        
+        bool result = detector(g1, 0);
+        
+        // Should return false (no avoidances, no elimination)
+        assert(result == false);
+        
+        // Store unchanged
+        assert(as.empty());
+    }
+    
+    // Test 2: Avoidance with singleton containing exact rl - SHOULD ELIMINATE
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        
+        // Create singleton avoidance containing rl
+        a01_decision_store avoidance;
+        avoidance.insert(rl);
+        as.insert(avoidance);
+        
+        assert(as.size() == 1);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // Test the exact goal/index combination
+        bool result = detector(g1, 0);
+        
+        // CRITICAL: Should return true (rl is singleton in avoidance)
+        assert(result == true);
+        
+        // Stores unchanged
+        assert(as.size() == 1);
+    }
+    
+    // Test 3: Avoidance with singleton, but different rl - should NOT eliminate
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const resolution_lineage* rl_in_avoidance = lp.resolution(g1, 0);
+        
+        // Avoidance contains rl for g1,0
+        a01_decision_store avoidance;
+        avoidance.insert(rl_in_avoidance);
+        as.insert(avoidance);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // Test different goal/index (g2, 0)
+        bool result = detector(g2, 0);
+        
+        // Should return false (different resolution)
+        assert(result == false);
+        
+        // Store unchanged
+        assert(as.size() == 1);
+    }
+    
+    // Test 4: Avoidance with 2+ resolutions - should NOT eliminate
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const resolution_lineage* rl1 = lp.resolution(g1, 0);
+        const resolution_lineage* rl2 = lp.resolution(g2, 0);
+        
+        // Avoidance with 2 resolutions (NOT singleton)
+        a01_decision_store avoidance;
+        avoidance.insert(rl1);
+        avoidance.insert(rl2);
+        as.insert(avoidance);
+        
+        assert(as.size() == 1);
+        assert(as.begin()->size() == 2);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // Test rl1 - should NOT eliminate (not singleton)
+        bool result1 = detector(g1, 0);
+        assert(result1 == false);
+        
+        // Test rl2 - should NOT eliminate (not singleton)
+        bool result2 = detector(g2, 0);
+        assert(result2 == false);
+        
+        // Stores unchanged
+        assert(as.size() == 1);
+    }
+    
+    // Test 5: Multiple avoidances, one is singleton - SHOULD ELIMINATE
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const goal_lineage* g3 = lp.goal(nullptr, 3);
+        const resolution_lineage* rl1 = lp.resolution(g1, 0);
+        const resolution_lineage* rl2 = lp.resolution(g2, 0);
+        const resolution_lineage* rl3 = lp.resolution(g3, 0);
+        
+        // Avoidance 1: {rl1, rl2} - not singleton
+        a01_decision_store avoidance1;
+        avoidance1.insert(rl1);
+        avoidance1.insert(rl2);
+        as.insert(avoidance1);
+        
+        // Avoidance 2: {rl3} - SINGLETON!
+        a01_decision_store avoidance2;
+        avoidance2.insert(rl3);
+        as.insert(avoidance2);
+        
+        // Avoidance 3: {rl1, rl3} - not singleton
+        a01_decision_store avoidance3;
+        avoidance3.insert(rl1);
+        avoidance3.insert(rl3);
+        as.insert(avoidance3);
+        
+        assert(as.size() == 3);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // Test rl1 - should NOT eliminate (in non-singletons only)
+        bool result1 = detector(g1, 0);
+        assert(result1 == false);
+        
+        // Test rl2 - should NOT eliminate (in non-singleton only)
+        bool result2 = detector(g2, 0);
+        assert(result2 == false);
+        
+        // Test rl3 - SHOULD ELIMINATE (exists as singleton)
+        bool result3 = detector(g3, 0);
+        assert(result3 == true);
+    }
+    
+    // Test 6: Same goal, different indices - independent
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const resolution_lineage* rl_idx0 = lp.resolution(g1, 0);
+        const resolution_lineage* rl_idx1 = lp.resolution(g1, 1);
+        const resolution_lineage* rl_idx2 = lp.resolution(g1, 2);
+        
+        // Avoidance: only {rl_idx1} as singleton
+        a01_decision_store avoidance;
+        avoidance.insert(rl_idx1);
+        as.insert(avoidance);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // Test different indices for same goal
+        bool result0 = detector(g1, 0);  // rl_idx0
+        assert(result0 == false);
+        
+        bool result1 = detector(g1, 1);  // rl_idx1 - SHOULD ELIMINATE
+        assert(result1 == true);
+        
+        bool result2 = detector(g1, 2);  // rl_idx2
+        assert(result2 == false);
+        
+        // Stores unchanged
+        assert(as.size() == 1);
+    }
+    
+    // Test 7: Multiple goals in goal store with various avoidances
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const goal_lineage* g3 = lp.goal(nullptr, 3);
+        
+        // Create various resolutions
+        const resolution_lineage* rl1_0 = lp.resolution(g1, 0);
+        const resolution_lineage* rl1_1 = lp.resolution(g1, 1);
+        const resolution_lineage* rl2_0 = lp.resolution(g2, 0);
+        const resolution_lineage* rl3_0 = lp.resolution(g3, 0);
+        
+        // Avoidance 1: {rl1_0} - singleton
+        a01_decision_store avoidance1;
+        avoidance1.insert(rl1_0);
+        as.insert(avoidance1);
+        
+        // Avoidance 2: {rl2_0, rl3_0} - not singleton
+        a01_decision_store avoidance2;
+        avoidance2.insert(rl2_0);
+        avoidance2.insert(rl3_0);
+        as.insert(avoidance2);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // g1, idx 0 - SHOULD ELIMINATE (singleton)
+        assert(detector(g1, 0) == true);
+        
+        // g1, idx 1 - should NOT eliminate
+        assert(detector(g1, 1) == false);
+        
+        // g2, idx 0 - should NOT eliminate (in non-singleton)
+        assert(detector(g2, 0) == false);
+        
+        // g3, idx 0 - should NOT eliminate (in non-singleton)
+        assert(detector(g3, 0) == false);
+    }
+    
+    // Test 8: Multiple calls - verify idempotence
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        
+        a01_decision_store avoidance;
+        avoidance.insert(rl);
+        as.insert(avoidance);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // Call 100 times
+        for (int i = 0; i < 100; i++) {
+            bool result = detector(g1, 0);
+            assert(result == true);
+        }
+        
+        // CRITICAL: Stores unchanged after 100 calls
+        assert(as.size() == 1);
+    }
+    
+    // Test 9: Simulate progressive narrowing (CDCL workflow)
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const goal_lineage* g3 = lp.goal(nullptr, 3);
+        
+        const resolution_lineage* rl1 = lp.resolution(g1, 0);
+        const resolution_lineage* rl2 = lp.resolution(g2, 0);
+        const resolution_lineage* rl3 = lp.resolution(g3, 0);
+        
+        // Initial learned clause: {rl1, rl2, rl3} - avoid all three together
+        a01_decision_store avoidance;
+        avoidance.insert(rl1);
+        avoidance.insert(rl2);
+        avoidance.insert(rl3);
+        as.insert(avoidance);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // Initially none should be eliminated (not singletons)
+        assert(detector(g1, 0) == false);
+        assert(detector(g2, 0) == false);
+        assert(detector(g3, 0) == false);
+        
+        // Simulate making resolution rl1 (would be done by goal_resolver)
+        // Extract, modify, re-insert
+        auto it = as.find(avoidance);
+        auto node = as.extract(it);
+        node.value().erase(rl1);
+        as.insert(std::move(node));
+        
+        // Now avoidance = {rl2, rl3} - still not singleton
+        assert(detector(g1, 0) == false);  // Not in avoidance anymore
+        assert(detector(g2, 0) == false);  // Still not singleton
+        assert(detector(g3, 0) == false);  // Still not singleton
+        
+        // Simulate making resolution rl2
+        it = as.begin();
+        node = as.extract(it);
+        node.value().erase(rl2);
+        as.insert(std::move(node));
+        
+        // Now avoidance = {rl3} - SINGLETON!
+        assert(detector(g1, 0) == false);  // Not in avoidance
+        assert(detector(g2, 0) == false);  // Not in avoidance
+        assert(detector(g3, 0) == true);   // MUST ELIMINATE (singleton!)
+    }
+    
+    // Test 10: Multiple singletons for same goal with different indices
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const resolution_lineage* rl_idx0 = lp.resolution(g1, 0);
+        const resolution_lineage* rl_idx1 = lp.resolution(g1, 1);
+        const resolution_lineage* rl_idx2 = lp.resolution(g1, 2);
+        
+        // Three separate singleton avoidances
+        a01_decision_store avoidance0;
+        avoidance0.insert(rl_idx0);
+        as.insert(avoidance0);
+        
+        a01_decision_store avoidance1;
+        avoidance1.insert(rl_idx1);
+        as.insert(avoidance1);
+        
+        // Don't add avoidance for rl_idx2
+        
+        assert(as.size() == 2);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // CRITICAL: idx 0 and 1 should be eliminated, idx 2 should not
+        assert(detector(g1, 0) == true);   // In singleton
+        assert(detector(g1, 1) == true);   // In singleton
+        assert(detector(g1, 2) == false);  // Not in any avoidance
+    }
+    
+    // Test 11: Deep lineage structure - verify interning works correctly
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        // Create deep tree
+        const goal_lineage* g_root = lp.goal(nullptr, 0);
+        const resolution_lineage* rl1 = lp.resolution(g_root, 0);
+        const goal_lineage* g_child = lp.goal(rl1, 0);
+        const resolution_lineage* rl2 = lp.resolution(g_child, 5);
+        const goal_lineage* g_grandchild = lp.goal(rl2, 10);
+        
+        // Avoidance: singleton containing grandchild's potential resolution
+        const resolution_lineage* rl_grandchild = lp.resolution(g_grandchild, 3);
+        a01_decision_store avoidance;
+        avoidance.insert(rl_grandchild);
+        as.insert(avoidance);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // Test the grandchild resolution - should eliminate
+        bool result = detector(g_grandchild, 3);
+        assert(result == true);
+        
+        // Test other levels - should not eliminate
+        assert(detector(g_root, 0) == false);
+        assert(detector(g_child, 5) == false);
+    }
+    
+    // Test 12: Same avoidance checked multiple times - idempotence
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        
+        a01_decision_store avoidance;
+        avoidance.insert(rl);
+        as.insert(avoidance);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // Multiple detectors on same stores
+        a01_cdcl_elimination_detector detector2(as, lp);
+        
+        // Both should give same result
+        assert(detector(g1, 0) == true);
+        assert(detector2(g1, 0) == true);
+        
+        // Call first detector many times
+        for (int i = 0; i < 50; i++) {
+            assert(detector(g1, 0) == true);
+        }
+        
+        // Stores unchanged
+        assert(as.size() == 1);
+    }
+    
+    // Test 13: Empty avoidance in store - should not cause elimination
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        // Add empty avoidance (this could happen after all resolutions erased)
+        a01_decision_store empty_avoidance;
+        as.insert(empty_avoidance);
+        
+        assert(as.size() == 1);
+        assert(as.begin()->size() == 0);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        
+        // Should NOT eliminate (empty set != singleton)
+        bool result = detector(g1, 0);
+        assert(result == false);
+    }
+    
+    // Test 14: Multiple singletons, testing various combinations
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        // Create 5 different resolutions
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const goal_lineage* g3 = lp.goal(nullptr, 3);
+        const goal_lineage* g4 = lp.goal(nullptr, 4);
+        const goal_lineage* g5 = lp.goal(nullptr, 5);
+        
+        const resolution_lineage* rl1 = lp.resolution(g1, 0);
+        const resolution_lineage* rl2 = lp.resolution(g2, 0);
+        const resolution_lineage* rl3 = lp.resolution(g3, 0);
+        const resolution_lineage* rl4 = lp.resolution(g4, 0);
+        const resolution_lineage* rl5 = lp.resolution(g5, 0);
+        
+        // Add singletons for rl1 and rl3 only
+        a01_decision_store av1;
+        av1.insert(rl1);
+        as.insert(av1);
+        
+        a01_decision_store av3;
+        av3.insert(rl3);
+        as.insert(av3);
+        
+        // Add non-singleton for rl2, rl4, rl5
+        a01_decision_store av_multi;
+        av_multi.insert(rl2);
+        av_multi.insert(rl4);
+        av_multi.insert(rl5);
+        as.insert(av_multi);
+        
+        assert(as.size() == 3);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // CRITICAL: Only rl1 and rl3 should be eliminated
+        assert(detector(g1, 0) == true);   // In singleton
+        assert(detector(g2, 0) == false);  // In non-singleton
+        assert(detector(g3, 0) == true);   // In singleton
+        assert(detector(g4, 0) == false);  // In non-singleton
+        assert(detector(g5, 0) == false);  // In non-singleton
+    }
+    
+    // Test 15: Verify lineage_pool interning - same goal/index returns same rl
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        
+        // Pre-construct rl
+        const resolution_lineage* rl_first = lp.resolution(g1, 0);
+        
+        // Add to avoidance
+        a01_decision_store avoidance;
+        avoidance.insert(rl_first);
+        as.insert(avoidance);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // CRITICAL: detector internally calls lp.resolution(g1, 0) again
+        // Due to interning, it should get the SAME pointer
+        bool result = detector(g1, 0);
+        
+        // Should eliminate (same interned instance)
+        assert(result == true);
+        
+        // Verify it's actually the same instance
+        const resolution_lineage* rl_second = lp.resolution(g1, 0);
+        assert(rl_first == rl_second); // Same pointer (interned)
+    }
+    
+    // Test 16: Complex avoidance patterns - multiple sizes
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const goal_lineage* g3 = lp.goal(nullptr, 3);
+        const goal_lineage* g4 = lp.goal(nullptr, 4);
+        
+        const resolution_lineage* rl1 = lp.resolution(g1, 0);
+        const resolution_lineage* rl2 = lp.resolution(g2, 0);
+        const resolution_lineage* rl3 = lp.resolution(g3, 0);
+        const resolution_lineage* rl4 = lp.resolution(g4, 0);
+        
+        // Avoidance size 0: empty
+        a01_decision_store av0;
+        as.insert(av0);
+        
+        // Avoidance size 1: {rl1}
+        a01_decision_store av1;
+        av1.insert(rl1);
+        as.insert(av1);
+        
+        // Avoidance size 2: {rl2, rl3}
+        a01_decision_store av2;
+        av2.insert(rl2);
+        av2.insert(rl3);
+        as.insert(av2);
+        
+        // Avoidance size 3: {rl1, rl2, rl4}
+        a01_decision_store av3;
+        av3.insert(rl1);
+        av3.insert(rl2);
+        av3.insert(rl4);
+        as.insert(av3);
+        
+        assert(as.size() == 4);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // CRITICAL: Only rl1 should be eliminated (exists as singleton)
+        assert(detector(g1, 0) == true);   // In singleton av1
+        assert(detector(g2, 0) == false);  // In non-singletons only
+        assert(detector(g3, 0) == false);  // In non-singleton only
+        assert(detector(g4, 0) == false);  // In non-singleton only
+    }
+    
+    // Test 17: Stress test - many avoidances, one singleton
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        // Create 50 resolutions
+        std::vector<const resolution_lineage*> resolutions;
+        for (int i = 0; i < 50; i++) {
+            const goal_lineage* g = lp.goal(nullptr, i);
+            const resolution_lineage* rl = lp.resolution(g, 0);
+            resolutions.push_back(rl);
+        }
+        
+        // Add 25 non-singleton avoidances
+        for (int i = 0; i < 25; i++) {
+            a01_decision_store avoidance;
+            avoidance.insert(resolutions[i * 2]);
+            avoidance.insert(resolutions[i * 2 + 1]);
+            as.insert(avoidance);
+        }
+        
+        // Add ONE singleton for rl at index 25
+        a01_decision_store singleton;
+        singleton.insert(resolutions[25]);
+        as.insert(singleton);
+        
+        assert(as.size() == 26);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // CRITICAL: Only goal 25, idx 0 should be eliminated
+        for (int i = 0; i < 50; i++) {
+            const goal_lineage* g = lp.goal(nullptr, i);
+            bool result = detector(g, 0);
+            
+            if (i == 25) {
+                assert(result == true);  // Singleton
+            } else {
+                assert(result == false); // Not in singleton
+            }
+        }
+    }
+    
+    // Test 18: No goals in lineage pool - detector should still work
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        // Create goal and resolution without adding to any stores
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        
+        a01_decision_store avoidance;
+        avoidance.insert(rl);
+        as.insert(avoidance);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // Should eliminate (rl exists as singleton)
+        bool result = detector(g1, 0);
+        assert(result == true);
+    }
+    
+    // Test 19: Different goal same index vs same goal different index
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        
+        const resolution_lineage* rl_g1_idx5 = lp.resolution(g1, 5);
+        
+        // Singleton for g1,idx5
+        a01_decision_store avoidance;
+        avoidance.insert(rl_g1_idx5);
+        as.insert(avoidance);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // CRITICAL: Only g1,idx5 should eliminate
+        assert(detector(g1, 5) == true);   // Exact match
+        assert(detector(g1, 0) == false);  // Same goal, different index
+        assert(detector(g2, 5) == false);  // Different goal, same index
+        assert(detector(g2, 0) == false);  // Different goal, different index
+    }
+    
+    // Test 20: Multiple singleton avoidances for same resolution (duplicates)
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const resolution_lineage* rl = lp.resolution(g1, 0);
+        
+        // Add same singleton multiple times (set will deduplicate)
+        a01_decision_store avoidance1;
+        avoidance1.insert(rl);
+        as.insert(avoidance1);
+        
+        a01_decision_store avoidance2;
+        avoidance2.insert(rl);
+        as.insert(avoidance2);  // Duplicate - will be ignored by set
+        
+        // std::set deduplicates
+        assert(as.size() == 1);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // Should still eliminate
+        bool result = detector(g1, 0);
+        assert(result == true);
+    }
+    
+    // Test 21: Verify count() check (as.count({rl}) > 0)
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const resolution_lineage* rl1 = lp.resolution(g1, 0);
+        const resolution_lineage* rl2 = lp.resolution(g2, 0);
+        
+        // Multiple avoidances with different sizes containing rl1
+        a01_decision_store av_single;
+        av_single.insert(rl1);
+        as.insert(av_single);
+        
+        a01_decision_store av_double;
+        av_double.insert(rl1);
+        av_double.insert(rl2);
+        as.insert(av_double);
+        
+        assert(as.size() == 2);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // CRITICAL: rl1 should eliminate because {rl1} exists as singleton
+        // Even though rl1 also appears in a non-singleton
+        bool result = detector(g1, 0);
+        assert(result == true);
+    }
+    
+    // Test 22: Simulate complete CDCL scenario
+    {
+        lineage_pool lp;
+        a01_avoidance_store as;
+        
+        // Learned conflict clause: "Don't resolve p with rule 0, q with rule 1, and r with rule 2 together"
+        const goal_lineage* g_p = lp.goal(nullptr, 1);
+        const goal_lineage* g_q = lp.goal(nullptr, 2);
+        const goal_lineage* g_r = lp.goal(nullptr, 3);
+        
+        const resolution_lineage* rl_p = lp.resolution(g_p, 0);
+        const resolution_lineage* rl_q = lp.resolution(g_q, 1);
+        const resolution_lineage* rl_r = lp.resolution(g_r, 2);
+        
+        // Initial learned clause
+        a01_decision_store learned_clause;
+        learned_clause.insert(rl_p);
+        learned_clause.insert(rl_q);
+        learned_clause.insert(rl_r);
+        as.insert(learned_clause);
+        
+        a01_cdcl_elimination_detector detector(as, lp);
+        
+        // Phase 1: No eliminations yet (all in 3-way avoidance)
+        assert(detector(g_p, 0) == false);
+        assert(detector(g_q, 1) == false);
+        assert(detector(g_r, 2) == false);
+        
+        // Phase 2: Make resolution rl_p (simulated by extraction/modification)
+        auto it = as.find(learned_clause);
+        auto node = as.extract(it);
+        node.value().erase(rl_p);
+        as.insert(std::move(node));
+        
+        // Now clause = {rl_q, rl_r}
+        assert(detector(g_p, 0) == false);  // Not in avoidance anymore
+        assert(detector(g_q, 1) == false);  // Still size 2
+        assert(detector(g_r, 2) == false);  // Still size 2
+        
+        // Phase 3: Make resolution rl_q
+        it = as.begin();
+        node = as.extract(it);
+        node.value().erase(rl_q);
+        as.insert(std::move(node));
+        
+        // Now clause = {rl_r} - SINGLETON!
+        assert(detector(g_p, 0) == false);  // Not in avoidance
+        assert(detector(g_q, 1) == false);  // Not in avoidance
+        assert(detector(g_r, 2) == true);   // MUST ELIMINATE!
+        
+        // This prevents taking rl_r, which would complete the conflict set
+    }
+}
+
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
 
@@ -17604,6 +18382,8 @@ void unit_test_main() {
     TEST(test_solution_detector);
     TEST(test_conflict_detector_constructor);
     TEST(test_conflict_detector);
+    TEST(test_a01_cdcl_elimination_detector_constructor);
+    TEST(test_a01_cdcl_elimination_detector);
 }
 
 int main() {
