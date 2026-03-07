@@ -14,7 +14,6 @@ bool a01_sim_one(
     a01_goal_store& gs,
     a01_candidate_store& cs,
     a01_decision_store& ds,
-    a01_resolution_store& rs,
     conflict_detector& cd,
     solution_detector& sd,
     a01_head_elimination_detector& he,
@@ -225,7 +224,7 @@ void a01() {
 
             t.push();
 
-            if (a01_sim_one(lp, gs_working_copy, cs_working_copy, ds_working_copy, rs_working_copy, cd, sd, he, ce, up, gr, dec)) {
+            if (a01_sim_one(lp, gs_working_copy, cs_working_copy, ds_working_copy, cd, sd, he, ce, up, gr, dec)) {
                 throw std::runtime_error("Solution found");
             }
 
