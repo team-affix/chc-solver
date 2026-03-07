@@ -11,6 +11,7 @@
 #include "../hpp/a01_head_elimination_detector.hpp"
 #include "../hpp/unit_propagation_detector.hpp"
 #include "../hpp/solution_detector.hpp"
+#include "../hpp/conflict_detector.hpp"
 #include "test_utils.hpp"
 
 void test_trail_constructor() {
@@ -16781,6 +16782,783 @@ void test_solution_detector() {
     }
 }
 
+void test_conflict_detector_constructor() {
+    // Test 1: Basic construction with empty stores
+    {
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        conflict_detector detector(gs, cs);
+        
+        // Verify references stored
+        assert(&detector.gs == &gs);
+        assert(&detector.cs == &cs);
+    }
+    
+    // Test 2: Construction with non-empty stores
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Pre-populate stores
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        gs.insert({g1, ep.atom("p")});
+        gs.insert({g2, ep.atom("q")});
+        
+        cs.insert({g1, 0});
+        cs.insert({g2, 0});
+        cs.insert({g2, 1});
+        
+        assert(gs.size() == 2);
+        assert(cs.size() == 3);
+        
+        conflict_detector detector(gs, cs);
+        
+        // Verify references and stores unchanged
+        assert(&detector.gs == &gs);
+        assert(&detector.cs == &cs);
+        assert(detector.gs.size() == 2);
+        assert(detector.cs.size() == 3);
+    }
+}
+
+void test_conflict_detector() {
+    // Test 1: No goals in store - no conflict (returns false)
+    {
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        assert(gs.empty());
+        
+        conflict_detector detector(gs, cs);
+        
+        bool result = detector();
+        
+        // CRITICAL: No goals = no conflict
+        assert(result == false);
+        
+        // Stores unchanged
+        assert(gs.empty());
+        assert(cs.empty());
+    }
+    
+    // Test 2: One goal with 1 candidate - no conflict
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        gs.insert({g1, ep.atom("p")});
+        cs.insert({g1, 0});
+        
+        assert(gs.size() == 1);
+        assert(cs.count(g1) == 1);
+        
+        conflict_detector detector(gs, cs);
+        
+        bool result = detector();
+        
+        // Should return false (goal has a candidate)
+        assert(result == false);
+        
+        // Stores unchanged
+        assert(gs.size() == 1);
+        assert(cs.size() == 1);
+    }
+    
+    // Test 3: One goal with 0 candidates - CONFLICT (returns true)
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        gs.insert({g1, ep.atom("p")});
+        // Don't add any candidates for g1
+        
+        assert(gs.size() == 1);
+        assert(cs.count(g1) == 0);
+        
+        conflict_detector detector(gs, cs);
+        
+        bool result = detector();
+        
+        // CRITICAL: Should return true (CONFLICT - no candidates for g1)
+        assert(result == true);
+        
+        // Stores unchanged
+        assert(gs.size() == 1);
+        assert(cs.count(g1) == 0);
+    }
+    
+    // Test 4: Multiple goals, all have candidates - no conflict
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const goal_lineage* g3 = lp.goal(nullptr, 3);
+        
+        gs.insert({g1, ep.atom("p")});
+        gs.insert({g2, ep.atom("q")});
+        gs.insert({g3, ep.atom("r")});
+        
+        cs.insert({g1, 0});
+        cs.insert({g2, 0});
+        cs.insert({g2, 1});
+        cs.insert({g3, 0});
+        cs.insert({g3, 1});
+        cs.insert({g3, 2});
+        
+        conflict_detector detector(gs, cs);
+        
+        bool result = detector();
+        
+        // Should return false (all goals have candidates)
+        assert(result == false);
+        
+        // Verify counts
+        assert(cs.count(g1) == 1);
+        assert(cs.count(g2) == 2);
+        assert(cs.count(g3) == 3);
+    }
+    
+    // Test 5: Multiple goals, one has 0 candidates - CONFLICT
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const goal_lineage* g3 = lp.goal(nullptr, 3);
+        
+        gs.insert({g1, ep.atom("p")});
+        gs.insert({g2, ep.atom("q")});
+        gs.insert({g3, ep.atom("r")});
+        
+        // g1 and g3 have candidates, g2 has NONE
+        cs.insert({g1, 0});
+        cs.insert({g1, 1});
+        cs.insert({g3, 0});
+        // g2 has no candidates
+        
+        assert(cs.count(g2) == 0);
+        
+        conflict_detector detector(gs, cs);
+        
+        bool result = detector();
+        
+        // CRITICAL: Should return true (CONFLICT - g2 has no candidates)
+        assert(result == true);
+        
+        // Stores unchanged
+        assert(gs.size() == 3);
+        assert(cs.count(g1) == 2);
+        assert(cs.count(g2) == 0);
+        assert(cs.count(g3) == 1);
+    }
+    
+    // Test 6: Multiple goals with 0 candidates - still just one conflict
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const goal_lineage* g3 = lp.goal(nullptr, 3);
+        
+        gs.insert({g1, ep.atom("p")});
+        gs.insert({g2, ep.atom("q")});
+        gs.insert({g3, ep.atom("r")});
+        
+        // All three have NO candidates
+        assert(cs.count(g1) == 0);
+        assert(cs.count(g2) == 0);
+        assert(cs.count(g3) == 0);
+        
+        conflict_detector detector(gs, cs);
+        
+        bool result = detector();
+        
+        // CRITICAL: Should return true (multiple conflicts)
+        assert(result == true);
+    }
+    
+    // Test 7: Simulate head elimination creating conflict
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        gs.insert({g1, ep.atom("p")});
+        
+        // Initially has 3 candidates
+        cs.insert({g1, 0});
+        cs.insert({g1, 1});
+        cs.insert({g1, 2});
+        
+        conflict_detector detector(gs, cs);
+        
+        // Initially no conflict
+        assert(detector() == false);
+        assert(cs.count(g1) == 3);
+        
+        // Simulate head elimination: remove candidates one by one
+        auto range = cs.equal_range(g1);
+        auto it = range.first;
+        cs.erase(it);
+        
+        // Still 2 candidates - no conflict
+        assert(detector() == false);
+        assert(cs.count(g1) == 2);
+        
+        // Remove another
+        range = cs.equal_range(g1);
+        it = range.first;
+        cs.erase(it);
+        
+        // Still 1 candidate - no conflict
+        assert(detector() == false);
+        assert(cs.count(g1) == 1);
+        
+        // Remove last candidate
+        range = cs.equal_range(g1);
+        it = range.first;
+        cs.erase(it);
+        
+        // NOW conflict!
+        assert(cs.count(g1) == 0);
+        assert(detector() == true);
+    }
+    
+    // Test 8: Multiple calls - verify idempotence with conflict
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        gs.insert({g1, ep.atom("p")});
+        // No candidates
+        
+        conflict_detector detector(gs, cs);
+        
+        // Call 100 times - should always return true
+        for (int i = 0; i < 100; i++) {
+            bool result = detector();
+            assert(result == true);
+        }
+        
+        // CRITICAL: Stores unchanged
+        assert(gs.size() == 1);
+        assert(cs.count(g1) == 0);
+    }
+    
+    // Test 9: Multiple calls - verify idempotence without conflict
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        gs.insert({g1, ep.atom("p")});
+        cs.insert({g1, 0});
+        
+        conflict_detector detector(gs, cs);
+        
+        // Call 100 times - should always return false
+        for (int i = 0; i < 100; i++) {
+            bool result = detector();
+            assert(result == false);
+        }
+        
+        // CRITICAL: Stores unchanged
+        assert(gs.size() == 1);
+        assert(cs.count(g1) == 1);
+    }
+    
+    // Test 10: Mixed scenario - some goals with candidates, some without
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const goal_lineage* g3 = lp.goal(nullptr, 3);
+        const goal_lineage* g4 = lp.goal(nullptr, 4);
+        
+        gs.insert({g1, ep.atom("p")});
+        gs.insert({g2, ep.atom("q")});
+        gs.insert({g3, ep.atom("r")});
+        gs.insert({g4, ep.atom("s")});
+        
+        // g1: 5 candidates
+        for (int i = 0; i < 5; i++) cs.insert({g1, (size_t)i});
+        
+        // g2: 0 candidates (CONFLICT!)
+        
+        // g3: 1 candidate
+        cs.insert({g3, 0});
+        
+        // g4: 3 candidates
+        cs.insert({g4, 0});
+        cs.insert({g4, 1});
+        cs.insert({g4, 2});
+        
+        conflict_detector detector(gs, cs);
+        
+        bool result = detector();
+        
+        // CRITICAL: Should return true (g2 has no candidates)
+        assert(result == true);
+        
+        // Verify specific counts
+        assert(cs.count(g1) == 5);
+        assert(cs.count(g2) == 0);  // The conflict
+        assert(cs.count(g3) == 1);
+        assert(cs.count(g4) == 3);
+    }
+    
+    // Test 11: Transition from no conflict to conflict
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        
+        gs.insert({g1, ep.atom("p")});
+        gs.insert({g2, ep.atom("q")});
+        
+        cs.insert({g1, 0});
+        cs.insert({g2, 0});
+        cs.insert({g2, 1});
+        
+        conflict_detector detector(gs, cs);
+        
+        // Initially no conflict
+        assert(detector() == false);
+        
+        // Remove g1's only candidate
+        cs.erase(cs.find(g1));
+        
+        // NOW conflict!
+        assert(cs.count(g1) == 0);
+        assert(detector() == true);
+    }
+    
+    // Test 12: Transition from conflict to no conflict
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        gs.insert({g1, ep.atom("p")});
+        // No candidates initially
+        
+        conflict_detector detector(gs, cs);
+        
+        // Initially conflict
+        assert(detector() == true);
+        
+        // Add a candidate
+        cs.insert({g1, 0});
+        
+        // NOW no conflict!
+        assert(cs.count(g1) == 1);
+        assert(detector() == false);
+    }
+    
+    // Test 13: Goals at different lineage depths - all positions matter
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Create lineage tree
+        const goal_lineage* g_root = lp.goal(nullptr, 0);
+        const resolution_lineage* rl1 = lp.resolution(g_root, 0);
+        const goal_lineage* g_child = lp.goal(rl1, 0);
+        const resolution_lineage* rl2 = lp.resolution(g_child, 0);
+        const goal_lineage* g_grandchild = lp.goal(rl2, 0);
+        
+        gs.insert({g_root, ep.atom("p")});
+        gs.insert({g_child, ep.atom("q")});
+        gs.insert({g_grandchild, ep.atom("r")});
+        
+        // Root: 1 candidate
+        cs.insert({g_root, 0});
+        
+        // Child: 0 candidates (CONFLICT!)
+        // (no candidates for g_child)
+        
+        // Grandchild: 2 candidates
+        cs.insert({g_grandchild, 0});
+        cs.insert({g_grandchild, 1});
+        
+        conflict_detector detector(gs, cs);
+        
+        bool result = detector();
+        
+        // CRITICAL: Should detect conflict even though it's at level 1
+        assert(result == true);
+        assert(cs.count(g_child) == 0);
+    }
+    
+    // Test 14: Many goals, all with candidates - no conflict
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Add 20 goals, each with at least 1 candidate
+        for (int i = 0; i < 20; i++) {
+            const goal_lineage* g = lp.goal(nullptr, i);
+            gs.insert({g, ep.atom("p" + std::to_string(i))});
+            
+            // Each goal has (i+1) candidates
+            for (int j = 0; j <= i; j++) {
+                cs.insert({g, (size_t)j});
+            }
+        }
+        
+        conflict_detector detector(gs, cs);
+        
+        bool result = detector();
+        
+        // Should return false (all have candidates)
+        assert(result == false);
+        
+        // Verify all have candidates
+        for (int i = 0; i < 20; i++) {
+            const goal_lineage* g = lp.goal(nullptr, i);
+            assert(cs.count(g) == i + 1);
+        }
+    }
+    
+    // Test 15: Many goals, one in middle has no candidates - conflict
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Add 10 goals
+        for (int i = 0; i < 10; i++) {
+            const goal_lineage* g = lp.goal(nullptr, i);
+            gs.insert({g, ep.atom("p" + std::to_string(i))});
+            
+            // All except g5 get candidates
+            if (i != 5) {
+                cs.insert({g, 0});
+            }
+        }
+        
+        // g5 specifically has no candidates
+        const goal_lineage* g5 = lp.goal(nullptr, 5);
+        assert(cs.count(g5) == 0);
+        
+        conflict_detector detector(gs, cs);
+        
+        bool result = detector();
+        
+        // CRITICAL: Should detect conflict (g5 has no candidates)
+        assert(result == true);
+    }
+    
+    // Test 16: Resolve goals to eliminate conflict
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        
+        gs.insert({g1, ep.atom("p")});
+        gs.insert({g2, ep.atom("q")});
+        
+        cs.insert({g1, 0});
+        // g2 has no candidates - conflict
+        
+        conflict_detector detector(gs, cs);
+        
+        // Conflict detected
+        assert(detector() == true);
+        
+        // "Resolve" conflicting goal by removing it from goal store
+        // (simulating backtrack/restart)
+        gs.erase(g2);
+        
+        // Now no conflict (conflicting goal removed)
+        assert(detector() == false);
+        assert(gs.size() == 1);
+    }
+    
+    // Test 17: Boundary - exactly 0 candidates vs exactly 1 candidate
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        const goal_lineage* g_zero = lp.goal(nullptr, 1);
+        const goal_lineage* g_one = lp.goal(nullptr, 2);
+        
+        gs.insert({g_zero, ep.atom("p")});
+        gs.insert({g_one, ep.atom("q")});
+        
+        // g_zero: 0 candidates
+        // g_one: 1 candidate
+        cs.insert({g_one, 0});
+        
+        conflict_detector detector(gs, cs);
+        
+        // CRITICAL: Conflict because g_zero has 0 (boundary)
+        assert(detector() == true);
+        assert(cs.count(g_zero) == 0);
+        assert(cs.count(g_one) == 1);
+        
+        // Add candidate to g_zero
+        cs.insert({g_zero, 0});
+        
+        // Now no conflict (both have 1)
+        assert(detector() == false);
+    }
+    
+    // Test 18: Empty candidate store with goals - all goals conflict
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Add goals but no candidates
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const goal_lineage* g3 = lp.goal(nullptr, 3);
+        
+        gs.insert({g1, ep.atom("p")});
+        gs.insert({g2, ep.atom("q")});
+        gs.insert({g3, ep.atom("r")});
+        
+        assert(gs.size() == 3);
+        assert(cs.empty());
+        
+        conflict_detector detector(gs, cs);
+        
+        bool result = detector();
+        
+        // CRITICAL: Conflict (all goals have 0 candidates)
+        assert(result == true);
+    }
+    
+    // Test 19: Verify std::any_of short-circuits (first conflict found)
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Add 10 goals - first one has no candidates
+        for (int i = 0; i < 10; i++) {
+            const goal_lineage* g = lp.goal(nullptr, i);
+            gs.insert({g, ep.atom("p" + std::to_string(i))});
+            
+            if (i > 0) {
+                cs.insert({g, 0}); // All except first have candidates
+            }
+        }
+        
+        const goal_lineage* g0 = lp.goal(nullptr, 0);
+        assert(cs.count(g0) == 0);
+        
+        conflict_detector detector(gs, cs);
+        
+        bool result = detector();
+        
+        // Should detect conflict (first goal has none)
+        assert(result == true);
+    }
+    
+    // Test 20: Multiple detectors on same stores
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        gs.insert({g1, ep.atom("p")});
+        // No candidates - conflict
+        
+        conflict_detector detector1(gs, cs);
+        conflict_detector detector2(gs, cs);
+        
+        // Both should return same result
+        assert(detector1() == true);
+        assert(detector2() == true);
+        
+        // Stores unchanged
+        assert(gs.size() == 1);
+        assert(cs.count(g1) == 0);
+    }
+    
+    // Test 21: Typical solver workflow - no conflict initially, then conflict after eliminations
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Three goals with multiple candidates each
+        const goal_lineage* g1 = lp.goal(nullptr, 1);
+        const goal_lineage* g2 = lp.goal(nullptr, 2);
+        const goal_lineage* g3 = lp.goal(nullptr, 3);
+        
+        gs.insert({g1, ep.atom("p")});
+        gs.insert({g2, ep.atom("q")});
+        gs.insert({g3, ep.atom("r")});
+        
+        cs.insert({g1, 0});
+        cs.insert({g1, 1});
+        
+        cs.insert({g2, 0});
+        cs.insert({g2, 1});
+        cs.insert({g2, 2});
+        
+        cs.insert({g3, 0});
+        
+        conflict_detector detector(gs, cs);
+        
+        // Initially no conflict
+        assert(detector() == false);
+        
+        // Simulate eliminations on g1
+        cs.erase(cs.find(g1));
+        cs.erase(cs.find(g1));
+        
+        // g1 now has 0 candidates - CONFLICT!
+        assert(cs.count(g1) == 0);
+        assert(detector() == true);
+        
+        // "Backtrack" by removing conflicting goal
+        gs.erase(g1);
+        
+        // No conflict now (conflicting goal gone)
+        assert(detector() == false);
+        assert(gs.size() == 2);
+    }
+    
+    // Test 22: Stress test - 100 goals with varying candidate counts
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        lineage_pool lp;
+        a01_goal_store gs;
+        a01_candidate_store cs;
+        
+        // Add 100 goals
+        for (int i = 0; i < 100; i++) {
+            const goal_lineage* g = lp.goal(nullptr, i);
+            gs.insert({g, ep.atom("p" + std::to_string(i))});
+            
+            // Goals get (i % 5) candidates: 0, 1, 2, 3, 4, 0, 1, ...
+            int num_candidates = i % 5;
+            for (int j = 0; j < num_candidates; j++) {
+                cs.insert({g, (size_t)j});
+            }
+        }
+        
+        conflict_detector detector(gs, cs);
+        
+        bool result = detector();
+        
+        // CRITICAL: Should detect conflict (goals with i%5==0 have no candidates)
+        assert(result == true);
+        
+        // Verify at least one goal has 0 candidates
+        bool found_zero = false;
+        for (int i = 0; i < 100; i++) {
+            const goal_lineage* g = lp.goal(nullptr, i);
+            if (cs.count(g) == 0) {
+                found_zero = true;
+                break;
+            }
+        }
+        assert(found_zero == true);
+    }
+}
+
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
 
@@ -16824,6 +17602,8 @@ void unit_test_main() {
     TEST(test_unit_propagation_detector);
     TEST(test_solution_detector_constructor);
     TEST(test_solution_detector);
+    TEST(test_conflict_detector_constructor);
+    TEST(test_conflict_detector);
 }
 
 int main() {
