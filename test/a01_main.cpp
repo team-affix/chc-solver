@@ -204,6 +204,27 @@ example_problem init_ep_8(expr_pool& ep, lineage_pool& lp) {
     return p;
 }
 
+example_problem init_ep_9(expr_pool& ep, lineage_pool& lp) {
+    // a :- b.
+    // a :- c.
+    // a :- d.
+    // a :- e.
+    // a :- f.
+    // no b, c, d, e, f candidates (refuted)
+    example_problem p;
+    // edit database
+    p.db.push_back(rule{ep.atom("a"), {ep.atom("b")}});
+    p.db.push_back(rule{ep.atom("a"), {ep.atom("c")}});
+    p.db.push_back(rule{ep.atom("a"), {ep.atom("d")}});
+    p.db.push_back(rule{ep.atom("a"), {ep.atom("e")}});
+    p.db.push_back(rule{ep.atom("a"), {ep.atom("f")}});
+
+    // edit goal store
+    p.gs.insert({lp.goal(nullptr, 0), ep.atom("a")});
+
+    return p;
+}
+
 void a01() {
     trail t;
     bind_map bm(t);
@@ -238,7 +259,7 @@ void a01() {
 
     // CHOOSE EXAMPLE PROBLEM
     {
-        example_problem epm = init_ep_8(ep, lp);
+        example_problem epm = init_ep_9(ep, lp);
         // extract db
         db = epm.db;
         // extract gs
@@ -258,8 +279,7 @@ void a01() {
         
         for (size_t i = 0; i < ITERATIONS_BEFORE_CDCL; ++i) {
 
-            std::random_device rd;
-            std::mt19937 rng(rd());
+            std::mt19937 rng(10);
 
             monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, EXPLORATION_CONSTANT, rng);
 
