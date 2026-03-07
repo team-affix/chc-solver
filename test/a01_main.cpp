@@ -49,147 +49,141 @@ bool a01_sim_one(
     
 }
 
-void init_ep_0(expr_pool& ep, lineage_pool& lp, a01_database& db, a01_goal_store& gs, a01_candidate_store& cs) {
+struct example_problem {
+    a01_database db;
+    a01_goal_store gs;
+};
+
+example_problem init_ep_0(expr_pool& ep, lineage_pool& lp) {
     // a.
     // :- a.
-    
+    example_problem p;
     // edit database
-    db.push_back(rule{ep.atom("a"), {}});
-
-    // construct goal adder
-    a01_goal_adder ga(gs, cs, db);
+    p.db.push_back(rule{ep.atom("a"), {}});
 
     // edit goal store
-    ga(lp.goal(nullptr, 0), ep.atom("a"));
+    p.gs.insert({lp.goal(nullptr, 0), ep.atom("a")});
+
+    return p;
 }
 
-void init_ep_1(expr_pool& ep, lineage_pool& lp, a01_database& db, a01_goal_store& gs, a01_candidate_store& cs) {
+example_problem init_ep_1(expr_pool& ep, lineage_pool& lp) {
     // a.
     // :- b.
-    
+    example_problem p;
     // edit database
-    db.push_back(rule{ep.atom("a"), {}});
-
-    // construct goal adder
-    a01_goal_adder ga(gs, cs, db);
+    p.db.push_back(rule{ep.atom("a"), {}});
 
     // edit goal store
-    ga(lp.goal(nullptr, 0), ep.atom("b"));
+    p.gs.insert({lp.goal(nullptr, 0), ep.atom("b")});
+
+    return p;
 }
 
-void init_ep_2(expr_pool& ep, lineage_pool& lp, a01_database& db, a01_goal_store& gs, a01_candidate_store& cs) {
+example_problem init_ep_2(expr_pool& ep, lineage_pool& lp) {
     // a :- b.
     // %no b candidates (refuted)
     // :- a.
-    
-    // edit database
-    db.push_back(rule{ep.atom("a"), {ep.atom("b")}});
+    example_problem p;
 
-    // construct goal adder
-    a01_goal_adder ga(gs, cs, db);
+    // edit database
+    p.db.push_back(rule{ep.atom("a"), {ep.atom("b")}});
 
     // edit goal store
-    ga(lp.goal(nullptr, 0), ep.atom("a"));
+    p.gs.insert({lp.goal(nullptr, 0), ep.atom("a")});
+
+    return p;
 }
 
-void init_ep_3(expr_pool& ep, lineage_pool& lp, a01_database& db, a01_goal_store& gs, a01_candidate_store& cs) {
+example_problem init_ep_3(expr_pool& ep, lineage_pool& lp) {
     // a :- b.
     // b.
     // :- a.
-    
-    // edit database
-    db.push_back(rule{ep.atom("a"), {ep.atom("b")}});
-    db.push_back(rule{ep.atom("b"), {}});
+    example_problem p;
 
-    // construct goal adder
-    a01_goal_adder ga(gs, cs, db);
+    // edit database
+    p.db.push_back(rule{ep.atom("a"), {ep.atom("b")}});
+    p.db.push_back(rule{ep.atom("b"), {}});
 
     // edit goal store
-    ga(lp.goal(nullptr, 0), ep.atom("a"));
+    p.gs.insert({lp.goal(nullptr, 0), ep.atom("a")});
+
+    return p;
 }
 
-void init_ep_4(expr_pool& ep, lineage_pool& lp, a01_database& db, a01_goal_store& gs, a01_candidate_store& cs) {
+example_problem init_ep_4(expr_pool& ep, lineage_pool& lp) {
     // a :- b, c.
     // b.
     // :- a.
     // %no c candidates (refuted)
-    
+    example_problem p;
     // edit database
-    db.push_back(rule{ep.atom("a"), {ep.atom("b"), ep.atom("c")}});
-    db.push_back(rule{ep.atom("b"), {}});
-
-    // construct goal adder
-    a01_goal_adder ga(gs, cs, db);
+    p.db.push_back(rule{ep.atom("a"), {ep.atom("b"), ep.atom("c")}});
+    p.db.push_back(rule{ep.atom("b"), {}});
 
     // edit goal store
-    ga(lp.goal(nullptr, 0), ep.atom("a"));
+    p.gs.insert({lp.goal(nullptr, 0), ep.atom("a")});
+
+    return p;
 }
 
-void init_ep_5(expr_pool& ep, lineage_pool& lp, a01_database& db, a01_goal_store& gs, a01_candidate_store& cs) {
+example_problem init_ep_5(expr_pool& ep, lineage_pool& lp) {
     // a :- b, c.
     // b.
     // c.
     // :- a.
-    
+    example_problem p;
     // edit database
-    db.push_back(rule{ep.atom("a"), {ep.atom("b"), ep.atom("c")}});
-    db.push_back(rule{ep.atom("b"), {}});
-    db.push_back(rule{ep.atom("c"), {}});
-
-    // construct goal adder
-    a01_goal_adder ga(gs, cs, db);
+    p.db.push_back(rule{ep.atom("a"), {ep.atom("b"), ep.atom("c")}});
+    p.db.push_back(rule{ep.atom("b"), {}});
+    p.db.push_back(rule{ep.atom("c"), {}});
 
     // edit goal store
-    ga(lp.goal(nullptr, 0), ep.atom("a"));
+    p.gs.insert({lp.goal(nullptr, 0), ep.atom("a")});
+
+    return p;
 }
 
-void init_ep_6(expr_pool& ep, lineage_pool& lp, a01_database& db, a01_goal_store& gs, a01_candidate_store& cs) {
+example_problem init_ep_6(expr_pool& ep, lineage_pool& lp) {
     // a :- b, c.
     // a :- d.
     // b.
     // %no d or c candidates (refuted inductively)
     // :- a.
-    
+    example_problem p;
     // edit database
-    db.push_back(rule{ep.atom("a"), {ep.atom("b"), ep.atom("c")}});
-    db.push_back(rule{ep.atom("a"), {ep.atom("d")}});
-    db.push_back(rule{ep.atom("b"), {}});
-
-    // construct goal adder
-    a01_goal_adder ga(gs, cs, db);
+    p.db.push_back(rule{ep.atom("a"), {ep.atom("b"), ep.atom("c")}});
+    p.db.push_back(rule{ep.atom("a"), {ep.atom("d")}});
+    p.db.push_back(rule{ep.atom("b"), {}});
 
     // edit goal store
-    ga(lp.goal(nullptr, 0), ep.atom("a"));
+    p.gs.insert({lp.goal(nullptr, 0), ep.atom("a")});
+
+    return p;
 }
 
-void init_ep_7(expr_pool& ep, lineage_pool& lp, a01_database& db, a01_goal_store& gs, a01_candidate_store& cs) {
+example_problem init_ep_7(expr_pool& ep, lineage_pool& lp) {
     // a :- b, c.
     // a :- d.
     // b.
     // c.
     // d.
     // :- a.
-    
+    example_problem p;
     // edit database
-    db.push_back(rule{ep.atom("a"), {ep.atom("b"), ep.atom("c")}});
-    db.push_back(rule{ep.atom("a"), {ep.atom("d")}});
-    db.push_back(rule{ep.atom("b"), {}});
-    db.push_back(rule{ep.atom("c"), {}});
-    db.push_back(rule{ep.atom("d"), {}});
-
-    // construct goal adder
-    a01_goal_adder ga(gs, cs, db);
+    p.db.push_back(rule{ep.atom("a"), {ep.atom("b"), ep.atom("c")}});
+    p.db.push_back(rule{ep.atom("a"), {ep.atom("d")}});
+    p.db.push_back(rule{ep.atom("b"), {}});
+    p.db.push_back(rule{ep.atom("c"), {}});
+    p.db.push_back(rule{ep.atom("d"), {}});
 
     // edit goal store
-    ga(lp.goal(nullptr, 0), ep.atom("a"));
+    p.gs.insert({lp.goal(nullptr, 0), ep.atom("a")});
+
+    return p;
 }
 
-struct example_problem {
-    a01_database db;
-    a01_goal_store gs;
-};
-
-example_problem make_ep_8(expr_pool& ep, lineage_pool& lp) {
+example_problem init_ep_8(expr_pool& ep, lineage_pool& lp) {
     // a :- b, c.
     // a :- d.
     // b.
@@ -244,7 +238,7 @@ void a01() {
 
     // CHOOSE EXAMPLE PROBLEM
     {
-        example_problem epm = make_ep_8(ep, lp);
+        example_problem epm = init_ep_8(ep, lp);
         // extract db
         db = epm.db;
         // extract gs
