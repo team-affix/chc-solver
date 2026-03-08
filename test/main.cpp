@@ -14,6 +14,7 @@
 #include "../hpp/conflict_detector.hpp"
 #include "../hpp/a01_cdcl_elimination_detector.hpp"
 #include "../hpp/a01_decider.hpp"
+#include "../hpp/a01_sim.hpp"
 #include "test_utils.hpp"
 
 void test_trail_constructor() {
@@ -19426,6 +19427,609 @@ void test_a01_decider() {
     }
 }
 
+void test_a01_sim_constructor() {
+    // Test 1: Empty goals - trail push/pop behavior
+    {
+        trail t;
+        t.push();
+        size_t depth_before = t.depth();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        a01_goals goals;  // Empty
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        {
+            a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+            
+            // CRITICAL: Trail depth increased by 1
+            assert(t.depth() == depth_before + 1);
+            
+            // Verify max_resolutions stored
+            assert(simulation.max_resolutions == 100);
+            
+            // Verify references
+            assert(&simulation.db == &db);
+            assert(&simulation.t == &t);
+            assert(&simulation.lp == &lp);
+            
+            // Verify stores initialized
+            assert(simulation.gs.size() == 0);
+            assert(simulation.cs.size() == 0);
+            assert(simulation.rs.size() == 0);
+            assert(simulation.ds.size() == 0);
+            
+            // Verify avoidance store is a COPY
+            assert(&simulation.as_copy != &as);
+            assert(simulation.as_copy.size() == 0);
+        }
+        
+        // CRITICAL: After destruction, trail depth restored
+        assert(t.depth() == depth_before);
+    }
+    
+    // Test 2: Single goal - verify goal_adder called correctly
+    {
+        trail t;
+        t.push();
+        size_t depth_before = t.depth();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("p"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        {
+            a01_sim simulation(50, db, goals, t, seq, ep, bm, lp, as, sim);
+            
+            // Trail pushed
+            assert(t.depth() == depth_before + 1);
+            
+            // CRITICAL: Goal added to goal_store with index 0
+            assert(simulation.gs.size() == 1);
+            const goal_lineage* gl = simulation.gs.begin()->first;
+            assert(gl->parent == nullptr);
+            assert(gl->idx == 0);
+            assert(simulation.gs.at(gl) == ep.atom("p"));
+            
+            // CRITICAL: Candidate added to candidate_store (1 goal * 1 db rule = 1 candidate)
+            assert(simulation.cs.size() == 1);
+            assert(simulation.cs.count(gl) == 1);
+            assert(simulation.cs.begin()->first == gl);
+            assert(simulation.cs.begin()->second == 0);  // db[0] as candidate
+            
+            // Other stores empty
+            assert(simulation.rs.size() == 0);
+            assert(simulation.ds.size() == 0);
+            
+            // Max resolutions stored
+            assert(simulation.max_resolutions == 50);
+        }
+        
+        // Trail popped
+        assert(t.depth() == depth_before);
+    }
+    
+    // Test 3: Multiple goals - verify sequential indexing
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.atom("q"), {}});
+        db.push_back(rule{ep.atom("r"), {}});
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.atom("q"));
+        goals.push_back(ep.atom("r"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(200, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // CRITICAL: Three goals added with indices 0, 1, 2
+        assert(simulation.gs.size() == 3);
+        
+        // Find each lineage by index
+        const goal_lineage* gl0 = nullptr;
+        const goal_lineage* gl1 = nullptr;
+        const goal_lineage* gl2 = nullptr;
+        
+        for (const auto& [gl, ge] : simulation.gs) {
+            if (gl->idx == 0) {
+                gl0 = gl;
+                assert(ge == ep.atom("p"));
+            } else if (gl->idx == 1) {
+                gl1 = gl;
+                assert(ge == ep.atom("q"));
+            } else if (gl->idx == 2) {
+                gl2 = gl;
+                assert(ge == ep.atom("r"));
+            }
+        }
+        
+        assert(gl0 != nullptr);
+        assert(gl1 != nullptr);
+        assert(gl2 != nullptr);
+        
+        // CRITICAL: All have nullptr parent (root goals)
+        assert(gl0->parent == nullptr);
+        assert(gl1->parent == nullptr);
+        assert(gl2->parent == nullptr);
+        
+        // CRITICAL: Total candidates = 3 goals * 3 db rules = 9
+        assert(simulation.cs.size() == 9);
+        
+        // CRITICAL: Each goal has ALL 3 rules as candidates (goal_adder adds all, trivially)
+        assert(simulation.cs.count(gl0) == 3);
+        assert(simulation.cs.count(gl1) == 3);
+        assert(simulation.cs.count(gl2) == 3);
+        
+        // Verify each goal has candidates 0, 1, 2
+        auto range0 = simulation.cs.equal_range(gl0);
+        std::set<size_t> indices0;
+        for (auto it = range0.first; it != range0.second; ++it) {
+            indices0.insert(it->second);
+        }
+        assert(indices0 == std::set<size_t>({0, 1, 2}));
+        
+        auto range1 = simulation.cs.equal_range(gl1);
+        std::set<size_t> indices1;
+        for (auto it = range1.first; it != range1.second; ++it) {
+            indices1.insert(it->second);
+        }
+        assert(indices1 == std::set<size_t>({0, 1, 2}));
+        
+        auto range2 = simulation.cs.equal_range(gl2);
+        std::set<size_t> indices2;
+        for (auto it = range2.first; it != range2.second; ++it) {
+            indices2.insert(it->second);
+        }
+        assert(indices2 == std::set<size_t>({0, 1, 2}));
+        
+        // Max resolutions
+        assert(simulation.max_resolutions == 200);
+    }
+    
+    // Test 4: Goals with no matching database rules - candidates empty for some goals
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        // No rule for "q" or "r"
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.atom("q"));
+        goals.push_back(ep.atom("r"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // CRITICAL: All goals added to goal_store
+        assert(simulation.gs.size() == 3);
+        
+        // CRITICAL: goal_adder adds ALL db rules to ALL goals (trivially, before elimination)
+        // 3 goals * 1 db rule = 3 total candidates
+        assert(simulation.cs.size() == 3);
+        
+        const goal_lineage* gl_p = nullptr;
+        const goal_lineage* gl_q = nullptr;
+        const goal_lineage* gl_r = nullptr;
+        
+        for (const auto& [gl, ge] : simulation.gs) {
+            if (gl->idx == 0) gl_p = gl;
+            else if (gl->idx == 1) gl_q = gl;
+            else if (gl->idx == 2) gl_r = gl;
+        }
+        
+        // Each goal has the single db rule as a candidate
+        assert(simulation.cs.count(gl_p) == 1);
+        assert(simulation.cs.count(gl_q) == 1);
+        assert(simulation.cs.count(gl_r) == 1);
+        
+        // All have db[0] as candidate
+        assert(simulation.cs.find(gl_p)->second == 0);
+        assert(simulation.cs.find(gl_q)->second == 0);
+        assert(simulation.cs.find(gl_r)->second == 0);
+    }
+    
+    // Test 5: Database with multiple candidates per goal
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.atom("p"), {ep.atom("q")}});
+        db.push_back(rule{ep.atom("p"), {ep.atom("r")}});
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("p"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // Goal added
+        assert(simulation.gs.size() == 1);
+        const goal_lineage* gl = simulation.gs.begin()->first;
+        
+        // CRITICAL: Three candidates for the same goal
+        assert(simulation.cs.count(gl) == 3);
+        
+        // Verify candidate indices are 0, 1, 2
+        auto range = simulation.cs.equal_range(gl);
+        std::set<size_t> indices;
+        for (auto it = range.first; it != range.second; ++it) {
+            indices.insert(it->second);
+        }
+        assert(indices.size() == 3);
+        assert(indices.count(0) == 1);
+        assert(indices.count(1) == 1);
+        assert(indices.count(2) == 1);
+    }
+    
+    // Test 6: Avoidance store is copied, not referenced
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        a01_goals goals;
+        
+        // Pre-populate avoidance store
+        a01_avoidance_store as;
+        const resolution_lineage* rl1 = lp.resolution(lp.goal(nullptr, 0), 0);
+        const resolution_lineage* rl2 = lp.resolution(lp.goal(nullptr, 1), 1);
+        
+        a01_decision_store avoid1;
+        avoid1.insert(rl1);
+        avoid1.insert(rl2);
+        
+        as.insert(avoid1);
+        
+        size_t as_size_before = as.size();
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // CRITICAL: as_copy is a COPY, not a reference
+        assert(&simulation.as_copy != &as);
+        assert(simulation.as_copy.size() == 1);
+        
+        // Original unchanged
+        assert(as.size() == as_size_before);
+        
+        // Content matches
+        assert(simulation.as_copy.count(avoid1) == 1);
+        assert(as.count(avoid1) == 1);
+    }
+    
+    // Test 7: Complex database and goals - verify all candidates found
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.atom("p"), {ep.atom("x")}});
+        db.push_back(rule{ep.atom("q"), {}});
+        db.push_back(rule{ep.atom("q"), {ep.atom("y")}});
+        db.push_back(rule{ep.atom("q"), {ep.atom("z")}});
+        db.push_back(rule{ep.atom("r"), {ep.atom("w")}});
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.atom("q"));
+        goals.push_back(ep.atom("r"));
+        goals.push_back(ep.atom("s"));  // No matching rule
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(75, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // CRITICAL: 4 goals added
+        assert(simulation.gs.size() == 4);
+        
+        // Find each lineage
+        const goal_lineage* gl0 = nullptr;
+        const goal_lineage* gl1 = nullptr;
+        const goal_lineage* gl2 = nullptr;
+        const goal_lineage* gl3 = nullptr;
+        
+        for (const auto& [gl, ge] : simulation.gs) {
+            if (gl->idx == 0) {
+                gl0 = gl;
+                assert(ge == ep.atom("p"));
+            } else if (gl->idx == 1) {
+                gl1 = gl;
+                assert(ge == ep.atom("q"));
+            } else if (gl->idx == 2) {
+                gl2 = gl;
+                assert(ge == ep.atom("r"));
+            } else if (gl->idx == 3) {
+                gl3 = gl;
+                assert(ge == ep.atom("s"));
+            }
+        }
+        
+        assert(gl0 && gl1 && gl2 && gl3);
+        
+        // CRITICAL: goal_adder adds ALL rules to ALL goals (trivially)
+        // 4 goals * 6 db rules = 24 total candidates
+        assert(simulation.cs.size() == 24);
+        
+        // Each goal has all 6 rules as candidates
+        assert(simulation.cs.count(gl0) == 6);
+        assert(simulation.cs.count(gl1) == 6);
+        assert(simulation.cs.count(gl2) == 6);
+        assert(simulation.cs.count(gl3) == 6);
+        
+        // Verify all have indices 0-5
+        for (const goal_lineage* gl : {gl0, gl1, gl2, gl3}) {
+            auto range = simulation.cs.equal_range(gl);
+            std::set<size_t> indices;
+            for (auto it = range.first; it != range.second; ++it) {
+                indices.insert(it->second);
+            }
+            assert(indices == std::set<size_t>({0, 1, 2, 3, 4, 5}));
+        }
+        
+        // Max resolutions
+        assert(simulation.max_resolutions == 75);
+    }
+    
+    // Test 8: Trail isolation - bindings inside constructor don't leak
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        a01_goals goals;
+        goals.push_back(ep.atom("p"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        size_t depth_before = t.depth();
+        
+        {
+            a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+            
+            // Inside simulation scope, depth is +1
+            assert(t.depth() == depth_before + 1);
+        }
+        
+        // CRITICAL: After simulation destroyed, trail depth restored
+        assert(t.depth() == depth_before);
+    }
+    
+    // Test 9: Pre-populated avoidance store is copied
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        a01_goals goals;
+        
+        // Pre-populate avoidance store with multiple avoidances
+        a01_avoidance_store as;
+        
+        const resolution_lineage* rl1 = lp.resolution(lp.goal(nullptr, 0), 0);
+        const resolution_lineage* rl2 = lp.resolution(lp.goal(nullptr, 1), 1);
+        const resolution_lineage* rl3 = lp.resolution(lp.goal(nullptr, 2), 2);
+        
+        a01_decision_store avoid1;
+        avoid1.insert(rl1);
+        avoid1.insert(rl2);
+        
+        a01_decision_store avoid2;
+        avoid2.insert(rl3);
+        
+        as.insert(avoid1);
+        as.insert(avoid2);
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        size_t as_size_before = as.size();
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // CRITICAL: as_copy has same content
+        assert(simulation.as_copy.size() == 2);
+        assert(simulation.as_copy.count(avoid1) == 1);
+        assert(simulation.as_copy.count(avoid2) == 1);
+        
+        // CRITICAL: Original unchanged
+        assert(as.size() == as_size_before);
+    }
+    
+    // Test 10: Verify sequencer and expr_pool passed correctly to copier
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        a01_goals goals;
+        goals.push_back(ep.atom("p"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // Verify copier references match (via members)
+        assert(&simulation.cp.expr_pool_ref == &ep);
+        assert(&simulation.cp.sequencer_ref == &seq);
+    }
+    
+    // Test 11: Different max_resolutions values stored correctly
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        a01_goals goals;
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        // Test various limits
+        {
+            a01_sim sim1(1, db, goals, t, seq, ep, bm, lp, as, sim);
+            assert(sim1.max_resolutions == 1);
+        }
+        
+        {
+            a01_sim sim2(1000, db, goals, t, seq, ep, bm, lp, as, sim);
+            assert(sim2.max_resolutions == 1000);
+        }
+        
+        {
+            a01_sim sim3(999999, db, goals, t, seq, ep, bm, lp, as, sim);
+            assert(sim3.max_resolutions == 999999);
+        }
+    }
+    
+    // Test 12: Multiple destructor calls (nested scopes) - trail properly managed
+    {
+        trail t;
+        t.push();
+        size_t depth_start = t.depth();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        a01_goals goals;
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        {
+            a01_sim sim1(100, db, goals, t, seq, ep, bm, lp, as, sim);
+            assert(t.depth() == depth_start + 1);
+            
+            {
+                a01_sim sim2(200, db, goals, t, seq, ep, bm, lp, as, sim);
+                assert(t.depth() == depth_start + 2);
+            }
+            
+            // After sim2 destroyed
+            assert(t.depth() == depth_start + 1);
+        }
+        
+        // CRITICAL: After both destroyed, trail restored
+        assert(t.depth() == depth_start);
+    }
+}
+
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
 
@@ -19477,6 +20081,7 @@ void unit_test_main() {
     TEST(test_a01_decider_choose_goal);
     TEST(test_a01_decider_choose_candidate);
     TEST(test_a01_decider);
+    TEST(test_a01_sim_constructor);
 }
 
 #ifdef DEBUG
