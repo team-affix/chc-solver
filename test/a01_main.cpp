@@ -225,6 +225,10 @@ example_problem init_ep_9(expr_pool& ep, lineage_pool& lp) {
     return p;
 }
 
+struct solution {
+    
+};
+
 void a01() {
     trail t;
     bind_map bm(t);
