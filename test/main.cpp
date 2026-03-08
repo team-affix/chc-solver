@@ -20324,6 +20324,68 @@ void test_a01_sim_constructor() {
     }
 }
 
+void test_a01_sim() {
+    // Test 1: Immediate solution - single goal with matching fact
+    // Database: a.
+    // Goals: :- a.
+    // Expected: Solution found (unit propagation resolves immediately)
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("a"), {}});  // Fact: a.
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("a"));  // Goal: :- a.
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // Execute simulation
+        bool result = simulation();
+        
+        // CRITICAL: Should return true (solution found)
+        assert(result == true);
+        
+        // CRITICAL: Goal store is empty (solution_detector check)
+        assert(simulation.gs.size() == 0);
+        
+        // CRITICAL: No decisions made (unit propagation only, no dec() calls)
+        assert(simulation.ds.size() == 0);
+        assert(simulation.decisions().size() == 0);
+        
+        // CRITICAL: Resolution store has exactly 1 resolution (the unit propagation)
+        assert(simulation.rs.size() == 1);
+        
+        // Verify resolution lineage structure
+        const resolution_lineage* rl = *simulation.rs.begin();
+        assert(rl->parent != nullptr);  // Parent is the goal
+        assert(rl->parent->parent == nullptr);  // Goal's parent is nullptr (root)
+        assert(rl->parent->idx == 0);  // Goal index 0
+        assert(rl->idx == 0);  // Database rule index 0
+        
+        // CRITICAL: Candidate store should be empty (goal resolved)
+        assert(simulation.cs.size() == 0);
+        
+        // CRITICAL: Trail still valid after execution
+        assert(t.depth() > 0);
+        
+        // CRITICAL: Max resolutions not exceeded
+        assert(simulation.rs.size() < simulation.max_resolutions);
+    }
+}
+
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
 
@@ -20376,6 +20438,7 @@ void unit_test_main() {
     TEST(test_a01_decider_choose_candidate);
     TEST(test_a01_decider);
     TEST(test_a01_sim_constructor);
+    TEST(test_a01_sim);
 }
 
 #ifdef DEBUG
