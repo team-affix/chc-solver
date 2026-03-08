@@ -19542,7 +19542,7 @@ void test_a01_sim_constructor() {
             
             // CRITICAL: Goal added to goal_store with index 0
             assert(simulation.gs.size() == 1);
-            const goal_lineage* gl = simulation.gs.begin()->first;
+            const goal_lineage* gl = lp.goal(nullptr, 0);
             assert(gl->parent == nullptr);
             assert(gl->idx == 0);
             assert(simulation.gs.at(gl) == ep.atom("p"));
@@ -19775,7 +19775,7 @@ void test_a01_sim_constructor() {
         
         // Goal added
         assert(simulation.gs.size() == 1);
-        const goal_lineage* gl = simulation.gs.begin()->first;
+        const goal_lineage* gl = lp.goal(nullptr, 0);
         
         // CRITICAL: Three candidates for the same goal
         assert(simulation.cs.count(gl) == 3);
@@ -20637,7 +20637,7 @@ void test_a01_sim() {
         
         // CRITICAL: Pre-populate MCTS tree to force decision on (gl0, idx 1)
         // Get the actual goal pointer from simulation.gs
-        const goal_lineage* gl0_for_mcts = simulation.gs.begin()->first;
+        const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
         
         // Force gl0 selection at level 1 (only goal anyway)
         root.m_visits = 100;
@@ -20769,7 +20769,7 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Pre-populate MCTS to force decision on idx 0
-        const goal_lineage* gl0_for_mcts = simulation.gs.begin()->first;
+        const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
         
         root.m_visits = 100;
         root.m_children[gl0_for_mcts].m_visits = 50;
@@ -20803,7 +20803,7 @@ void test_a01_sim() {
         assert(simulation.gs.size() == 1);
         
         // CRITICAL: Conflict detected (d has no candidates)
-        const goal_lineage* gl_d = simulation.gs.begin()->first;
+        const goal_lineage* gl_d = lp.goal(rl_b, 0);
         assert(simulation.cs.count(gl_d) == 0);
         
         // Verify MCTS was called once
@@ -20915,7 +20915,7 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Before execution, verify 5 candidates added
-        const goal_lineage* gl0_for_check = simulation.gs.begin()->first;
+        const goal_lineage* gl0_for_check = lp.goal(nullptr, 0);
         assert(simulation.cs.count(gl0_for_check) == 5);
         
         bool result = simulation();
@@ -20937,7 +20937,7 @@ void test_a01_sim() {
         // CRITICAL: Goal store has f (unresolved)
         assert(simulation.gs.size() == 1);
         
-        const goal_lineage* gl_f = simulation.gs.begin()->first;
+        const goal_lineage* gl_f = lp.goal(rl_e, 0);
         assert(simulation.cs.count(gl_f) == 0);  // No candidates for f
         
         // CRITICAL: Candidate store empty (head elim removed 4, resolution removed 1)
@@ -21045,7 +21045,7 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Pre-populate MCTS to force decision on (gl0, idx 0)
-        const goal_lineage* gl0_for_mcts = simulation.gs.begin()->first;
+        const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
         
         root.m_visits = 100;
         root.m_children[gl0_for_mcts].m_visits = 50;
@@ -21405,7 +21405,7 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Force decision on idx 0
-        const goal_lineage* gl0_for_mcts = simulation.gs.begin()->first;
+        const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
         
         root.m_visits = 100;
         root.m_children[gl0_for_mcts].m_visits = 50;
@@ -21472,7 +21472,7 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Initial state: 20 candidates
-        const goal_lineage* gl0_for_check = simulation.gs.begin()->first;
+        const goal_lineage* gl0_for_check = lp.goal(nullptr, 0);
         assert(simulation.cs.count(gl0_for_check) == 20);
         
         bool result = simulation();
@@ -21590,7 +21590,7 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Force decision on idx 1
-        const goal_lineage* gl0_for_mcts = simulation.gs.begin()->first;
+        const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
         
         root.m_visits = 100;
         root.m_children[gl0_for_mcts].m_visits = 50;
@@ -21679,7 +21679,7 @@ void test_a01_sim() {
         // CRITICAL: Goal store has q(b) unresolved
         assert(simulation.gs.size() == 1);
         
-        const goal_lineage* gl_q = simulation.gs.begin()->first;
+        const goal_lineage* gl_q = lp.goal(rl, 0);
         assert(simulation.cs.count(gl_q) == 0);
     }
     
@@ -21717,7 +21717,7 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Force first decision on (gl0, idx 0)
-        const goal_lineage* gl0_for_mcts = simulation.gs.begin()->first;
+        const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
         
         root.m_visits = 100;
         root.m_children[gl0_for_mcts].m_visits = 50;
@@ -21872,7 +21872,8 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Verify 30 candidates initially
-        assert(simulation.cs.count(simulation.gs.begin()->first) == 30);
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        assert(simulation.cs.count(gl0) == 30);
         
         bool result = simulation();
         
@@ -21935,7 +21936,7 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Pre-populate MCTS to force decision on idx 0
-        const goal_lineage* gl0_for_mcts = simulation.gs.begin()->first;
+        const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
         root.m_visits = 100;
         root.m_children[gl0_for_mcts].m_visits = 50;
         root.m_children[gl0_for_mcts].m_children[size_t(0)].m_visits = 0;  // Force idx 0
@@ -22416,7 +22417,7 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Force decision on idx 0 (q path -> apple)
-        const goal_lineage* gl0_for_mcts = simulation.gs.begin()->first;
+        const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
         root.m_visits = 100;
         root.m_children[gl0_for_mcts].m_visits = 50;
         root.m_children[gl0_for_mcts].m_children[size_t(0)].m_visits = 0;  // Force idx 0
@@ -22483,7 +22484,7 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Pre-populate MCTS to force base case (idx 2)
-        const goal_lineage* gl0_for_mcts = simulation.gs.begin()->first;
+        const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
         root.m_visits = 100;
         root.m_children[gl0_for_mcts].m_visits = 50;
         root.m_children[gl0_for_mcts].m_children[size_t(2)].m_visits = 0;  // Force idx 2
