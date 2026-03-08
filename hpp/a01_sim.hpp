@@ -15,6 +15,7 @@
 struct a01_sim {
     ~a01_sim();
     a01_sim(
+        size_t,
         const a01_database&,
         const a01_goals&,
         trail&,
@@ -30,6 +31,8 @@ struct a01_sim {
 #ifndef DEBUG
 private:
 #endif
+    size_t max_resolutions;
+
     const a01_database& db;
     trail& t;
     lineage_pool& lp;

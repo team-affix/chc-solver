@@ -5,6 +5,7 @@ a01_sim::~a01_sim() {
 }
 
 a01_sim::a01_sim(
+    size_t max_resolutions,
     const a01_database& db,
     const a01_goals& goals,
     trail& t,
@@ -15,6 +16,7 @@ a01_sim::a01_sim(
     a01_avoidance_store as,
     monte_carlo::simulation<a01_decider::choice, std::mt19937>& sim
 ) :
+    max_resolutions(max_resolutions),
     db(db),
     t(t),
     lp(lp),
@@ -41,7 +43,7 @@ a01_sim::a01_sim(
 
 bool a01_sim::operator()() {
 
-    while (!cd() && !sd()) {
+    while ((rs.size() < max_resolutions) && !cd() && !sd()) {
 
         // head elimination
         size_t elim0 = std::erase_if(cs, [this](const auto& e) { return he(e.first, e.second); });
