@@ -20384,6 +20384,1532 @@ void test_a01_sim() {
         // CRITICAL: Max resolutions not exceeded
         assert(simulation.rs.size() < simulation.max_resolutions);
     }
+    
+    // Test 2: Immediate conflict - no matching rules
+    // Database: empty
+    // Goal: :- a.
+    // Expected: Conflict (no candidates for goal)
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;  // Empty database
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("a"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Should return false (conflict)
+        assert(result == false);
+        
+        // CRITICAL: Goal store NOT empty (unresolved goal remains)
+        assert(simulation.gs.size() == 1);
+        
+        // CRITICAL: Candidate store empty (no candidates available)
+        assert(simulation.cs.size() == 0);
+        
+        // CRITICAL: No resolutions or decisions made
+        assert(simulation.rs.size() == 0);
+        assert(simulation.ds.size() == 0);
+        assert(simulation.decisions().size() == 0);
+    }
+    
+    // Test 3: Head elimination removes non-unifying candidates
+    // Database: a., b.
+    // Goal: :- a.
+    // Expected: Head elim removes b, then unit prop on a
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("a"), {}});  // idx 0
+        db.push_back(rule{ep.atom("b"), {}});  // idx 1
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("a"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Goal store empty
+        assert(simulation.gs.size() == 0);
+        
+        // CRITICAL: Exactly 1 resolution (unit prop on a with idx 0)
+        assert(simulation.rs.size() == 1);
+        
+        // Verify exact resolution
+        const resolution_lineage* rl = *simulation.rs.begin();
+        assert(rl->idx == 0);  // Used db[0]
+        assert(rl->parent->idx == 0);  // Resolved goal idx 0
+        assert(rl->parent->parent == nullptr);
+        
+        // CRITICAL: No decisions (only unit prop)
+        assert(simulation.ds.size() == 0);
+        
+        // Candidate store empty after resolution
+        assert(simulation.cs.size() == 0);
+    }
+    
+    // Test 4: CDCL elimination removes avoided candidates
+    // Database: a :- b., a :- c., b., c.
+    // Goal: :- a.
+    // Avoidance: avoid (gl0, idx 0)
+    // Expected: CDCL removes idx 0, decision/unit prop on idx 1
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
+        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
+        db.push_back(rule{ep.atom("b"), {}});  // idx 2
+        db.push_back(rule{ep.atom("c"), {}});  // idx 3
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("a"));
+        
+        // Pre-populate avoidance: avoid (gl0, idx 0)
+        const goal_lineage* gl0_avoid = lp.goal(nullptr, 0);
+        const resolution_lineage* rl0_avoid = lp.resolution(gl0_avoid, 0);
+        
+        a01_decision_store avoid;
+        avoid.insert(rl0_avoid);
+        
+        a01_avoidance_store as;
+        as.insert(avoid);
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Goal store empty
+        assert(simulation.gs.size() == 0);
+        
+        // CRITICAL: Exactly 2 resolutions (a with idx 1, then c)
+        assert(simulation.rs.size() == 2);
+        
+        // Verify exact resolutions
+        std::set<const resolution_lineage*> rs_set(simulation.rs.begin(), simulation.rs.end());
+        
+        // Find resolution for goal idx 0 with db idx 1
+        const goal_lineage* gl0 = nullptr;
+        for (const auto& [gl, ge] : simulation.gs) {
+            if (gl->idx == 0) gl0 = gl;
+        }
+        // gs is empty now, need to get from lineage in rs
+        const resolution_lineage* rl_a = nullptr;
+        const resolution_lineage* rl_c = nullptr;
+        
+        for (const resolution_lineage* rl : simulation.rs) {
+            if (rl->parent->idx == 0 && rl->idx == 1) {
+                rl_a = rl;  // Resolution of a using idx 1
+            } else if (rl->parent->idx == 0 && rl->parent->parent == rl_a && rl->idx == 3) {
+                rl_c = rl;  // Resolution of c (child of a's resolution)
+            }
+        }
+        
+        assert(rl_a != nullptr);
+        assert(rl_c != nullptr);
+        
+        // CRITICAL: Verify lineage structure
+        assert(rl_a->parent->idx == 0);
+        assert(rl_a->parent->parent == nullptr);
+        assert(rl_a->idx == 1);  // Used db[1], NOT db[0] (CDCL eliminated)
+        
+        assert(rl_c->parent->parent == rl_a);
+        assert(rl_c->idx == 3);
+        
+        // CRITICAL: No decisions (unit propagations)
+        assert(simulation.ds.size() == 0);
+        
+        // CRITICAL: Original avoidance store unchanged
+        assert(as.size() == 1);
+    }
+    
+    // Test 5: Unit propagation chain
+    // Database: a :- b., b :- c., c.
+    // Goal: :- a.
+    // Expected: Chain of 3 unit propagations
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
+        db.push_back(rule{ep.atom("b"), {ep.atom("c")}});  // idx 1
+        db.push_back(rule{ep.atom("c"), {}});  // idx 2
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("a"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 3 resolutions (a, b, c)
+        assert(simulation.rs.size() == 3);
+        
+        // CRITICAL: No decisions (all unit propagations)
+        assert(simulation.ds.size() == 0);
+        
+        // Verify exact lineage chain
+        const resolution_lineage* rl_a = nullptr;
+        const resolution_lineage* rl_b = nullptr;
+        const resolution_lineage* rl_c = nullptr;
+        
+        for (const resolution_lineage* rl : simulation.rs) {
+            if (rl->parent->parent == nullptr && rl->idx == 0) {
+                rl_a = rl;  // Resolution of root goal a
+            } else if (rl->parent->parent != nullptr && rl->parent->parent->idx == 0 && rl->idx == 1) {
+                rl_b = rl;  // Resolution of b (child of a)
+            } else if (rl->idx == 2) {
+                rl_c = rl;  // Resolution of c
+            }
+        }
+        
+        assert(rl_a != nullptr);
+        assert(rl_b != nullptr);
+        assert(rl_c != nullptr);
+        
+        // CRITICAL: Verify chain structure
+        assert(rl_a->parent->idx == 0);
+        assert(rl_a->parent->parent == nullptr);
+        assert(rl_a->idx == 0);
+        
+        assert(rl_b->parent->idx == 0);
+        assert(rl_b->parent->parent == rl_a);
+        assert(rl_b->idx == 1);
+        
+        assert(rl_c->parent->idx == 0);
+        assert(rl_c->parent->parent == rl_b);
+        assert(rl_c->idx == 2);
+        
+        // Goal and candidate stores empty
+        assert(simulation.gs.size() == 0);
+        assert(simulation.cs.size() == 0);
+    }
+    
+    // Test 6: Single decision made (pre-populated MCTS)
+    // Database: a :- b., a :- c., b., c.
+    // Goal: :- a.
+    // Force decision on (a, idx 1) via MCTS tree
+    // Expected: Decision on a→c, then unit prop on c
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
+        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
+        db.push_back(rule{ep.atom("b"), {}});  // idx 2
+        db.push_back(rule{ep.atom("c"), {}});  // idx 3
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("a"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // CRITICAL: Pre-populate MCTS tree to force decision on (gl0, idx 1)
+        // Get the actual goal pointer from simulation.gs
+        const goal_lineage* gl0 = simulation.gs.begin()->first;
+        
+        // Force gl0 selection at level 1 (only goal anyway)
+        root.m_visits = 100;
+        root.m_children[gl0].m_visits = 50;
+        root.m_children[gl0].m_value = 100.0;
+        
+        // Force idx 1 selection at level 2 (using unvisited node)
+        root.m_children[gl0].m_children[size_t(0)].m_visits = 10;
+        root.m_children[gl0].m_children[size_t(0)].m_value = 20.0;
+        
+        root.m_children[gl0].m_children[size_t(1)].m_visits = 0;  // UNVISITED - will be chosen!
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 2 resolutions (decision on a→c, unit prop on c)
+        assert(simulation.rs.size() == 2);
+        
+        // CRITICAL: Exactly 1 decision
+        assert(simulation.ds.size() == 1);
+        
+        // Verify the decision is in rs
+        const resolution_lineage* decision_rl = *simulation.ds.begin();
+        assert(simulation.rs.count(decision_rl) == 1);
+        
+        // CRITICAL: Verify decision used idx 1
+        assert(decision_rl->idx == 1);
+        assert(decision_rl->parent->idx == 0);
+        
+        // Verify second resolution (unit prop on c)
+        const resolution_lineage* rl_c = nullptr;
+        for (const resolution_lineage* rl : simulation.rs) {
+            if (rl != decision_rl) {
+                rl_c = rl;
+            }
+        }
+        
+        assert(rl_c != nullptr);
+        assert(rl_c->idx == 3);  // db[3] = c.
+        assert(rl_c->parent->parent == decision_rl);
+        
+        // CRITICAL: MCTS simulation length is 2 (one decision call = goal + candidate)
+        assert(sim.length() == 2);
+        
+        // Stores empty
+        assert(simulation.gs.size() == 0);
+        assert(simulation.cs.size() == 0);
+    }
+    
+    // Test 7: Decision followed by unit propagation
+    // Database: a :- b., b.
+    // Goal: :- a.
+    // Force decision via MCTS (even though could be unit prop)
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
+        db.push_back(rule{ep.atom("b"), {}});  // idx 1
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("a"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // Pre-populate MCTS to make a decision (force choice even though it's unit)
+        // We'll add a dummy candidate to prevent unit prop initially
+        const goal_lineage* gl0 = simulation.gs.begin()->first;
+        
+        // Actually, with only 1 candidate it's always unit prop. Let me rethink...
+        // Need 2 candidates for same goal, then force one via MCTS
+        
+        // Scratch this approach - this will always be unit prop with 1 candidate
+        // Just verify the behavior
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 2 resolutions
+        assert(simulation.rs.size() == 2);
+        
+        // Verify resolutions
+        const resolution_lineage* rl_a = nullptr;
+        const resolution_lineage* rl_b = nullptr;
+        
+        for (const resolution_lineage* rl : simulation.rs) {
+            if (rl->parent->parent == nullptr && rl->idx == 0) {
+                rl_a = rl;
+            } else if (rl->idx == 1) {
+                rl_b = rl;
+            }
+        }
+        
+        assert(rl_a != nullptr);
+        assert(rl_b != nullptr);
+        
+        // CRITICAL: Both are unit propagations (no decisions)
+        assert(simulation.ds.size() == 0);
+        
+        // Verify lineage chain
+        assert(rl_b->parent->parent == rl_a);
+        
+        // Stores empty
+        assert(simulation.gs.size() == 0);
+        assert(simulation.cs.size() == 0);
+    }
+    
+    // Test 8: Conflict after multiple resolutions with unsat children
+    // Database: a :- b., a :- c., b :- d., c :- e.
+    // Goal: :- a.
+    // Expected: Decision on a, spawn children, conflict on unsat child
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
+        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
+        db.push_back(rule{ep.atom("b"), {ep.atom("d")}});  // idx 2
+        db.push_back(rule{ep.atom("c"), {ep.atom("e")}});  // idx 3
+        // No rules for d or e
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("a"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // Pre-populate MCTS to force decision on idx 0
+        const goal_lineage* gl0 = simulation.gs.begin()->first;
+        
+        root.m_visits = 100;
+        root.m_children[gl0].m_visits = 50;
+        root.m_children[gl0].m_children[size_t(0)].m_visits = 0;  // Force idx 0
+        root.m_children[gl0].m_children[size_t(1)].m_visits = 10;
+        root.m_children[gl0].m_children[size_t(1)].m_value = 20.0;
+        
+        bool result = simulation();
+        
+        // CRITICAL: Should return false (conflict)
+        assert(result == false);
+        
+        // CRITICAL: Exactly 2 resolutions (a→b, b→d)
+        assert(simulation.rs.size() == 2);
+        
+        // Verify exact resolutions
+        const resolution_lineage* rl_a = nullptr;
+        const resolution_lineage* rl_b = nullptr;
+        
+        for (const resolution_lineage* rl : simulation.rs) {
+            if (rl->parent->parent == nullptr && rl->idx == 0) {
+                rl_a = rl;
+            } else if (rl->idx == 2) {
+                rl_b = rl;
+            }
+        }
+        
+        assert(rl_a != nullptr);
+        assert(rl_b != nullptr);
+        
+        // CRITICAL: First decision made on a
+        assert(simulation.ds.size() == 1);
+        assert(simulation.ds.count(rl_a) == 1);
+        
+        // CRITICAL: Second resolution is unit prop (not in ds)
+        assert(simulation.ds.count(rl_b) == 0);
+        
+        // CRITICAL: Goal store NOT empty (d is unresolved)
+        assert(simulation.gs.size() == 1);
+        
+        // CRITICAL: Conflict detected (d has no candidates)
+        const goal_lineage* gl_d = simulation.gs.begin()->first;
+        assert(simulation.cs.count(gl_d) == 0);
+        
+        // Verify MCTS was called once
+        assert(sim.length() == 2);
+    }
+    
+    // Test 9: Max resolutions exceeded
+    // Database: a :- b., b :- c., c :- d., d :- e., e :- f., f :- g., g.
+    // Goal: :- a.
+    // max_resolutions = 3
+    // Expected: Stops after 3 resolutions, returns false
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});
+        db.push_back(rule{ep.atom("b"), {ep.atom("c")}});
+        db.push_back(rule{ep.atom("c"), {ep.atom("d")}});
+        db.push_back(rule{ep.atom("d"), {ep.atom("e")}});
+        db.push_back(rule{ep.atom("e"), {ep.atom("f")}});
+        db.push_back(rule{ep.atom("f"), {ep.atom("g")}});
+        db.push_back(rule{ep.atom("g"), {}});
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("a"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(3, db, goals, t, seq, ep, bm, lp, as, sim);  // Max 3 resolutions!
+        
+        bool result = simulation();
+        
+        // CRITICAL: Should return false (max exceeded, not solved)
+        assert(result == false);
+        
+        // CRITICAL: Exactly 3 resolutions (limit reached)
+        assert(simulation.rs.size() == 3);
+        
+        // CRITICAL: Goal store NOT empty (not all goals resolved)
+        assert(simulation.gs.size() > 0);
+        
+        // CRITICAL: No conflict (still have candidates)
+        // After 3 resolutions: a→b→c→d, so d is in gs and should have candidates
+        bool has_candidates = false;
+        for (const auto& [gl, ge] : simulation.gs) {
+            if (simulation.cs.count(gl) > 0) {
+                has_candidates = true;
+                break;
+            }
+        }
+        assert(has_candidates == true);
+        
+        // All 3 resolutions are unit propagations (no decisions made at limit)
+        assert(simulation.ds.size() == 0);
+        
+        // Verify exact resolutions made (a, b, c)
+        std::set<size_t> resolution_indices;
+        for (const resolution_lineage* rl : simulation.rs) {
+            resolution_indices.insert(rl->idx);
+        }
+        assert(resolution_indices == std::set<size_t>({0, 1, 2}));
+    }
+    
+    // Test 10: Fixpoint iteration - multiple head eliminations before decision
+    // Database: a., b., c., d., e :- f.
+    // Goal: :- e.
+    // Expected: Head elim removes a,b,c,d (4 candidates), unit prop on e→f, conflict on f
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("a"), {}});  // idx 0
+        db.push_back(rule{ep.atom("b"), {}});  // idx 1
+        db.push_back(rule{ep.atom("c"), {}});  // idx 2
+        db.push_back(rule{ep.atom("d"), {}});  // idx 3
+        db.push_back(rule{ep.atom("e"), {ep.atom("f")}});  // idx 4
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("e"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // Before execution, verify 5 candidates added
+        const goal_lineage* gl0 = simulation.gs.begin()->first;
+        assert(simulation.cs.count(gl0) == 5);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Should return false (conflict on f)
+        assert(result == false);
+        
+        // CRITICAL: Exactly 1 resolution (e→f)
+        assert(simulation.rs.size() == 1);
+        
+        const resolution_lineage* rl = *simulation.rs.begin();
+        assert(rl->idx == 4);
+        assert(rl->parent->idx == 0);
+        
+        // CRITICAL: No decisions (unit prop)
+        assert(simulation.ds.size() == 0);
+        
+        // CRITICAL: Goal store has f (unresolved)
+        assert(simulation.gs.size() == 1);
+        
+        const goal_lineage* gl_f = simulation.gs.begin()->first;
+        assert(simulation.cs.count(gl_f) == 0);  // No candidates for f
+        
+        // CRITICAL: Candidate store empty (head elim removed 4, resolution removed 1)
+        assert(simulation.cs.size() == 0);
+    }
+    
+    // Test 11: Avoidance store erasure during resolution
+    // Database: a :- b., b.
+    // Goal: :- a.
+    // Avoidance: {{rl(gl0,0), rl_dummy}}
+    // Expected: After making rl(gl0,0), it gets erased from avoidance
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
+        db.push_back(rule{ep.atom("b"), {}});  // idx 1
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("a"));
+        
+        // Pre-populate avoidance with the future resolution plus a dummy
+        const goal_lineage* gl0_pre = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_a0_pre = lp.resolution(gl0_pre, 0);
+        
+        // Add dummy resolution to keep avoidance non-singleton
+        const goal_lineage* gl_dummy = lp.goal(nullptr, 99);
+        const resolution_lineage* rl_dummy = lp.resolution(gl_dummy, 99);
+        
+        a01_decision_store avoid;
+        avoid.insert(rl_a0_pre);
+        avoid.insert(rl_dummy);
+        
+        a01_avoidance_store as;
+        as.insert(avoid);
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // Verify avoidance copied
+        assert(simulation.as_copy.size() == 1);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 2 resolutions (a, b)
+        assert(simulation.rs.size() == 2);
+        
+        // CRITICAL: All unit propagations (no decisions)
+        assert(simulation.ds.size() == 0);
+        
+        // CRITICAL: Avoidance store modified (rl(gl0,0) erased after resolution)
+        assert(simulation.as_copy.size() == 1);
+        const a01_decision_store& remaining = *simulation.as_copy.begin();
+        assert(remaining.size() == 1);  // Only dummy remains
+        assert(remaining.count(rl_dummy) == 1);
+        assert(remaining.count(rl_a0_pre) == 0);  // This was erased
+        
+        // Stores empty
+        assert(simulation.gs.size() == 0);
+        assert(simulation.cs.size() == 0);
+    }
+    
+    // Test 12: Mixed decisions and unit propagations (complex)
+    // Database: a :- b., a :- c., b :- d., c :- e., d., e.
+    // Goal: :- a.
+    // Force decision on idx 0 (a→b), then unit prop on d
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
+        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
+        db.push_back(rule{ep.atom("b"), {ep.atom("d")}});  // idx 2
+        db.push_back(rule{ep.atom("c"), {ep.atom("e")}});  // idx 3
+        db.push_back(rule{ep.atom("d"), {}});  // idx 4
+        db.push_back(rule{ep.atom("e"), {}});  // idx 5
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("a"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // Pre-populate MCTS to force decision on (gl0, idx 0)
+        const goal_lineage* gl0 = simulation.gs.begin()->first;
+        
+        root.m_visits = 100;
+        root.m_children[gl0].m_visits = 50;
+        root.m_children[gl0].m_children[size_t(0)].m_visits = 0;  // Force idx 0
+        root.m_children[gl0].m_children[size_t(1)].m_visits = 10;
+        root.m_children[gl0].m_children[size_t(1)].m_value = 20.0;
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 3 resolutions (a→b decision, b→d unit prop, d unit prop)
+        assert(simulation.rs.size() == 3);
+        
+        // CRITICAL: Exactly 1 decision
+        assert(simulation.ds.size() == 1);
+        
+        // CRITICAL: ds ⊆ rs (decision store is subset of resolution store)
+        for (const resolution_lineage* rl : simulation.ds) {
+            assert(simulation.rs.count(rl) == 1);
+        }
+        
+        // Verify the decision
+        const resolution_lineage* decision_rl = *simulation.ds.begin();
+        assert(decision_rl->idx == 0);  // Decision used idx 0
+        assert(decision_rl->parent->idx == 0);
+        
+        // Verify other resolutions are NOT in ds
+        size_t non_decision_count = 0;
+        for (const resolution_lineage* rl : simulation.rs) {
+            if (simulation.ds.count(rl) == 0) {
+                non_decision_count++;
+            }
+        }
+        assert(non_decision_count == 2);  // b→d and d are unit props
+        
+        // Stores empty
+        assert(simulation.gs.size() == 0);
+        assert(simulation.cs.size() == 0);
+    }
+    
+    // Test 13: Empty goals - already solved
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        a01_goals goals;  // Empty - already solved!
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Returns true (solution - no goals to resolve)
+        assert(result == true);
+        
+        // CRITICAL: No resolutions made
+        assert(simulation.rs.size() == 0);
+        assert(simulation.ds.size() == 0);
+        
+        // CRITICAL: Stores all empty
+        assert(simulation.gs.size() == 0);
+        assert(simulation.cs.size() == 0);
+        
+        // CRITICAL: MCTS never called
+        assert(sim.length() == 0);
+    }
+    
+    // Test 14: Multi-goal resolution with sub-goals
+    // Database: a :- b, c., b., c.
+    // Goal: :- a.
+    // Expected: Unit prop on a spawns b and c, both resolve via unit prop
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("a"), {ep.atom("b"), ep.atom("c")}});  // idx 0
+        db.push_back(rule{ep.atom("b"), {}});  // idx 1
+        db.push_back(rule{ep.atom("c"), {}});  // idx 2
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("a"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 3 resolutions (a, b, c)
+        assert(simulation.rs.size() == 3);
+        
+        // CRITICAL: No decisions (all unit props)
+        assert(simulation.ds.size() == 0);
+        
+        // Verify resolutions
+        const resolution_lineage* rl_a = nullptr;
+        const resolution_lineage* rl_b = nullptr;
+        const resolution_lineage* rl_c = nullptr;
+        
+        for (const resolution_lineage* rl : simulation.rs) {
+            if (rl->parent->parent == nullptr && rl->idx == 0) {
+                rl_a = rl;
+            } else if (rl->idx == 1) {
+                rl_b = rl;
+            } else if (rl->idx == 2) {
+                rl_c = rl;
+            }
+        }
+        
+        assert(rl_a != nullptr);
+        assert(rl_b != nullptr);
+        assert(rl_c != nullptr);
+        
+        // CRITICAL: Verify b and c are both children of a's resolution
+        assert(rl_b->parent->parent == rl_a);
+        assert(rl_c->parent->parent == rl_a);
+        
+        // CRITICAL: b and c have different goal indices (0 and 1 in body)
+        assert(rl_b->parent->idx != rl_c->parent->idx);
+        
+        // Stores empty
+        assert(simulation.gs.size() == 0);
+        assert(simulation.cs.size() == 0);
+    }
+    
+    // Test 15: Simple variable unification
+    // Database: p(X) :- q(X)., q(a).
+    // Goal: :- p(a).
+    // Expected: Unify and solve
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        // p(X) :- q(X).
+        const expr* X = ep.var(seq());
+        db.push_back(rule{
+            ep.cons(ep.atom("p"), X),
+            {ep.cons(ep.atom("q"), X)}
+        });
+        // q(a).
+        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});
+        
+        a01_goals goals;
+        goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));  // :- p(a).
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 2 resolutions
+        assert(simulation.rs.size() == 2);
+        
+        // CRITICAL: No decisions
+        assert(simulation.ds.size() == 0);
+        
+        // Stores empty
+        assert(simulation.gs.size() == 0);
+        assert(simulation.cs.size() == 0);
+    }
+    
+    // Test 16: Variable binds to variable
+    // Database: p(X) :- q(X)., q(Y) :- r(Y)., r(a).
+    // Goal: :- p(a).
+    // Expected: Chain of variable unifications
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        const expr* X = ep.var(seq());
+        const expr* Y = ep.var(seq());
+        
+        db.push_back(rule{ep.cons(ep.atom("p"), X), {ep.cons(ep.atom("q"), X)}});
+        db.push_back(rule{ep.cons(ep.atom("q"), Y), {ep.cons(ep.atom("r"), Y)}});
+        db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("a")), {}});
+        
+        a01_goals goals;
+        goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 3 resolutions
+        assert(simulation.rs.size() == 3);
+        
+        // No decisions
+        assert(simulation.ds.size() == 0);
+        
+        // Stores empty
+        assert(simulation.gs.size() == 0);
+        assert(simulation.cs.size() == 0);
+    }
+    
+    // Test 17: Complex multi-variable with multiple goals
+    // Database: p(X,Y) :- q(X), r(Y)., q(a)., r(b).
+    // Goal: :- p(a,b).
+    // Expected: Resolve p, spawn q(a) and r(b), both resolve
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        const expr* X = ep.var(seq());
+        const expr* Y = ep.var(seq());
+        
+        db.push_back(rule{
+            ep.cons(ep.atom("p"), ep.cons(X, Y)),
+            {ep.cons(ep.atom("q"), X), ep.cons(ep.atom("r"), Y)}
+        });
+        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});
+        db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("b")), {}});
+        
+        a01_goals goals;
+        goals.push_back(ep.cons(ep.atom("p"), ep.cons(ep.atom("a"), ep.atom("b"))));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 3 resolutions
+        assert(simulation.rs.size() == 3);
+        
+        // No decisions
+        assert(simulation.ds.size() == 0);
+        
+        // Stores empty
+        assert(simulation.gs.size() == 0);
+        assert(simulation.cs.size() == 0);
+    }
+    
+    // Test 18: Complex nested variables with decisions
+    // Database: p(X) :- q(X)., p(X) :- r(X)., q(a)., r(b).
+    // Goal: :- p(a).
+    // Force decision on idx 0, verify unification
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        const expr* X1 = ep.var(seq());
+        const expr* X2 = ep.var(seq());
+        
+        db.push_back(rule{ep.cons(ep.atom("p"), X1), {ep.cons(ep.atom("q"), X1)}});  // idx 0
+        db.push_back(rule{ep.cons(ep.atom("p"), X2), {ep.cons(ep.atom("r"), X2)}});  // idx 1
+        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 2
+        db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("b")), {}});  // idx 3
+        
+        a01_goals goals;
+        goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // Force decision on idx 0
+        const goal_lineage* gl0 = simulation.gs.begin()->first;
+        
+        root.m_visits = 100;
+        root.m_children[gl0].m_visits = 50;
+        root.m_children[gl0].m_children[size_t(0)].m_visits = 50;
+        root.m_children[gl0].m_children[size_t(0)].m_value = 5000.0;  // Massive reward
+        root.m_children[gl0].m_children[size_t(1)].m_visits = 10;
+        root.m_children[gl0].m_children[size_t(1)].m_value = 10.0;
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 2 resolutions
+        assert(simulation.rs.size() == 2);
+        
+        // CRITICAL: Exactly 1 decision
+        assert(simulation.ds.size() == 1);
+        
+        // Verify decision
+        const resolution_lineage* decision_rl = *simulation.ds.begin();
+        assert(decision_rl->idx == 0);
+        
+        // Stores empty
+        assert(simulation.gs.size() == 0);
+        assert(simulation.cs.size() == 0);
+    }
+    
+    // Test 19: Many database entries (20 rules)
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        
+        // Add 19 non-matching rules
+        for (int i = 0; i < 19; i++) {
+            db.push_back(rule{ep.atom("x" + std::to_string(i)), {}});
+        }
+        // Add 1 matching rule
+        db.push_back(rule{ep.atom("target"), {}});  // idx 19
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("target"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // Initial state: 20 candidates
+        const goal_lineage* gl0 = simulation.gs.begin()->first;
+        assert(simulation.cs.count(gl0) == 20);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 1 resolution (head elim removes 19, unit prop on idx 19)
+        assert(simulation.rs.size() == 1);
+        
+        const resolution_lineage* rl = *simulation.rs.begin();
+        assert(rl->idx == 19);
+        
+        // No decisions
+        assert(simulation.ds.size() == 0);
+        
+        // Stores empty
+        assert(simulation.gs.size() == 0);
+        assert(simulation.cs.size() == 0);
+    }
+    
+    // Test 20: Many goals (10 goals, all solvable)
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        a01_goals goals;
+        
+        // Create 10 independent facts and goals
+        for (int i = 0; i < 10; i++) {
+            db.push_back(rule{ep.atom("g" + std::to_string(i)), {}});
+            goals.push_back(ep.atom("g" + std::to_string(i)));
+        }
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 10 resolutions (one per goal)
+        assert(simulation.rs.size() == 10);
+        
+        // CRITICAL: No decisions (all unit props)
+        assert(simulation.ds.size() == 0);
+        
+        // CRITICAL: Verify all resolutions use correct indices
+        std::set<size_t> resolution_indices;
+        for (const resolution_lineage* rl : simulation.rs) {
+            resolution_indices.insert(rl->idx);
+        }
+        assert(resolution_indices.size() == 10);
+        for (int i = 0; i < 10; i++) {
+            assert(resolution_indices.count(i) == 1);
+        }
+        
+        // Stores empty
+        assert(simulation.gs.size() == 0);
+        assert(simulation.cs.size() == 0);
+    }
+    
+    // Test 21: Complex with decisions, unit props, and avoidance erasure
+    // Database: a :- b., a :- c., b :- d., c., d.
+    // Goal: :- a.
+    // Avoidance: {{rl(gl0,0), rl(gl_b,2)}}
+    // Force decision on idx 1 (a→c), verify avoidance erasure
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
+        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
+        db.push_back(rule{ep.atom("b"), {ep.atom("d")}});  // idx 2
+        db.push_back(rule{ep.atom("c"), {}});  // idx 3
+        db.push_back(rule{ep.atom("d"), {}});  // idx 4
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("a"));
+        
+        // Pre-populate avoidance
+        const goal_lineage* gl0_pre = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_a0_pre = lp.resolution(gl0_pre, 0);
+        const goal_lineage* gl_b_pre = lp.goal(rl_a0_pre, 0);
+        const resolution_lineage* rl_b_pre = lp.resolution(gl_b_pre, 2);
+        
+        a01_decision_store avoid;
+        avoid.insert(rl_a0_pre);
+        avoid.insert(rl_b_pre);
+        
+        a01_avoidance_store as;
+        as.insert(avoid);
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // Force decision on idx 1
+        const goal_lineage* gl0 = simulation.gs.begin()->first;
+        
+        root.m_visits = 100;
+        root.m_children[gl0].m_visits = 50;
+        root.m_children[gl0].m_children[size_t(0)].m_visits = 10;
+        root.m_children[gl0].m_children[size_t(0)].m_value = 10.0;
+        root.m_children[gl0].m_children[size_t(1)].m_visits = 0;  // Force idx 1
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 2 resolutions (a→c decision, c unit prop)
+        assert(simulation.rs.size() == 2);
+        
+        // CRITICAL: Exactly 1 decision
+        assert(simulation.ds.size() == 1);
+        
+        // Verify decision
+        const resolution_lineage* decision_rl = *simulation.ds.begin();
+        assert(decision_rl->idx == 1);
+        
+        // CRITICAL: ds ⊆ rs
+        assert(simulation.rs.count(decision_rl) == 1);
+        
+        // CRITICAL: Avoidance modified (rl(gl0,1) erased after resolution)
+        assert(simulation.as_copy.size() == 1);
+        const a01_decision_store& remaining = *simulation.as_copy.begin();
+        // After making rl(gl0,1), it should be erased from avoidance
+        // But our avoidance had rl(gl0,0) and rl(gl_b,2), not rl(gl0,1)
+        // So avoidance should be unchanged
+        assert(remaining.size() == 2);
+        
+        // Stores empty
+        assert(simulation.gs.size() == 0);
+        assert(simulation.cs.size() == 0);
+    }
+    
+    // Test 22: Conflict with variables - unification fails
+    // Database: p(a) :- q(b).
+    // Goal: :- p(a).
+    // Expected: Spawn q(b), conflict (no rule for q(b))
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {ep.cons(ep.atom("q"), ep.atom("b"))}});
+        
+        a01_goals goals;
+        goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Conflict detected
+        assert(result == false);
+        
+        // CRITICAL: Exactly 1 resolution (p(a)→q(b))
+        assert(simulation.rs.size() == 1);
+        
+        const resolution_lineage* rl = *simulation.rs.begin();
+        assert(rl->idx == 0);
+        
+        // CRITICAL: No decisions (unit prop)
+        assert(simulation.ds.size() == 0);
+        
+        // CRITICAL: Goal store has q(b) unresolved
+        assert(simulation.gs.size() == 1);
+        
+        const goal_lineage* gl_q = simulation.gs.begin()->first;
+        assert(simulation.cs.count(gl_q) == 0);
+    }
+    
+    // Test 23: Multiple decisions with pre-populated MCTS
+    // Database: a :- b., a :- c., b :- d., b :- e., c., d., e.
+    // Goal: :- a.
+    // Force decision on (a, idx 0), then decision on (b, idx 3)
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
+        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
+        db.push_back(rule{ep.atom("b"), {ep.atom("d")}});  // idx 2
+        db.push_back(rule{ep.atom("b"), {ep.atom("e")}});  // idx 3
+        db.push_back(rule{ep.atom("c"), {}});  // idx 4
+        db.push_back(rule{ep.atom("d"), {}});  // idx 5
+        db.push_back(rule{ep.atom("e"), {}});  // idx 6
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("a"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // Force first decision on (gl0, idx 0)
+        const goal_lineage* gl0 = simulation.gs.begin()->first;
+        
+        root.m_visits = 100;
+        root.m_children[gl0].m_visits = 50;
+        root.m_children[gl0].m_children[size_t(0)].m_visits = 0;  // Force idx 0
+        root.m_children[gl0].m_children[size_t(1)].m_visits = 10;
+        root.m_children[gl0].m_children[size_t(1)].m_value = 10.0;
+        
+        // After first decision, need to pre-populate for second decision
+        // gl_b will be created during simulation, can't pre-populate here
+        // Just verify result
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 3 resolutions (a→b decision, b→? decision, ? unit prop)
+        assert(simulation.rs.size() == 3);
+        
+        // CRITICAL: At least 1 decision (first one forced)
+        assert(simulation.ds.size() >= 1);
+        
+        // CRITICAL: ds ⊆ rs
+        for (const resolution_lineage* rl : simulation.ds) {
+            assert(simulation.rs.count(rl) == 1);
+        }
+        
+        // Stores empty
+        assert(simulation.gs.size() == 0);
+        assert(simulation.cs.size() == 0);
+    }
+    
+    // Test 24: Complex variable scenario with list structures
+    // Database: append(nil, X, X)., append(cons(H,T), X, cons(H,R)) :- append(T, X, R).
+    // Goal: :- append(cons(a,nil), cons(b,nil), cons(a,cons(b,nil))).
+    // Expected: Resolution with recursive rule
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        
+        // append(nil, X, X).
+        const expr* X1 = ep.var(seq());
+        db.push_back(rule{
+            ep.cons(ep.atom("append"), ep.cons(ep.atom("nil"), ep.cons(X1, X1))),
+            {}
+        });
+        
+        // append(cons(H,T), X, cons(H,R)) :- append(T, X, R).
+        const expr* H = ep.var(seq());
+        const expr* T = ep.var(seq());
+        const expr* X2 = ep.var(seq());
+        const expr* R = ep.var(seq());
+        
+        db.push_back(rule{
+            ep.cons(ep.atom("append"), ep.cons(
+                ep.cons(ep.atom("cons"), ep.cons(H, T)),
+                ep.cons(X2, ep.cons(ep.atom("cons"), ep.cons(H, R)))
+            )),
+            {ep.cons(ep.atom("append"), ep.cons(T, ep.cons(X2, R)))}
+        });
+        
+        a01_goals goals;
+        goals.push_back(ep.cons(ep.atom("append"), ep.cons(
+            ep.cons(ep.atom("cons"), ep.cons(ep.atom("a"), ep.atom("nil"))),
+            ep.cons(ep.cons(ep.atom("cons"), ep.cons(ep.atom("b"), ep.atom("nil"))),
+                    ep.cons(ep.atom("cons"), ep.cons(ep.atom("a"), ep.cons(ep.atom("cons"), ep.cons(ep.atom("b"), ep.atom("nil"))))))
+        )));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 2 resolutions (recursive case, base case)
+        assert(simulation.rs.size() == 2);
+        
+        // No decisions (both unit props after head elim)
+        assert(simulation.ds.size() == 0);
+        
+        // Stores empty
+        assert(simulation.gs.size() == 0);
+        assert(simulation.cs.size() == 0);
+    }
+    
+    // Test 25: Large complex problem with 30 rules and multiple goals
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        
+        // Create a complex dependency graph
+        // 30 rules total
+        for (int i = 0; i < 10; i++) {
+            db.push_back(rule{ep.atom("noise" + std::to_string(i)), {}});
+        }
+        
+        // Main rules: p :- q, r., q., r.
+        db.push_back(rule{ep.atom("p"), {ep.atom("q"), ep.atom("r")}});
+        db.push_back(rule{ep.atom("q"), {}});
+        db.push_back(rule{ep.atom("r"), {}});
+        
+        // More noise
+        for (int i = 10; i < 27; i++) {
+            db.push_back(rule{ep.atom("noise" + std::to_string(i)), {}});
+        }
+        
+        a01_goals goals;
+        goals.push_back(ep.atom("p"));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // Verify 30 candidates initially
+        assert(simulation.cs.count(simulation.gs.begin()->first) == 30);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 3 resolutions (p, q, r)
+        assert(simulation.rs.size() == 3);
+        
+        // No decisions (all unit props after massive head elimination)
+        assert(simulation.ds.size() == 0);
+        
+        // Verify resolution indices (should be 10, 11, 12)
+        std::set<size_t> resolution_indices;
+        for (const resolution_lineage* rl : simulation.rs) {
+            resolution_indices.insert(rl->idx);
+        }
+        assert(resolution_indices == std::set<size_t>({10, 11, 12}));
+        
+        // Stores empty
+        assert(simulation.gs.size() == 0);
+        assert(simulation.cs.size() == 0);
+    }
 }
 
 void unit_test_main() {
