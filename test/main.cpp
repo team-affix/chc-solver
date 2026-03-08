@@ -20368,12 +20368,9 @@ void test_a01_sim() {
         // CRITICAL: Resolution store has exactly 1 resolution (the unit propagation)
         assert(simulation.rs.size() == 1);
         
-        // Verify resolution lineage structure
-        const resolution_lineage* rl = *simulation.rs.begin();
-        assert(rl->parent != nullptr);  // Parent is the goal
-        assert(rl->parent->parent == nullptr);  // Goal's parent is nullptr (root)
-        assert(rl->parent->idx == 0);  // Goal index 0
-        assert(rl->idx == 0);  // Database rule index 0
+        // CRITICAL: Verify exact resolution using lineage_pool
+        const resolution_lineage* expected_rl = lp.resolution(lp.goal(nullptr, 0), 0);
+        assert(simulation.rs.count(expected_rl) == 1);
         
         // CRITICAL: Candidate store should be empty (goal resolved)
         assert(simulation.cs.size() == 0);
@@ -20467,11 +20464,9 @@ void test_a01_sim() {
         // CRITICAL: Exactly 1 resolution (unit prop on a with idx 0)
         assert(simulation.rs.size() == 1);
         
-        // Verify exact resolution
-        const resolution_lineage* rl = *simulation.rs.begin();
-        assert(rl->idx == 0);  // Used db[0]
-        assert(rl->parent->idx == 0);  // Resolved goal idx 0
-        assert(rl->parent->parent == nullptr);
+        // CRITICAL: Verify exact resolution using lineage_pool
+        const resolution_lineage* expected_rl = lp.resolution(lp.goal(nullptr, 0), 0);
+        assert(simulation.rs.count(expected_rl) == 1);
         
         // CRITICAL: No decisions (only unit prop)
         assert(simulation.ds.size() == 0);
@@ -20530,36 +20525,16 @@ void test_a01_sim() {
         // CRITICAL: Exactly 2 resolutions (a with idx 1, then c)
         assert(simulation.rs.size() == 2);
         
-        // Verify exact resolutions
-        std::set<const resolution_lineage*> rs_set(simulation.rs.begin(), simulation.rs.end());
+        // CRITICAL: Verify exact resolutions using lineage_pool
+        // First resolution: root goal (idx 0) with db rule idx 1
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_a = lp.resolution(gl0, 1);
+        assert(simulation.rs.count(rl_a) == 1);
         
-        // Find resolution for goal idx 0 with db idx 1
-        const goal_lineage* gl0 = nullptr;
-        for (const auto& [gl, ge] : simulation.gs) {
-            if (gl->idx == 0) gl0 = gl;
-        }
-        // gs is empty now, need to get from lineage in rs
-        const resolution_lineage* rl_a = nullptr;
-        const resolution_lineage* rl_c = nullptr;
-        
-        for (const resolution_lineage* rl : simulation.rs) {
-            if (rl->parent->idx == 0 && rl->idx == 1) {
-                rl_a = rl;  // Resolution of a using idx 1
-            } else if (rl->parent->idx == 0 && rl->parent->parent == rl_a && rl->idx == 3) {
-                rl_c = rl;  // Resolution of c (child of a's resolution)
-            }
-        }
-        
-        assert(rl_a != nullptr);
-        assert(rl_c != nullptr);
-        
-        // CRITICAL: Verify lineage structure
-        assert(rl_a->parent->idx == 0);
-        assert(rl_a->parent->parent == nullptr);
-        assert(rl_a->idx == 1);  // Used db[1], NOT db[0] (CDCL eliminated)
-        
-        assert(rl_c->parent->parent == rl_a);
-        assert(rl_c->idx == 3);
+        // Second resolution: child goal (body idx 0 of rl_a) with db rule idx 3
+        const goal_lineage* gl_c = lp.goal(rl_a, 0);
+        const resolution_lineage* rl_c = lp.resolution(gl_c, 3);
+        assert(simulation.rs.count(rl_c) == 1);
         
         // CRITICAL: No decisions (unit propagations)
         assert(simulation.ds.size() == 0);
@@ -20608,37 +20583,21 @@ void test_a01_sim() {
         // CRITICAL: No decisions (all unit propagations)
         assert(simulation.ds.size() == 0);
         
-        // Verify exact lineage chain
-        const resolution_lineage* rl_a = nullptr;
-        const resolution_lineage* rl_b = nullptr;
-        const resolution_lineage* rl_c = nullptr;
+        // CRITICAL: Verify exact lineage chain using lineage_pool
+        // First: root goal (idx 0) with db rule idx 0
+        const goal_lineage* gl_a = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_a = lp.resolution(gl_a, 0);
+        assert(simulation.rs.count(rl_a) == 1);
         
-        for (const resolution_lineage* rl : simulation.rs) {
-            if (rl->parent->parent == nullptr && rl->idx == 0) {
-                rl_a = rl;  // Resolution of root goal a
-            } else if (rl->parent->parent != nullptr && rl->parent->parent->idx == 0 && rl->idx == 1) {
-                rl_b = rl;  // Resolution of b (child of a)
-            } else if (rl->idx == 2) {
-                rl_c = rl;  // Resolution of c
-            }
-        }
+        // Second: child goal (body idx 0 of rl_a) with db rule idx 1
+        const goal_lineage* gl_b = lp.goal(rl_a, 0);
+        const resolution_lineage* rl_b = lp.resolution(gl_b, 1);
+        assert(simulation.rs.count(rl_b) == 1);
         
-        assert(rl_a != nullptr);
-        assert(rl_b != nullptr);
-        assert(rl_c != nullptr);
-        
-        // CRITICAL: Verify chain structure
-        assert(rl_a->parent->idx == 0);
-        assert(rl_a->parent->parent == nullptr);
-        assert(rl_a->idx == 0);
-        
-        assert(rl_b->parent->idx == 0);
-        assert(rl_b->parent->parent == rl_a);
-        assert(rl_b->idx == 1);
-        
-        assert(rl_c->parent->idx == 0);
-        assert(rl_c->parent->parent == rl_b);
-        assert(rl_c->idx == 2);
+        // Third: child goal (body idx 0 of rl_b) with db rule idx 2
+        const goal_lineage* gl_c = lp.goal(rl_b, 0);
+        const resolution_lineage* rl_c = lp.resolution(gl_c, 2);
+        assert(simulation.rs.count(rl_c) == 1);
         
         // Goal and candidate stores empty
         assert(simulation.gs.size() == 0);
@@ -20678,18 +20637,18 @@ void test_a01_sim() {
         
         // CRITICAL: Pre-populate MCTS tree to force decision on (gl0, idx 1)
         // Get the actual goal pointer from simulation.gs
-        const goal_lineage* gl0 = simulation.gs.begin()->first;
+        const goal_lineage* gl0_for_mcts = simulation.gs.begin()->first;
         
         // Force gl0 selection at level 1 (only goal anyway)
         root.m_visits = 100;
-        root.m_children[gl0].m_visits = 50;
-        root.m_children[gl0].m_value = 100.0;
+        root.m_children[gl0_for_mcts].m_visits = 50;
+        root.m_children[gl0_for_mcts].m_value = 100.0;
         
         // Force idx 1 selection at level 2 (using unvisited node)
-        root.m_children[gl0].m_children[size_t(0)].m_visits = 10;
-        root.m_children[gl0].m_children[size_t(0)].m_value = 20.0;
+        root.m_children[gl0_for_mcts].m_children[size_t(0)].m_visits = 10;
+        root.m_children[gl0_for_mcts].m_children[size_t(0)].m_value = 20.0;
         
-        root.m_children[gl0].m_children[size_t(1)].m_visits = 0;  // UNVISITED - will be chosen!
+        root.m_children[gl0_for_mcts].m_children[size_t(1)].m_visits = 0;  // UNVISITED - will be chosen!
         
         bool result = simulation();
         
@@ -20702,25 +20661,18 @@ void test_a01_sim() {
         // CRITICAL: Exactly 1 decision
         assert(simulation.ds.size() == 1);
         
-        // Verify the decision is in rs
-        const resolution_lineage* decision_rl = *simulation.ds.begin();
-        assert(simulation.rs.count(decision_rl) == 1);
+        // CRITICAL: Verify exact resolutions
+        // First: decision on root goal (idx 0) with db rule idx 1
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_a = lp.resolution(gl0, 1);
+        assert(simulation.rs.count(rl_a) == 1);
+        assert(simulation.ds.count(rl_a) == 1);  // This is the decision
         
-        // CRITICAL: Verify decision used idx 1
-        assert(decision_rl->idx == 1);
-        assert(decision_rl->parent->idx == 0);
-        
-        // Verify second resolution (unit prop on c)
-        const resolution_lineage* rl_c = nullptr;
-        for (const resolution_lineage* rl : simulation.rs) {
-            if (rl != decision_rl) {
-                rl_c = rl;
-            }
-        }
-        
-        assert(rl_c != nullptr);
-        assert(rl_c->idx == 3);  // db[3] = c.
-        assert(rl_c->parent->parent == decision_rl);
+        // Second: unit prop on child goal (body idx 0 of rl_a) with db rule idx 3
+        const goal_lineage* gl_c = lp.goal(rl_a, 0);
+        const resolution_lineage* rl_c = lp.resolution(gl_c, 3);
+        assert(simulation.rs.count(rl_c) == 1);
+        assert(simulation.ds.count(rl_c) == 0);  // Not a decision
         
         // CRITICAL: MCTS simulation length is 2 (one decision call = goal + candidate)
         assert(sim.length() == 2);
@@ -20758,15 +20710,7 @@ void test_a01_sim() {
         
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
-        // Pre-populate MCTS to make a decision (force choice even though it's unit)
-        // We'll add a dummy candidate to prevent unit prop initially
-        const goal_lineage* gl0 = simulation.gs.begin()->first;
-        
-        // Actually, with only 1 candidate it's always unit prop. Let me rethink...
-        // Need 2 candidates for same goal, then force one via MCTS
-        
-        // Scratch this approach - this will always be unit prop with 1 candidate
-        // Just verify the behavior
+        // Note: With only 1 candidate per goal, both will be unit props
         
         bool result = simulation();
         
@@ -20776,26 +20720,17 @@ void test_a01_sim() {
         // CRITICAL: Exactly 2 resolutions
         assert(simulation.rs.size() == 2);
         
-        // Verify resolutions
-        const resolution_lineage* rl_a = nullptr;
-        const resolution_lineage* rl_b = nullptr;
+        // CRITICAL: Verify exact resolutions
+        const goal_lineage* gl_a = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_a = lp.resolution(gl_a, 0);
+        assert(simulation.rs.count(rl_a) == 1);
         
-        for (const resolution_lineage* rl : simulation.rs) {
-            if (rl->parent->parent == nullptr && rl->idx == 0) {
-                rl_a = rl;
-            } else if (rl->idx == 1) {
-                rl_b = rl;
-            }
-        }
-        
-        assert(rl_a != nullptr);
-        assert(rl_b != nullptr);
+        const goal_lineage* gl_b = lp.goal(rl_a, 0);
+        const resolution_lineage* rl_b = lp.resolution(gl_b, 1);
+        assert(simulation.rs.count(rl_b) == 1);
         
         // CRITICAL: Both are unit propagations (no decisions)
         assert(simulation.ds.size() == 0);
-        
-        // Verify lineage chain
-        assert(rl_b->parent->parent == rl_a);
         
         // Stores empty
         assert(simulation.gs.size() == 0);
@@ -20834,42 +20769,34 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Pre-populate MCTS to force decision on idx 0
-        const goal_lineage* gl0 = simulation.gs.begin()->first;
+        const goal_lineage* gl0_for_mcts = simulation.gs.begin()->first;
         
         root.m_visits = 100;
-        root.m_children[gl0].m_visits = 50;
-        root.m_children[gl0].m_children[size_t(0)].m_visits = 0;  // Force idx 0
-        root.m_children[gl0].m_children[size_t(1)].m_visits = 10;
-        root.m_children[gl0].m_children[size_t(1)].m_value = 20.0;
+        root.m_children[gl0_for_mcts].m_visits = 50;
+        root.m_children[gl0_for_mcts].m_children[size_t(0)].m_visits = 0;  // Force idx 0
+        root.m_children[gl0_for_mcts].m_children[size_t(1)].m_visits = 10;
+        root.m_children[gl0_for_mcts].m_children[size_t(1)].m_value = 20.0;
         
         bool result = simulation();
         
         // CRITICAL: Should return false (conflict)
         assert(result == false);
         
-        // CRITICAL: Exactly 2 resolutions (a→b, b→d)
+        // CRITICAL: Exactly 2 resolutions (a→b decision, b→d unit prop)
         assert(simulation.rs.size() == 2);
         
-        // Verify exact resolutions
-        const resolution_lineage* rl_a = nullptr;
-        const resolution_lineage* rl_b = nullptr;
+        // CRITICAL: Verify exact resolutions
+        const goal_lineage* gl_a = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_a = lp.resolution(gl_a, 0);
+        assert(simulation.rs.count(rl_a) == 1);
         
-        for (const resolution_lineage* rl : simulation.rs) {
-            if (rl->parent->parent == nullptr && rl->idx == 0) {
-                rl_a = rl;
-            } else if (rl->idx == 2) {
-                rl_b = rl;
-            }
-        }
+        const goal_lineage* gl_b = lp.goal(rl_a, 0);
+        const resolution_lineage* rl_b = lp.resolution(gl_b, 2);
+        assert(simulation.rs.count(rl_b) == 1);
         
-        assert(rl_a != nullptr);
-        assert(rl_b != nullptr);
-        
-        // CRITICAL: First decision made on a
+        // CRITICAL: First is decision, second is unit prop
         assert(simulation.ds.size() == 1);
         assert(simulation.ds.count(rl_a) == 1);
-        
-        // CRITICAL: Second resolution is unit prop (not in ds)
         assert(simulation.ds.count(rl_b) == 0);
         
         // CRITICAL: Goal store NOT empty (d is unresolved)
@@ -20942,12 +20869,18 @@ void test_a01_sim() {
         // All 3 resolutions are unit propagations (no decisions made at limit)
         assert(simulation.ds.size() == 0);
         
-        // Verify exact resolutions made (a, b, c)
-        std::set<size_t> resolution_indices;
-        for (const resolution_lineage* rl : simulation.rs) {
-            resolution_indices.insert(rl->idx);
-        }
-        assert(resolution_indices == std::set<size_t>({0, 1, 2}));
+        // CRITICAL: Verify exact resolutions (a, b, c)
+        const goal_lineage* gl_a = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_a = lp.resolution(gl_a, 0);
+        assert(simulation.rs.count(rl_a) == 1);
+        
+        const goal_lineage* gl_b = lp.goal(rl_a, 0);
+        const resolution_lineage* rl_b = lp.resolution(gl_b, 1);
+        assert(simulation.rs.count(rl_b) == 1);
+        
+        const goal_lineage* gl_c = lp.goal(rl_b, 0);
+        const resolution_lineage* rl_c = lp.resolution(gl_c, 2);
+        assert(simulation.rs.count(rl_c) == 1);
     }
     
     // Test 10: Fixpoint iteration - multiple head eliminations before decision
@@ -20982,8 +20915,8 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Before execution, verify 5 candidates added
-        const goal_lineage* gl0 = simulation.gs.begin()->first;
-        assert(simulation.cs.count(gl0) == 5);
+        const goal_lineage* gl0_for_check = simulation.gs.begin()->first;
+        assert(simulation.cs.count(gl0_for_check) == 5);
         
         bool result = simulation();
         
@@ -20993,9 +20926,10 @@ void test_a01_sim() {
         // CRITICAL: Exactly 1 resolution (e→f)
         assert(simulation.rs.size() == 1);
         
-        const resolution_lineage* rl = *simulation.rs.begin();
-        assert(rl->idx == 4);
-        assert(rl->parent->idx == 0);
+        // CRITICAL: Verify exact resolution
+        const goal_lineage* gl_e = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_e = lp.resolution(gl_e, 4);
+        assert(simulation.rs.count(rl_e) == 1);
         
         // CRITICAL: No decisions (unit prop)
         assert(simulation.ds.size() == 0);
@@ -21111,13 +21045,13 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Pre-populate MCTS to force decision on (gl0, idx 0)
-        const goal_lineage* gl0 = simulation.gs.begin()->first;
+        const goal_lineage* gl0_for_mcts = simulation.gs.begin()->first;
         
         root.m_visits = 100;
-        root.m_children[gl0].m_visits = 50;
-        root.m_children[gl0].m_children[size_t(0)].m_visits = 0;  // Force idx 0
-        root.m_children[gl0].m_children[size_t(1)].m_visits = 10;
-        root.m_children[gl0].m_children[size_t(1)].m_value = 20.0;
+        root.m_children[gl0_for_mcts].m_visits = 50;
+        root.m_children[gl0_for_mcts].m_children[size_t(0)].m_visits = 0;  // Force idx 0
+        root.m_children[gl0_for_mcts].m_children[size_t(1)].m_visits = 10;
+        root.m_children[gl0_for_mcts].m_children[size_t(1)].m_value = 20.0;
         
         bool result = simulation();
         
@@ -21135,19 +21069,21 @@ void test_a01_sim() {
             assert(simulation.rs.count(rl) == 1);
         }
         
-        // Verify the decision
-        const resolution_lineage* decision_rl = *simulation.ds.begin();
-        assert(decision_rl->idx == 0);  // Decision used idx 0
-        assert(decision_rl->parent->idx == 0);
+        // CRITICAL: Verify exact resolutions
+        const goal_lineage* gl_a = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_a = lp.resolution(gl_a, 0);
+        assert(simulation.rs.count(rl_a) == 1);
+        assert(simulation.ds.count(rl_a) == 1);  // Decision
         
-        // Verify other resolutions are NOT in ds
-        size_t non_decision_count = 0;
-        for (const resolution_lineage* rl : simulation.rs) {
-            if (simulation.ds.count(rl) == 0) {
-                non_decision_count++;
-            }
-        }
-        assert(non_decision_count == 2);  // b→d and d are unit props
+        const goal_lineage* gl_b = lp.goal(rl_a, 0);
+        const resolution_lineage* rl_b = lp.resolution(gl_b, 2);
+        assert(simulation.rs.count(rl_b) == 1);
+        assert(simulation.ds.count(rl_b) == 0);  // Unit prop
+        
+        const goal_lineage* gl_d = lp.goal(rl_b, 0);
+        const resolution_lineage* rl_d = lp.resolution(gl_d, 4);
+        assert(simulation.rs.count(rl_d) == 1);
+        assert(simulation.ds.count(rl_d) == 0);  // Unit prop
         
         // Stores empty
         assert(simulation.gs.size() == 0);
@@ -21232,31 +21168,19 @@ void test_a01_sim() {
         // CRITICAL: No decisions (all unit props)
         assert(simulation.ds.size() == 0);
         
-        // Verify resolutions
-        const resolution_lineage* rl_a = nullptr;
-        const resolution_lineage* rl_b = nullptr;
-        const resolution_lineage* rl_c = nullptr;
+        // CRITICAL: Verify exact resolutions
+        const goal_lineage* gl_a = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_a = lp.resolution(gl_a, 0);
+        assert(simulation.rs.count(rl_a) == 1);
         
-        for (const resolution_lineage* rl : simulation.rs) {
-            if (rl->parent->parent == nullptr && rl->idx == 0) {
-                rl_a = rl;
-            } else if (rl->idx == 1) {
-                rl_b = rl;
-            } else if (rl->idx == 2) {
-                rl_c = rl;
-            }
-        }
+        // b is body index 0, c is body index 1
+        const goal_lineage* gl_b = lp.goal(rl_a, 0);
+        const resolution_lineage* rl_b = lp.resolution(gl_b, 1);
+        assert(simulation.rs.count(rl_b) == 1);
         
-        assert(rl_a != nullptr);
-        assert(rl_b != nullptr);
-        assert(rl_c != nullptr);
-        
-        // CRITICAL: Verify b and c are both children of a's resolution
-        assert(rl_b->parent->parent == rl_a);
-        assert(rl_c->parent->parent == rl_a);
-        
-        // CRITICAL: b and c have different goal indices (0 and 1 in body)
-        assert(rl_b->parent->idx != rl_c->parent->idx);
+        const goal_lineage* gl_c = lp.goal(rl_a, 1);
+        const resolution_lineage* rl_c = lp.resolution(gl_c, 2);
+        assert(simulation.rs.count(rl_c) == 1);
         
         // Stores empty
         assert(simulation.gs.size() == 0);
@@ -21305,6 +21229,15 @@ void test_a01_sim() {
         // CRITICAL: Exactly 2 resolutions
         assert(simulation.rs.size() == 2);
         
+        // CRITICAL: Verify exact resolutions
+        const goal_lineage* gl_p = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_p = lp.resolution(gl_p, 0);
+        assert(simulation.rs.count(rl_p) == 1);
+        
+        const goal_lineage* gl_q = lp.goal(rl_p, 0);
+        const resolution_lineage* rl_q = lp.resolution(gl_q, 1);
+        assert(simulation.rs.count(rl_q) == 1);
+        
         // CRITICAL: No decisions
         assert(simulation.ds.size() == 0);
         
@@ -21352,6 +21285,19 @@ void test_a01_sim() {
         
         // CRITICAL: Exactly 3 resolutions
         assert(simulation.rs.size() == 3);
+        
+        // CRITICAL: Verify exact resolutions
+        const goal_lineage* gl_p = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_p = lp.resolution(gl_p, 0);
+        assert(simulation.rs.count(rl_p) == 1);
+        
+        const goal_lineage* gl_q = lp.goal(rl_p, 0);
+        const resolution_lineage* rl_q = lp.resolution(gl_q, 1);
+        assert(simulation.rs.count(rl_q) == 1);
+        
+        const goal_lineage* gl_r = lp.goal(rl_q, 0);
+        const resolution_lineage* rl_r = lp.resolution(gl_r, 2);
+        assert(simulation.rs.count(rl_r) == 1);
         
         // No decisions
         assert(simulation.ds.size() == 0);
@@ -21404,6 +21350,19 @@ void test_a01_sim() {
         // CRITICAL: Exactly 3 resolutions
         assert(simulation.rs.size() == 3);
         
+        // CRITICAL: Verify exact resolutions
+        const goal_lineage* gl_p = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_p = lp.resolution(gl_p, 0);
+        assert(simulation.rs.count(rl_p) == 1);
+        
+        const goal_lineage* gl_q = lp.goal(rl_p, 0);
+        const resolution_lineage* rl_q = lp.resolution(gl_q, 1);
+        assert(simulation.rs.count(rl_q) == 1);
+        
+        const goal_lineage* gl_r = lp.goal(rl_p, 1);
+        const resolution_lineage* rl_r = lp.resolution(gl_r, 2);
+        assert(simulation.rs.count(rl_r) == 1);
+        
         // No decisions
         assert(simulation.ds.size() == 0);
         
@@ -21446,14 +21405,14 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Force decision on idx 0
-        const goal_lineage* gl0 = simulation.gs.begin()->first;
+        const goal_lineage* gl0_for_mcts = simulation.gs.begin()->first;
         
         root.m_visits = 100;
-        root.m_children[gl0].m_visits = 50;
-        root.m_children[gl0].m_children[size_t(0)].m_visits = 50;
-        root.m_children[gl0].m_children[size_t(0)].m_value = 5000.0;  // Massive reward
-        root.m_children[gl0].m_children[size_t(1)].m_visits = 10;
-        root.m_children[gl0].m_children[size_t(1)].m_value = 10.0;
+        root.m_children[gl0_for_mcts].m_visits = 50;
+        root.m_children[gl0_for_mcts].m_children[size_t(0)].m_visits = 50;
+        root.m_children[gl0_for_mcts].m_children[size_t(0)].m_value = 5000.0;  // Massive reward
+        root.m_children[gl0_for_mcts].m_children[size_t(1)].m_visits = 10;
+        root.m_children[gl0_for_mcts].m_children[size_t(1)].m_value = 10.0;
         
         bool result = simulation();
         
@@ -21466,9 +21425,16 @@ void test_a01_sim() {
         // CRITICAL: Exactly 1 decision
         assert(simulation.ds.size() == 1);
         
-        // Verify decision
-        const resolution_lineage* decision_rl = *simulation.ds.begin();
-        assert(decision_rl->idx == 0);
+        // CRITICAL: Verify exact resolutions
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_p = lp.resolution(gl0, 0);
+        assert(simulation.rs.count(rl_p) == 1);
+        assert(simulation.ds.count(rl_p) == 1);  // Decision
+        
+        const goal_lineage* gl_q = lp.goal(rl_p, 0);
+        const resolution_lineage* rl_q = lp.resolution(gl_q, 2);
+        assert(simulation.rs.count(rl_q) == 1);
+        assert(simulation.ds.count(rl_q) == 0);  // Unit prop
         
         // Stores empty
         assert(simulation.gs.size() == 0);
@@ -21506,8 +21472,8 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Initial state: 20 candidates
-        const goal_lineage* gl0 = simulation.gs.begin()->first;
-        assert(simulation.cs.count(gl0) == 20);
+        const goal_lineage* gl0_for_check = simulation.gs.begin()->first;
+        assert(simulation.cs.count(gl0_for_check) == 20);
         
         bool result = simulation();
         
@@ -21517,8 +21483,10 @@ void test_a01_sim() {
         // CRITICAL: Exactly 1 resolution (head elim removes 19, unit prop on idx 19)
         assert(simulation.rs.size() == 1);
         
-        const resolution_lineage* rl = *simulation.rs.begin();
-        assert(rl->idx == 19);
+        // CRITICAL: Verify exact resolution
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl = lp.resolution(gl0, 19);
+        assert(simulation.rs.count(rl) == 1);
         
         // No decisions
         assert(simulation.ds.size() == 0);
@@ -21566,14 +21534,11 @@ void test_a01_sim() {
         // CRITICAL: No decisions (all unit props)
         assert(simulation.ds.size() == 0);
         
-        // CRITICAL: Verify all resolutions use correct indices
-        std::set<size_t> resolution_indices;
-        for (const resolution_lineage* rl : simulation.rs) {
-            resolution_indices.insert(rl->idx);
-        }
-        assert(resolution_indices.size() == 10);
+        // CRITICAL: Verify all 10 exact resolutions
         for (int i = 0; i < 10; i++) {
-            assert(resolution_indices.count(i) == 1);
+            const goal_lineage* gl = lp.goal(nullptr, i);
+            const resolution_lineage* rl = lp.resolution(gl, i);
+            assert(simulation.rs.count(rl) == 1);
         }
         
         // Stores empty
@@ -21625,13 +21590,13 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Force decision on idx 1
-        const goal_lineage* gl0 = simulation.gs.begin()->first;
+        const goal_lineage* gl0_for_mcts = simulation.gs.begin()->first;
         
         root.m_visits = 100;
-        root.m_children[gl0].m_visits = 50;
-        root.m_children[gl0].m_children[size_t(0)].m_visits = 10;
-        root.m_children[gl0].m_children[size_t(0)].m_value = 10.0;
-        root.m_children[gl0].m_children[size_t(1)].m_visits = 0;  // Force idx 1
+        root.m_children[gl0_for_mcts].m_visits = 50;
+        root.m_children[gl0_for_mcts].m_children[size_t(0)].m_visits = 10;
+        root.m_children[gl0_for_mcts].m_children[size_t(0)].m_value = 10.0;
+        root.m_children[gl0_for_mcts].m_children[size_t(1)].m_visits = 0;  // Force idx 1
         
         bool result = simulation();
         
@@ -21644,14 +21609,18 @@ void test_a01_sim() {
         // CRITICAL: Exactly 1 decision
         assert(simulation.ds.size() == 1);
         
-        // Verify decision
-        const resolution_lineage* decision_rl = *simulation.ds.begin();
-        assert(decision_rl->idx == 1);
+        // CRITICAL: Verify exact resolutions
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_a = lp.resolution(gl0, 1);
+        assert(simulation.rs.count(rl_a) == 1);
+        assert(simulation.ds.count(rl_a) == 1);  // Decision
         
-        // CRITICAL: ds ⊆ rs
-        assert(simulation.rs.count(decision_rl) == 1);
+        const goal_lineage* gl_c = lp.goal(rl_a, 0);
+        const resolution_lineage* rl_c = lp.resolution(gl_c, 3);
+        assert(simulation.rs.count(rl_c) == 1);
+        assert(simulation.ds.count(rl_c) == 0);  // Unit prop
         
-        // CRITICAL: Avoidance modified (rl(gl0,1) erased after resolution)
+        // CRITICAL: Avoidance modified (rl_a erased after resolution)
         assert(simulation.as_copy.size() == 1);
         const a01_decision_store& remaining = *simulation.as_copy.begin();
         // After making rl(gl0,1), it should be erased from avoidance
@@ -21699,8 +21668,10 @@ void test_a01_sim() {
         // CRITICAL: Exactly 1 resolution (p(a)→q(b))
         assert(simulation.rs.size() == 1);
         
-        const resolution_lineage* rl = *simulation.rs.begin();
-        assert(rl->idx == 0);
+        // CRITICAL: Verify exact resolution
+        const goal_lineage* gl_p = lp.goal(nullptr, 0);
+        const resolution_lineage* rl = lp.resolution(gl_p, 0);
+        assert(simulation.rs.count(rl) == 1);
         
         // CRITICAL: No decisions (unit prop)
         assert(simulation.ds.size() == 0);
@@ -21746,13 +21717,13 @@ void test_a01_sim() {
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
         
         // Force first decision on (gl0, idx 0)
-        const goal_lineage* gl0 = simulation.gs.begin()->first;
+        const goal_lineage* gl0_for_mcts = simulation.gs.begin()->first;
         
         root.m_visits = 100;
-        root.m_children[gl0].m_visits = 50;
-        root.m_children[gl0].m_children[size_t(0)].m_visits = 0;  // Force idx 0
-        root.m_children[gl0].m_children[size_t(1)].m_visits = 10;
-        root.m_children[gl0].m_children[size_t(1)].m_value = 10.0;
+        root.m_children[gl0_for_mcts].m_visits = 50;
+        root.m_children[gl0_for_mcts].m_children[size_t(0)].m_visits = 0;  // Force idx 0
+        root.m_children[gl0_for_mcts].m_children[size_t(1)].m_visits = 10;
+        root.m_children[gl0_for_mcts].m_children[size_t(1)].m_value = 10.0;
         
         // After first decision, need to pre-populate for second decision
         // gl_b will be created during simulation, can't pre-populate here
@@ -21766,8 +21737,14 @@ void test_a01_sim() {
         // CRITICAL: Exactly 3 resolutions (a→b decision, b→? decision, ? unit prop)
         assert(simulation.rs.size() == 3);
         
-        // CRITICAL: At least 1 decision (first one forced)
-        assert(simulation.ds.size() >= 1);
+        // CRITICAL: Exactly 2 decisions (a and b both have 2 candidates)
+        assert(simulation.ds.size() == 2);
+        
+        // CRITICAL: Verify first decision (a with idx 0)
+        const goal_lineage* gl_a = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_a = lp.resolution(gl_a, 0);
+        assert(simulation.rs.count(rl_a) == 1);
+        assert(simulation.ds.count(rl_a) == 1);
         
         // CRITICAL: ds ⊆ rs
         for (const resolution_lineage* rl : simulation.ds) {
@@ -21838,6 +21815,15 @@ void test_a01_sim() {
         // CRITICAL: Exactly 2 resolutions (recursive case, base case)
         assert(simulation.rs.size() == 2);
         
+        // CRITICAL: Verify exact resolutions
+        const goal_lineage* gl_append1 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_recursive = lp.resolution(gl_append1, 1);
+        assert(simulation.rs.count(rl_recursive) == 1);
+        
+        const goal_lineage* gl_append2 = lp.goal(rl_recursive, 0);
+        const resolution_lineage* rl_base = lp.resolution(gl_append2, 0);
+        assert(simulation.rs.count(rl_base) == 1);
+        
         // No decisions (both unit props after head elim)
         assert(simulation.ds.size() == 0);
         
@@ -21899,12 +21885,18 @@ void test_a01_sim() {
         // No decisions (all unit props after massive head elimination)
         assert(simulation.ds.size() == 0);
         
-        // Verify resolution indices (should be 10, 11, 12)
-        std::set<size_t> resolution_indices;
-        for (const resolution_lineage* rl : simulation.rs) {
-            resolution_indices.insert(rl->idx);
-        }
-        assert(resolution_indices == std::set<size_t>({10, 11, 12}));
+        // CRITICAL: Verify exact resolutions (should be db indices 10, 11, 12)
+        const goal_lineage* gl_p = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_p = lp.resolution(gl_p, 10);
+        assert(simulation.rs.count(rl_p) == 1);
+        
+        const goal_lineage* gl_q = lp.goal(rl_p, 0);
+        const resolution_lineage* rl_q = lp.resolution(gl_q, 11);
+        assert(simulation.rs.count(rl_q) == 1);
+        
+        const goal_lineage* gl_r = lp.goal(rl_p, 1);
+        const resolution_lineage* rl_r = lp.resolution(gl_r, 12);
+        assert(simulation.rs.count(rl_r) == 1);
         
         // Stores empty
         assert(simulation.gs.size() == 0);
