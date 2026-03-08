@@ -21902,6 +21902,643 @@ void test_a01_sim() {
         assert(simulation.gs.size() == 0);
         assert(simulation.cs.size() == 0);
     }
+    
+    // ========== TESTS WITH VARIABLES IN GOALS ==========
+    
+    // Test 26: Single variable in goal binds to atom
+    // Database: p(a)., p(b).
+    // Goal: :- p(X).
+    // Expected: X binds to a (after head elim removes p(b))
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {}});  // idx 0
+        db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("b")), {}});  // idx 1
+        
+        a01_goals goals;
+        const expr* X = ep.var(seq());
+        goals.push_back(ep.cons(ep.atom("p"), X));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 1 resolution
+        assert(simulation.rs.size() == 1);
+        
+        // CRITICAL: Verify X is bound using normalizer
+        normalizer norm(ep, bm);
+        const expr* X_normalized = norm(X);
+        assert(X_normalized == ep.atom("a") || X_normalized == ep.atom("b"));
+    }
+    
+    // Test 27: Variable binds to compound term
+    // Database: q(cons(a,nil)).
+    // Goal: :- q(X).
+    // Expected: X binds to cons(a,nil)
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        const expr* cons_a_nil = ep.cons(ep.atom("cons"), ep.cons(ep.atom("a"), ep.atom("nil")));
+        db.push_back(rule{ep.cons(ep.atom("q"), cons_a_nil), {}});  // idx 0
+        
+        a01_goals goals;
+        const expr* X = ep.var(seq());
+        goals.push_back(ep.cons(ep.atom("q"), X));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: X binds to cons(a,nil)
+        normalizer norm(ep, bm);
+        const expr* X_normalized = norm(X);
+        assert(X_normalized == cons_a_nil);
+    }
+    
+    // Test 28: Multiple variables in single goal
+    // Database: pair(a,b).
+    // Goal: :- pair(X,Y).
+    // Expected: X binds to a, Y binds to b
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        const expr* pair_a_b = ep.cons(ep.atom("pair"), ep.cons(ep.atom("a"), ep.atom("b")));
+        db.push_back(rule{pair_a_b, {}});  // idx 0
+        
+        a01_goals goals;
+        const expr* X = ep.var(seq());
+        const expr* Y = ep.var(seq());
+        const expr* pair_X_Y = ep.cons(ep.atom("pair"), ep.cons(X, Y));
+        goals.push_back(pair_X_Y);
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Verify X and Y bindings
+        normalizer norm(ep, bm);
+        const expr* X_normalized = norm(X);
+        const expr* Y_normalized = norm(Y);
+        assert(X_normalized == ep.atom("a"));
+        assert(Y_normalized == ep.atom("b"));
+    }
+    
+    // Test 29: Variable binds through rule chain
+    // Database: p(X) :- q(X)., q(hello).
+    // Goal: :- p(Y).
+    // Expected: Y binds to hello
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        const expr* X_rule = ep.var(seq());
+        db.push_back(rule{ep.cons(ep.atom("p"), X_rule), {ep.cons(ep.atom("q"), X_rule)}});  // idx 0
+        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("hello")), {}});  // idx 1
+        
+        a01_goals goals;
+        const expr* Y_goal = ep.var(seq());
+        goals.push_back(ep.cons(ep.atom("p"), Y_goal));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Verify Y binds to hello through chain
+        normalizer norm(ep, bm);
+        const expr* Y_normalized = norm(Y_goal);
+        assert(Y_normalized == ep.atom("hello"));
+    }
+    
+    // Test 30: Two starting goals with variables
+    // Database: p(a)., q(b).
+    // Goals: :- p(X), q(Y).
+    // Expected: X binds to a, Y binds to b
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {}});  // idx 0
+        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("b")), {}});  // idx 1
+        
+        a01_goals goals;
+        const expr* X = ep.var(seq());
+        const expr* Y = ep.var(seq());
+        goals.push_back(ep.cons(ep.atom("p"), X));
+        goals.push_back(ep.cons(ep.atom("q"), Y));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: 2 resolutions (one per goal)
+        assert(simulation.rs.size() == 2);
+        
+        // CRITICAL: Verify both variable bindings
+        normalizer norm(ep, bm);
+        const expr* X_normalized = norm(X);
+        const expr* Y_normalized = norm(Y);
+        assert(X_normalized == ep.atom("a"));
+        assert(Y_normalized == ep.atom("b"));
+    }
+    
+    // Test 31: Three starting goals with shared variable
+    // Database: p(a)., q(a)., r(a).
+    // Goals: :- p(X), q(X), r(X).
+    // Expected: X binds to a (unifies across all three)
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {}});  // idx 0
+        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 1
+        db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("a")), {}});  // idx 2
+        
+        a01_goals goals;
+        const expr* X = ep.var(seq());
+        goals.push_back(ep.cons(ep.atom("p"), X));
+        goals.push_back(ep.cons(ep.atom("q"), X));
+        goals.push_back(ep.cons(ep.atom("r"), X));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: 3 resolutions
+        assert(simulation.rs.size() == 3);
+        
+        // CRITICAL: X binds to a
+        normalizer norm(ep, bm);
+        const expr* X_normalized = norm(X);
+        assert(X_normalized == ep.atom("a"));
+    }
+    
+    // Test 32: Multiple goals with dependent variables
+    // Database: f(a,b)., g(b,c).
+    // Goals: :- f(X,Y), g(Y,Z).
+    // Expected: X=a, Y=b, Z=c (Y is shared and must unify)
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        const expr* f_a_b = ep.cons(ep.atom("f"), ep.cons(ep.atom("a"), ep.atom("b")));
+        const expr* g_b_c = ep.cons(ep.atom("g"), ep.cons(ep.atom("b"), ep.atom("c")));
+        db.push_back(rule{f_a_b, {}});  // idx 0
+        db.push_back(rule{g_b_c, {}});  // idx 1
+        
+        a01_goals goals;
+        const expr* X = ep.var(seq());
+        const expr* Y = ep.var(seq());
+        const expr* Z = ep.var(seq());
+        goals.push_back(ep.cons(ep.atom("f"), ep.cons(X, Y)));
+        goals.push_back(ep.cons(ep.atom("g"), ep.cons(Y, Z)));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Verify all three variables
+        normalizer norm(ep, bm);
+        const expr* X_normalized = norm(X);
+        const expr* Y_normalized = norm(Y);
+        const expr* Z_normalized = norm(Z);
+        assert(X_normalized == ep.atom("a"));
+        assert(Y_normalized == ep.atom("b"));
+        assert(Z_normalized == ep.atom("c"));
+    }
+    
+    // Test 33: Variable binds to complex nested structure
+    // Database: tree(node(leaf(1), leaf(2))).
+    // Goal: :- tree(X).
+    // Expected: X binds to node(leaf(1), leaf(2))
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        const expr* leaf1 = ep.cons(ep.atom("leaf"), ep.atom("1"));
+        const expr* leaf2 = ep.cons(ep.atom("leaf"), ep.atom("2"));
+        const expr* node = ep.cons(ep.atom("node"), ep.cons(leaf1, leaf2));
+        const expr* tree = ep.cons(ep.atom("tree"), node);
+        db.push_back(rule{tree, {}});  // idx 0
+        
+        a01_goals goals;
+        const expr* X = ep.var(seq());
+        goals.push_back(ep.cons(ep.atom("tree"), X));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: X binds to the nested structure
+        normalizer norm(ep, bm);
+        const expr* X_normalized = norm(X);
+        assert(X_normalized == node);
+    }
+    
+    // Test 34: Multiple goals with rules spawning sub-goals with variables
+    // Database: p(X) :- q(X)., q(Y) :- r(Y)., r(hello).
+    // Goals: :- p(A), p(B).
+    // Expected: A=hello, B=hello
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        const expr* X = ep.var(seq());
+        const expr* Y = ep.var(seq());
+        db.push_back(rule{ep.cons(ep.atom("p"), X), {ep.cons(ep.atom("q"), X)}});  // idx 0
+        db.push_back(rule{ep.cons(ep.atom("q"), Y), {ep.cons(ep.atom("r"), Y)}});  // idx 1
+        db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("hello")), {}});  // idx 2
+        
+        a01_goals goals;
+        const expr* A = ep.var(seq());
+        const expr* B = ep.var(seq());
+        goals.push_back(ep.cons(ep.atom("p"), A));
+        goals.push_back(ep.cons(ep.atom("p"), B));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: 6 resolutions (p(A), q(...), r(...), p(B), q(...), r(...))
+        assert(simulation.rs.size() == 6);
+        
+        // CRITICAL: Both A and B bind to hello
+        normalizer norm(ep, bm);
+        const expr* A_normalized = norm(A);
+        const expr* B_normalized = norm(B);
+        assert(A_normalized == ep.atom("hello"));
+        assert(B_normalized == ep.atom("hello"));
+    }
+    
+    // Test 35: Five starting goals with mixed variables
+    // Database: a(1)., b(2)., c(3)., d(4)., e(5).
+    // Goals: :- a(V1), b(V2), c(V3), d(V4), e(V5).
+    // Expected: V1=1, V2=2, V3=3, V4=4, V5=5
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        db.push_back(rule{ep.cons(ep.atom("a"), ep.atom("1")), {}});  // idx 0
+        db.push_back(rule{ep.cons(ep.atom("b"), ep.atom("2")), {}});  // idx 1
+        db.push_back(rule{ep.cons(ep.atom("c"), ep.atom("3")), {}});  // idx 2
+        db.push_back(rule{ep.cons(ep.atom("d"), ep.atom("4")), {}});  // idx 3
+        db.push_back(rule{ep.cons(ep.atom("e"), ep.atom("5")), {}});  // idx 4
+        
+        a01_goals goals;
+        const expr* V1 = ep.var(seq());
+        const expr* V2 = ep.var(seq());
+        const expr* V3 = ep.var(seq());
+        const expr* V4 = ep.var(seq());
+        const expr* V5 = ep.var(seq());
+        goals.push_back(ep.cons(ep.atom("a"), V1));
+        goals.push_back(ep.cons(ep.atom("b"), V2));
+        goals.push_back(ep.cons(ep.atom("c"), V3));
+        goals.push_back(ep.cons(ep.atom("d"), V4));
+        goals.push_back(ep.cons(ep.atom("e"), V5));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: 5 resolutions
+        assert(simulation.rs.size() == 5);
+        
+        // CRITICAL: Verify all five variables
+        normalizer norm(ep, bm);
+        assert(norm(V1) == ep.atom("1"));
+        assert(norm(V2) == ep.atom("2"));
+        assert(norm(V3) == ep.atom("3"));
+        assert(norm(V4) == ep.atom("4"));
+        assert(norm(V5) == ep.atom("5"));
+    }
+    
+    // Test 36: Variable in goal with decision required
+    // Database: p(X) :- q(X)., p(X) :- r(X)., q(apple)., r(banana).
+    // Goal: :- p(Fruit).
+    // Expected: Fruit binds to apple or banana (depends on MCTS decision)
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        const expr* X1 = ep.var(seq());
+        const expr* X2 = ep.var(seq());
+        db.push_back(rule{ep.cons(ep.atom("p"), X1), {ep.cons(ep.atom("q"), X1)}});  // idx 0
+        db.push_back(rule{ep.cons(ep.atom("p"), X2), {ep.cons(ep.atom("r"), X2)}});  // idx 1
+        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("apple")), {}});  // idx 2
+        db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("banana")), {}});  // idx 3
+        
+        a01_goals goals;
+        const expr* Fruit = ep.var(seq());
+        goals.push_back(ep.cons(ep.atom("p"), Fruit));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        // Force decision on idx 0 (q path -> apple)
+        const goal_lineage* gl0_for_mcts = simulation.gs.begin()->first;
+        root.m_visits = 100;
+        root.m_children[gl0_for_mcts].m_visits = 50;
+        root.m_children[gl0_for_mcts].m_children[size_t(0)].m_visits = 0;  // Force idx 0
+        root.m_children[gl0_for_mcts].m_children[size_t(1)].m_visits = 10;
+        root.m_children[gl0_for_mcts].m_children[size_t(1)].m_value = 10.0;
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Exactly 1 decision
+        assert(simulation.ds.size() == 1);
+        
+        // CRITICAL: Fruit binds to apple (based on forced decision)
+        normalizer norm(ep, bm);
+        const expr* Fruit_normalized = norm(Fruit);
+        assert(Fruit_normalized == ep.atom("apple"));
+    }
+    
+    // Test 37: Partial instantiation with variable
+    // Database: link(a,b)., link(b,c)., path(X,Y) :- link(X,Y)., path(X,Z) :- link(X,Y), path(Y,Z).
+    // Goal: :- path(a,Dest).
+    // Expected: Dest binds to b or c depending on resolution
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        const expr* link_a_b = ep.cons(ep.atom("link"), ep.cons(ep.atom("a"), ep.atom("b")));
+        const expr* link_b_c = ep.cons(ep.atom("link"), ep.cons(ep.atom("b"), ep.atom("c")));
+        db.push_back(rule{link_a_b, {}});  // idx 0
+        db.push_back(rule{link_b_c, {}});  // idx 1
+        
+        const expr* X1 = ep.var(seq());
+        const expr* Y1 = ep.var(seq());
+        const expr* path_base = ep.cons(ep.atom("path"), ep.cons(X1, Y1));
+        const expr* link_X1_Y1 = ep.cons(ep.atom("link"), ep.cons(X1, Y1));
+        db.push_back(rule{path_base, {link_X1_Y1}});  // idx 2
+        
+        const expr* X2 = ep.var(seq());
+        const expr* Y2 = ep.var(seq());
+        const expr* Z2 = ep.var(seq());
+        const expr* path_rec = ep.cons(ep.atom("path"), ep.cons(X2, Z2));
+        const expr* link_X2_Y2 = ep.cons(ep.atom("link"), ep.cons(X2, Y2));
+        const expr* path_Y2_Z2 = ep.cons(ep.atom("path"), ep.cons(Y2, Z2));
+        db.push_back(rule{path_rec, {link_X2_Y2, path_Y2_Z2}});  // idx 3
+        
+        a01_goals goals;
+        const expr* Dest = ep.var(seq());
+        goals.push_back(ep.cons(ep.atom("path"), ep.cons(ep.atom("a"), Dest)));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: Dest binds to b or c
+        normalizer norm(ep, bm);
+        const expr* Dest_normalized = norm(Dest);
+        assert(Dest_normalized == ep.atom("b") || Dest_normalized == ep.atom("c"));
+    }
+    
+    // Test 38: Multiple goals with complex variable sharing
+    // Database: add(X,Y,Z) :- plus(X,Y,Z)., plus(1,2,3)., mul(A,B,C) :- times(A,B,C)., times(2,3,6).
+    // Goals: :- add(1,2,Sum), mul(2,3,Prod).
+    // Expected: Sum=3, Prod=6
+    {
+        trail t;
+        t.push();
+        
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        
+        a01_database db;
+        const expr* X = ep.var(seq());
+        const expr* Y = ep.var(seq());
+        const expr* Z = ep.var(seq());
+        const expr* add_rule = ep.cons(ep.atom("add"), ep.cons(X, ep.cons(Y, Z)));
+        const expr* plus_body = ep.cons(ep.atom("plus"), ep.cons(X, ep.cons(Y, Z)));
+        db.push_back(rule{add_rule, {plus_body}});  // idx 0
+        
+        const expr* plus_fact = ep.cons(ep.atom("plus"), ep.cons(ep.atom("1"), ep.cons(ep.atom("2"), ep.atom("3"))));
+        db.push_back(rule{plus_fact, {}});  // idx 1
+        
+        const expr* A = ep.var(seq());
+        const expr* B = ep.var(seq());
+        const expr* C = ep.var(seq());
+        const expr* mul_rule = ep.cons(ep.atom("mul"), ep.cons(A, ep.cons(B, C)));
+        const expr* times_body = ep.cons(ep.atom("times"), ep.cons(A, ep.cons(B, C)));
+        db.push_back(rule{mul_rule, {times_body}});  // idx 2
+        
+        const expr* times_fact = ep.cons(ep.atom("times"), ep.cons(ep.atom("2"), ep.cons(ep.atom("3"), ep.atom("6"))));
+        db.push_back(rule{times_fact, {}});  // idx 3
+        
+        a01_goals goals;
+        const expr* Sum = ep.var(seq());
+        const expr* Prod = ep.var(seq());
+        goals.push_back(ep.cons(ep.atom("add"), ep.cons(ep.atom("1"), ep.cons(ep.atom("2"), Sum))));
+        goals.push_back(ep.cons(ep.atom("mul"), ep.cons(ep.atom("2"), ep.cons(ep.atom("3"), Prod))));
+        
+        a01_avoidance_store as;
+        
+        monte_carlo::tree_node<a01_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        
+        bool result = simulation();
+        
+        // CRITICAL: Solution found
+        assert(result == true);
+        
+        // CRITICAL: 4 resolutions (add->plus fact, mul->times fact)
+        assert(simulation.rs.size() == 4);
+        
+        // CRITICAL: Verify both results
+        normalizer norm(ep, bm);
+        const expr* Sum_normalized = norm(Sum);
+        const expr* Prod_normalized = norm(Prod);
+        assert(Sum_normalized == ep.atom("3"));
+        assert(Prod_normalized == ep.atom("6"));
+    }
 }
 
 void unit_test_main() {
