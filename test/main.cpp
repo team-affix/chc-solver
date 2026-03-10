@@ -22046,6 +22046,18 @@ void test_a01_sim() {
         // CRITICAL: 2 resolutions (one per goal)
         assert(simulation.rs.size() == 2);
         
+        // CRITICAL: Verify exact resolutions
+        const goal_lineage* gl_p = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_p = lp.resolution(gl_p, 0);
+        assert(simulation.rs.count(rl_p) == 1);
+        
+        const goal_lineage* gl_q = lp.goal(nullptr, 1);
+        const resolution_lineage* rl_q = lp.resolution(gl_q, 1);
+        assert(simulation.rs.count(rl_q) == 1);
+        
+        // CRITICAL: No decisions (both unit props)
+        assert(simulation.ds.size() == 0);
+        
         // CRITICAL: Verify both variable bindings
         normalizer norm(ep, bm);
         const expr* X_normalized = norm(X);
