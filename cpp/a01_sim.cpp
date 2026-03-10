@@ -1,9 +1,5 @@
 #include "../hpp/a01_sim.hpp"
 
-a01_sim::~a01_sim() {
-    t.pop();
-}
-
 a01_sim::a01_sim(
     size_t max_resolutions,
     const a01_database& db,
@@ -35,7 +31,6 @@ a01_sim::a01_sim(
     ga(gs, cs, db),
     gr(rs, gs, cs, db, cp, bm, lp, ga, as_copy)
 {
-    t.push();
     size_t i = 0;
     for (const auto& goal : goals)
         ga(lp.goal(nullptr, i++), goal);

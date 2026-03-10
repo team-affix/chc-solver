@@ -14,29 +14,25 @@
 
 // struct a01 {
 //     a01(
+//         const a01_database&,
+//         const std::set<const expr*>&,
 //         trail&,
 //         sequencer&,
 //         expr_pool&,
-//         bind_map&,
-//         const a01_database&,
-//         const std::set<const expr*>&
+//         bind_map&
 //     );
 //     std::optional<a01_resolution_store> operator()();
 // #ifndef DEBUG
 // private:
 // #endif
+//     const a01_database& db;
 //     trail& t;
 //     sequencer& vars;
 //     expr_pool& ep;
 //     bind_map& bm;
-//     const a01_database& db;
 
 //     lineage_pool lp;
 
-//     a01_goal_store gs;
-//     a01_candidate_store cs;
-//     a01_resolution_store rs;
-//     a01_decision_store ds;
 //     a01_avoidance_store as;
 // };
 

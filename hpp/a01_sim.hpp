@@ -13,7 +13,6 @@
 #include "a01_goal_resolver.hpp"
 
 struct a01_sim {
-    ~a01_sim();
     a01_sim(
         size_t,
         const a01_database&,
