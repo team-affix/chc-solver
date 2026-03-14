@@ -27,6 +27,7 @@ struct a01_sim {
     );
     bool operator()();
     const a01_decision_store& decisions() const;
+    const a01_resolution_store& resolutions() const;
 #ifndef DEBUG
 private:
 #endif

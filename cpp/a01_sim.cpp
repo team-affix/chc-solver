@@ -78,3 +78,7 @@ bool a01_sim::operator()() {
 const a01_decision_store& a01_sim::decisions() const {
     return ds;
 }
+
+const a01_resolution_store& a01_sim::resolutions() const {
+    return rs;
+}
