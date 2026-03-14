@@ -25255,7 +25255,7 @@ void test_a01_next_avoidance() {
         assert(avoidance.count(rl_a1) == 1 || avoidance.count(rl_b2) == 1);
     }
 
-    // Test 2: Three goals share variable X — no single X value satisfies all three.
+    // Test 11: Three goals share variable X — no single X value satisfies all three.
     //
     // Goals: { a(X), b(X), c(X) }   — all three share variable X
     //   Rule 0: a(1).   Rule 1: a(2).        →  X ∈ {1, 2}  for a
@@ -25324,7 +25324,7 @@ void test_a01_next_avoidance() {
         assert(is_a_rule || is_b_rule || is_c_rule);
     }
 
-    // Test 3: Two independent variables, compound goal c(X,Y) teaches MCTS goal ordering.
+    // Test 12: Two independent variables, compound goal c(X,Y) teaches MCTS goal ordering.
     //
     // Goals: { a(X), b(Y), c(X,Y) }   — X shared by a and c; Y shared by b and c
     //   Rule 0: a(1).  Rule 1: a(2).        →  X ∈ {1, 2}
