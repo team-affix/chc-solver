@@ -80,12 +80,12 @@ bool a01::sim_one(monte_carlo::tree_node<a01_decider::choice>& root, a01_decisio
     // run the simulation
     bool sim_result = sim_instance();
 
-    // terminate the simulation
-    sim.terminate(-ds.size());
-
     // export the decisions and resolutions
     ds = sim_instance.decisions();
     rs = sim_instance.resolutions();
+
+    // terminate the simulation
+    sim.terminate(-(double)ds.size());
 
     // return the result of the simulation
     return sim_result;
