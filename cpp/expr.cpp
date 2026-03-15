@@ -1,3 +1,4 @@
+#include <stdexcept>
 #include "../hpp/expr.hpp"
 
 expr_pool::expr_pool(trail& t) : trail_ref(t) {
@@ -14,6 +15,23 @@ const expr* expr_pool::var(uint32_t i) {
 
 const expr* expr_pool::cons(const expr* l, const expr* r) {
     return intern(expr{expr::cons{l, r}});
+}
+
+const expr* expr_pool::import(const expr* e) {
+    // if the expression already in pool, return it
+    if (exprs.contains(*e))
+        return e;
+    
+    // if the expression is a leaf, just intern it
+    if (std::holds_alternative<expr::atom>(e->content) ||
+        std::holds_alternative<expr::var>(e->content))
+        return intern(expr{e->content});
+    
+    // if the expression is a cons cell, copy the lhs and rhs
+    if (const expr::cons* c = std::get_if<expr::cons>(&e->content))
+        return cons(import(c->lhs), import(c->rhs));
+
+    throw std::runtime_error("Unsupported expression type");
 }
 
 size_t expr_pool::size() const {
