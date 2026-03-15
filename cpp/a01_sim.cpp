@@ -9,6 +9,8 @@ a01_sim::a01_sim(
     expr_pool& ep,
     bind_map& bm,
     lineage_pool& lp,
+    a01_resolution_store& rs,
+    a01_decision_store& ds,
     a01_avoidance_store as,
     monte_carlo::simulation<a01_decider::choice, std::mt19937>& sim
 ) :
@@ -16,11 +18,11 @@ a01_sim::a01_sim(
     db(db),
     t(t),
     lp(lp),
+    rs(rs),
+    ds(ds),
     as_copy(as),
     gs({}),
     cs({}),
-    rs({}),
-    ds({}),
     cp(vars, ep),
     sd(gs),
     cd(gs, cs),
@@ -31,6 +33,11 @@ a01_sim::a01_sim(
     ga(gs, cs, db),
     gr(rs, gs, cs, db, cp, bm, lp, ga, as_copy)
 {
+    // clear the resolution and decision stores
+    // for the start of the simulation
+    rs.clear();
+    ds.clear();
+
     size_t i = 0;
     for (const auto& goal : goals)
         ga(lp.goal(nullptr, i++), goal);
@@ -73,12 +80,4 @@ bool a01_sim::operator()() {
 
     // return whether a solution was found
     return sd();
-}
-
-const a01_decision_store& a01_sim::decisions() const {
-    return ds;
-}
-
-const a01_resolution_store& a01_sim::resolutions() const {
-    return rs;
 }

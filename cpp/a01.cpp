@@ -78,14 +78,10 @@ bool a01::sim_one(monte_carlo::tree_node<a01_decider::choice>& root, a01_decisio
     monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, c, rng);
 
     // construct the a01_sim
-    a01_sim sim_instance(max_resolutions, db, goals, t, vars, ep, bm, lp, as, sim);
+    a01_sim sim_instance(max_resolutions, db, goals, t, vars, ep, bm, lp, rs, ds, as, sim);
 
     // run the simulation
     bool sim_result = sim_instance();
-
-    // export the decisions and resolutions
-    ds = sim_instance.decisions();
-    rs = sim_instance.resolutions();
 
     // terminate the simulation
     sim.terminate(-(double)ds.size());

@@ -20051,7 +20051,9 @@ void test_a01_sim_constructor() {
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         {
-            a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+            a01_resolution_store rs;
+            a01_decision_store ds;
+            a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
             
             // Verify max_resolutions stored
             assert(simulation.max_resolutions == 100);
@@ -20098,13 +20100,10 @@ void test_a01_sim_constructor() {
             assert(&simulation.gr.db == &db);
             assert(&simulation.gr.bm == &bm);
             assert(&simulation.gr.lp == &lp);
+            assert(&simulation.rs == &rs);
+            assert(&simulation.ds == &ds);
             assert(&simulation.gr.ga == &simulation.ga);
             assert(&simulation.gr.as == &simulation.as_copy);
-            
-            // CRITICAL: Test decisions() accessor
-            const a01_decision_store& decisions_ref = simulation.decisions();
-            assert(&decisions_ref == &simulation.ds);
-            assert(decisions_ref.size() == 0);
         }
     }
     
@@ -20129,9 +20128,12 @@ void test_a01_sim_constructor() {
         monte_carlo::tree_node<a01_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
-        
+
         {
-            a01_sim simulation(50, db, goals, t, seq, ep, bm, lp, as, sim);
+            a01_resolution_store rs;
+            a01_decision_store ds;
+
+            a01_sim simulation(50, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
             
             // CRITICAL: Goal added to goal_store with index 0
             assert(simulation.gs.size() == 1);
@@ -20152,10 +20154,6 @@ void test_a01_sim_constructor() {
             
             // Max resolutions stored
             assert(simulation.max_resolutions == 50);
-            
-            // CRITICAL: Test decisions() accessor
-            assert(&simulation.decisions() == &simulation.ds);
-            assert(simulation.decisions().size() == 0);
             
             // CRITICAL: Verify lineage comes from correct pool
             assert(lp.goal_lineages.count(*gl) == 1);
@@ -20188,7 +20186,10 @@ void test_a01_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(200, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+
+        a01_sim simulation(200, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: Three goals added with indices 0, 1, 2
         assert(simulation.gs.size() == 3);
@@ -20258,10 +20259,6 @@ void test_a01_sim_constructor() {
         assert(lp.goal_lineages.count(*gl1) == 1);
         assert(lp.goal_lineages.count(*gl2) == 1);
         
-        // CRITICAL: Test decisions() accessor
-        assert(&simulation.decisions() == &simulation.ds);
-        assert(simulation.decisions().size() == 0);
-        
         // CRITICAL: Verify resolution and decision stores empty
         assert(simulation.rs.size() == 0);
         assert(simulation.ds.size() == 0);
@@ -20292,7 +20289,9 @@ void test_a01_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: All goals added to goal_store
         assert(simulation.gs.size() == 3);
@@ -20324,7 +20323,6 @@ void test_a01_sim_constructor() {
         // CRITICAL: Verify resolution and decision stores empty
         assert(simulation.rs.size() == 0);
         assert(simulation.ds.size() == 0);
-        assert(simulation.decisions().size() == 0);
         
         // CRITICAL: Verify goal expressions are correct
         assert(simulation.gs.at(gl_p) == ep.atom("p"));
@@ -20361,7 +20359,9 @@ void test_a01_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Goal added
         assert(simulation.gs.size() == 1);
@@ -20384,7 +20384,6 @@ void test_a01_sim_constructor() {
         // CRITICAL: Verify resolution/decision stores empty
         assert(simulation.rs.size() == 0);
         assert(simulation.ds.size() == 0);
-        assert(simulation.decisions().size() == 0);
         
         // CRITICAL: Verify goal expression content
         assert(simulation.gs.at(gl) == ep.atom("p"));
@@ -20425,7 +20424,9 @@ void test_a01_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: as_copy is a COPY, not a reference
         assert(&simulation.as_copy != &as);
@@ -20469,7 +20470,9 @@ void test_a01_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(75, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(75, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: 4 goals added
         assert(simulation.gs.size() == 4);
@@ -20524,7 +20527,6 @@ void test_a01_sim_constructor() {
         // CRITICAL: Verify resolution/decision stores empty
         assert(simulation.rs.size() == 0);
         assert(simulation.ds.size() == 0);
-        assert(simulation.decisions().size() == 0);
         
         // CRITICAL: Verify all lineages from correct pool and have correct properties
         assert(lp.goal_lineages.count(*gl0) == 1);
@@ -20586,7 +20588,9 @@ void test_a01_sim_constructor() {
         
         size_t as_size_before = as.size();
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: as_copy has same content
         assert(simulation.as_copy.size() == 2);
@@ -20617,7 +20621,9 @@ void test_a01_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Verify copier references match (via members)
         assert(&simulation.cp.expr_pool_ref == &ep);
@@ -20645,17 +20651,23 @@ void test_a01_sim_constructor() {
         
         // Test various limits
         {
-            a01_sim sim1(1, db, goals, t, seq, ep, bm, lp, as, sim);
+            a01_resolution_store rs;
+            a01_decision_store ds;
+            a01_sim sim1(1, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
             assert(sim1.max_resolutions == 1);
         }
         
         {
-            a01_sim sim2(1000, db, goals, t, seq, ep, bm, lp, as, sim);
+            a01_resolution_store rs;
+            a01_decision_store ds;
+            a01_sim sim2(1000, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
             assert(sim2.max_resolutions == 1000);
         }
         
         {
-            a01_sim sim3(999999, db, goals, t, seq, ep, bm, lp, as, sim);
+            a01_resolution_store rs;
+            a01_decision_store ds;
+            a01_sim sim3(999999, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
             assert(sim3.max_resolutions == 999999);
         }
     }
@@ -20678,18 +20690,13 @@ void test_a01_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: decisions() returns reference to ds
-        const a01_decision_store& decisions_ref = simulation.decisions();
-        assert(&decisions_ref == &simulation.ds);
-        
-        // CRITICAL: Multiple calls return same reference
-        const a01_decision_store& decisions_ref2 = simulation.decisions();
-        assert(&decisions_ref == &decisions_ref2);
-        
-        // Empty at construction
-        assert(decisions_ref.size() == 0);
+        assert(&simulation.ds == &ds);
+        assert(&simulation.rs == &rs);
     }
     
     // Test 14: Verify component initialization with non-empty avoidance store
@@ -20719,7 +20726,9 @@ void test_a01_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: Verify as_copy has content, original unchanged
         assert(simulation.as_copy.size() == 1);
@@ -20729,8 +20738,8 @@ void test_a01_sim_constructor() {
         // CRITICAL: Verify gr resolver references the copy (public in DEBUG)
         assert(&simulation.gr.as == &simulation.as_copy);
         
-        // CRITICAL: Verify decisions() accessor works
-        assert(simulation.decisions().size() == 0);
+        assert(&simulation.ds == &ds);
+        assert(&simulation.rs == &rs);
     }
     
     // Test 15: Verify all store sizes after construction with various goal counts
@@ -20759,7 +20768,9 @@ void test_a01_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(500, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(500, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: 5 goals added
         assert(simulation.gs.size() == 5);
@@ -20771,7 +20782,8 @@ void test_a01_sim_constructor() {
         assert(simulation.rs.size() == 0);
         assert(simulation.ds.size() == 0);
         assert(simulation.as_copy.size() == 0);
-        assert(simulation.decisions().size() == 0);
+        assert(simulation.ds.size() == 0);
+        assert(simulation.rs.size() == 0);
         
         // CRITICAL: Verify each goal has 2 candidates
         for (const auto& [gl, ge] : simulation.gs) {
@@ -20810,7 +20822,9 @@ void test_a01_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: Verify ordering - idx matches position in list
         const goal_lineage* gl_idx0 = nullptr;
@@ -20870,7 +20884,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Execute simulation
         bool result = simulation();
@@ -20883,7 +20899,6 @@ void test_a01_sim() {
         
         // CRITICAL: No decisions made (unit propagation only, no dec() calls)
         assert(simulation.ds.size() == 0);
-        assert(simulation.decisions().size() == 0);
         
         // CRITICAL: Resolution store has exactly 1 resolution (the unit propagation)
         assert(simulation.rs.size() == 1);
@@ -20926,7 +20941,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -20942,7 +20959,7 @@ void test_a01_sim() {
         // CRITICAL: No resolutions or decisions made
         assert(simulation.rs.size() == 0);
         assert(simulation.ds.size() == 0);
-        assert(simulation.decisions().size() == 0);
+        assert(simulation.rs.size() == 0);
     }
     
     // Test 3: Head elimination removes non-unifying candidates
@@ -20971,7 +20988,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -21032,7 +21051,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -21090,7 +21111,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -21153,7 +21176,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: Pre-populate MCTS tree to force decision on (gl0, idx 1)
         // Get the actual goal pointer from simulation.gs
@@ -21228,7 +21253,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Note: With only 1 candidate per goal, both will be unit props
         
@@ -21286,7 +21313,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Pre-populate MCTS to force decision on idx 0
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -21362,7 +21391,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(3, db, goals, t, seq, ep, bm, lp, as, sim);  // Max 3 resolutions!
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(3, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);  // Max 3 resolutions!
         
         bool result = simulation();
         
@@ -21432,7 +21463,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Before execution, verify 5 candidates added
         const goal_lineage* gl0_for_check = lp.goal(nullptr, 0);
@@ -21504,7 +21537,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Verify avoidance copied
         assert(simulation.as_copy.size() == 1);
@@ -21562,7 +21597,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Pre-populate MCTS to force decision on (gl0, idx 0)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -21629,7 +21666,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -21675,7 +21714,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -21739,7 +21780,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -21796,7 +21839,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -21860,7 +21905,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -21922,7 +21969,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Force decision on idx 0
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -21989,7 +22038,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Initial state: 20 candidates
         const goal_lineage* gl0_for_check = lp.goal(nullptr, 0);
@@ -22041,7 +22092,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -22107,7 +22160,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Force decision on idx 1
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -22178,7 +22233,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -22234,7 +22291,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Force first decision on (gl0, idx 0)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -22325,7 +22384,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -22389,7 +22450,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Verify 30 candidates initially
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
@@ -22453,7 +22516,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Pre-populate MCTS to force decision on idx 0
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -22513,7 +22578,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -22555,7 +22622,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -22598,7 +22667,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -22640,7 +22711,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -22700,7 +22773,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -22767,7 +22842,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -22832,7 +22909,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -22877,7 +22956,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -22965,7 +23046,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -23042,7 +23125,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Force decision on idx 0 (q path -> apple)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -23109,7 +23194,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Pre-populate MCTS to force base case (idx 2)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -23196,7 +23283,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -23268,7 +23357,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -23317,7 +23408,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Pre-populate MCTS to force idx 2 (NOT idx 0, to prove MCTS works!)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -23380,7 +23473,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -23432,7 +23527,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -23491,7 +23588,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -23560,7 +23659,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -23648,7 +23749,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -23723,7 +23826,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -23773,7 +23878,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Pre-populate MCTS to force idx 1 (bob)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -23847,7 +23954,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -23905,7 +24014,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -23958,7 +24069,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(5, db, goals, t, seq, ep, bm, lp, as, sim);  // Low max_resolutions
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(5, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);  // Low max_resolutions
         
         bool result = simulation();
         
@@ -24000,7 +24113,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -24042,7 +24157,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -24109,7 +24226,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -24197,7 +24316,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -24245,7 +24366,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -24292,7 +24415,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -24346,7 +24471,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(5, db, goals, t, seq, ep, bm, lp, as, sim);  // Max 5
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(5, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);  // Max 5
         
         bool result = simulation();
         
@@ -24386,7 +24513,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -24435,7 +24564,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Pre-populate MCTS to force idx 2
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -24498,7 +24629,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -24542,7 +24675,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -24602,7 +24737,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -24640,7 +24777,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         
@@ -24682,7 +24821,9 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, as, sim);
+        a01_resolution_store rs;
+        a01_decision_store ds;
+        a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
         

@@ -22,12 +22,12 @@ struct a01_sim {
         expr_pool&,
         bind_map&,
         lineage_pool&,
+        a01_resolution_store&,
+        a01_decision_store&,
         a01_avoidance_store,
         monte_carlo::simulation<a01_decider::choice, std::mt19937>&
     );
     bool operator()();
-    const a01_decision_store& decisions() const;
-    const a01_resolution_store& resolutions() const;
 #ifndef DEBUG
 private:
 #endif
@@ -36,13 +36,13 @@ private:
     const a01_database& db;
     trail& t;
     lineage_pool& lp;
+    a01_resolution_store& rs;
+    a01_decision_store& ds;
     
     a01_avoidance_store as_copy;
 
     a01_goal_store gs;
     a01_candidate_store cs;
-    a01_resolution_store rs;
-    a01_decision_store ds;
 
     
     copier cp;
