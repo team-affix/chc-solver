@@ -18,10 +18,6 @@ const expr* expr_pool::cons(const expr* l, const expr* r) {
 }
 
 const expr* expr_pool::import(const expr* e) {
-    // if the expression already in pool, return it
-    if (exprs.contains(*e))
-        return e;
-    
     // if the expression is a leaf, just intern it
     if (std::holds_alternative<expr::atom>(e->content) ||
         std::holds_alternative<expr::var>(e->content))
