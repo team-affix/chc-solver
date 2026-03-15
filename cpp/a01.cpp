@@ -38,6 +38,10 @@ a01::a01(
 bool a01::operator()(size_t iterations, std::optional<a01_resolution_store>& soln) {
     // default to no solution
     soln = std::nullopt;
+
+    // if the a01 has already found the last solution, then it is refuted
+    if (as.contains({}))
+        return false;
     
     for (size_t i = 0; i < iterations; i++) {
         // trim the lineage pool between iterations
@@ -57,12 +61,8 @@ bool a01::operator()(size_t iterations, std::optional<a01_resolution_store>& sol
             lp.pin(rl);
 
         // check for solution
-        if (soln.has_value()) {
-            // pin the solution
-            for (const auto& rl : soln.value())
-                lp.pin(rl);
+        if (soln.has_value())
             break;
-        }
     }
     
     return true;

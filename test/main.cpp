@@ -26425,6 +26425,10 @@ void test_a01_operator() {
 
         // CRITICAL: the two solutions bind X to different names
         assert(parent1 != parent2);
+
+        // Test for refutation
+        bool result3 = solver(1000, soln);
+        assert(result3 == false);
     }
 
     // Test 8: Boolean SAT — formula (P ∨ Q) ∧ (¬P ∨ Q)
