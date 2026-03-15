@@ -39,6 +39,18 @@ void lineage_pool::trim() {
     }
 }
 
+const goal_lineage* lineage_pool::import(const goal_lineage* l) {
+    if (l == nullptr)
+        return nullptr;
+    return goal(import(l->parent), l->idx);
+}
+
+const resolution_lineage* lineage_pool::import(const resolution_lineage* l) {
+    if (l == nullptr)
+        return nullptr;
+    return resolution(import(l->parent), l->idx);
+}
+
 const goal_lineage* lineage_pool::intern(goal_lineage&& l) {
     return &goal_lineages.emplace(std::move(l), false).first->first;
 }

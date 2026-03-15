@@ -24,6 +24,8 @@ struct lineage_pool {
     void pin(const goal_lineage*);
     void pin(const resolution_lineage*);
     void trim();
+    const goal_lineage* import(const goal_lineage*);
+    const resolution_lineage* import(const resolution_lineage*);
 #ifndef DEBUG
 private:
 #endif
