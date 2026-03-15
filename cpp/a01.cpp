@@ -40,6 +40,7 @@ bool a01::operator()(size_t iterations, std::optional<a01_resolution_store>& sol
     soln = std::nullopt;
 
     // if the a01 has already found the last solution, then it is refuted
+    // this is required if the last solution found required no decisions
     if (as.contains({}))
         return false;
     
