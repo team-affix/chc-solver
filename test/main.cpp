@@ -9931,6 +9931,179 @@ void test_lineage_pool_trim() {
     }
 }
 
+void test_lineage_pool_import() {
+
+    // Test 1: Import nullptr goal_lineage - must return nullptr without touching pool
+    {
+        lineage_pool pool;
+        const goal_lineage* imported = pool.import(static_cast<const goal_lineage*>(nullptr));
+        assert(imported == nullptr);
+        assert(pool.goal_lineages.empty());
+        assert(pool.resolution_lineages.empty());
+    }
+
+    // Test 2: Import nullptr resolution_lineage - must return nullptr without touching pool
+    {
+        lineage_pool pool;
+        const resolution_lineage* imported = pool.import(static_cast<const resolution_lineage*>(nullptr));
+        assert(imported == nullptr);
+        assert(pool.goal_lineages.empty());
+        assert(pool.resolution_lineages.empty());
+    }
+
+    // Test 3: Import stack root goal (nullptr parent) - interned in pool
+    {
+        lineage_pool pool;
+        goal_lineage g{nullptr, 7};
+        const goal_lineage* imported = pool.import(&g);
+        assert(imported != nullptr);
+        assert(imported != &g);
+        assert(imported->parent == nullptr);
+        assert(imported->idx == 7);
+        assert(pool.goal_lineages.size() == 1);
+        assert(pool.resolution_lineages.size() == 0);
+        assert(pool.goal_lineages.count(*imported) == 1);
+    }
+
+    // Test 4: Import stack root resolution (nullptr parent) - interned in pool
+    {
+        lineage_pool pool;
+        resolution_lineage r{nullptr, 3};
+        const resolution_lineage* imported = pool.import(&r);
+        assert(imported != nullptr);
+        assert(imported != &r);
+        assert(imported->parent == nullptr);
+        assert(imported->idx == 3);
+        assert(pool.goal_lineages.size() == 0);
+        assert(pool.resolution_lineages.size() == 1);
+        assert(pool.resolution_lineages.count(*imported) == 1);
+    }
+
+    // Test 5: Import a two-level stack chain: goal(resolution(nullptr))
+    {
+        lineage_pool pool;
+        resolution_lineage r{nullptr, 1};
+        goal_lineage g{&r, 2};
+        const goal_lineage* imported = pool.import(&g);
+        assert(imported != nullptr);
+        assert(imported != &g);
+        assert(imported->idx == 2);
+        assert(pool.goal_lineages.size() == 1);
+        assert(pool.resolution_lineages.size() == 1);
+        const resolution_lineage* pool_r = imported->parent;
+        assert(pool_r != nullptr);
+        assert(pool_r != &r);
+        assert(pool_r->parent == nullptr);
+        assert(pool_r->idx == 1);
+        assert(pool.resolution_lineages.count(*pool_r) == 1);
+    }
+
+    // Test 6: Import a three-level stack chain: goal2(resolution1(goal0(nullptr)))
+    {
+        lineage_pool pool;
+        goal_lineage g0{nullptr, 0};
+        resolution_lineage r1{&g0, 1};
+        goal_lineage g2{&r1, 2};
+        const goal_lineage* imported = pool.import(&g2);
+        assert(imported != nullptr);
+        assert(imported->idx == 2);
+        assert(pool.goal_lineages.size() == 2);
+        assert(pool.resolution_lineages.size() == 1);
+        const resolution_lineage* pool_r1 = imported->parent;
+        assert(pool_r1 != nullptr);
+        assert(pool_r1 != &r1);
+        assert(pool_r1->idx == 1);
+        const goal_lineage* pool_g0 = pool_r1->parent;
+        assert(pool_g0 != nullptr);
+        assert(pool_g0 != &g0);
+        assert(pool_g0->parent == nullptr);
+        assert(pool_g0->idx == 0);
+    }
+
+    // Test 7: Import goal already entirely in pool - returns same pointer, pool unchanged
+    {
+        lineage_pool pool;
+        const goal_lineage* pool_g = pool.goal(nullptr, 5);
+        const goal_lineage* imported = pool.import(pool_g);
+        assert(imported == pool_g);
+        assert(pool.goal_lineages.size() == 1);
+        assert(pool.resolution_lineages.size() == 0);
+    }
+
+    // Test 8: Import resolution already entirely in pool - returns same pointer, pool unchanged
+    {
+        lineage_pool pool;
+        const resolution_lineage* pool_r = pool.resolution(nullptr, 5);
+        const resolution_lineage* imported = pool.import(pool_r);
+        assert(imported == pool_r);
+        assert(pool.goal_lineages.size() == 0);
+        assert(pool.resolution_lineages.size() == 1);
+    }
+
+    // Test 9: Import stack goal structurally identical to existing pool goal - must deduplicate
+    {
+        lineage_pool pool;
+        const goal_lineage* pool_g = pool.goal(nullptr, 9);
+        goal_lineage stack_g{nullptr, 9};
+        const goal_lineage* imported = pool.import(&stack_g);
+        assert(imported == pool_g);
+        assert(pool.goal_lineages.size() == 1);
+    }
+
+    // Test 10: Import stack resolution structurally identical to existing pool resolution - must deduplicate
+    {
+        lineage_pool pool;
+        const resolution_lineage* pool_r = pool.resolution(nullptr, 4);
+        resolution_lineage stack_r{nullptr, 4};
+        const resolution_lineage* imported = pool.import(&stack_r);
+        assert(imported == pool_r);
+        assert(pool.resolution_lineages.size() == 1);
+    }
+
+    // Test 11: Stack goal whose resolution parent is value-equal to an existing pool entry -
+    // parent deduplicates to existing pool pointer; only the goal is newly added
+    {
+        lineage_pool pool;
+        const resolution_lineage* pool_r = pool.resolution(nullptr, 1);
+        resolution_lineage stack_r{nullptr, 1};   // same value, different address
+        goal_lineage stack_g{&stack_r, 2};
+        const goal_lineage* imported = pool.import(&stack_g);
+        assert(imported != nullptr);
+        assert(imported->parent == pool_r);        // deduplicates to the existing pool resolution
+        assert(imported->idx == 2);
+        assert(pool.goal_lineages.size() == 1);
+        assert(pool.resolution_lineages.size() == 1);  // no new resolution was added
+    }
+
+    // Test 12: Cross-pool import - chain interned in pool1 is re-interned into pool2
+    // with completely fresh pool2 pointers; pool1 must be unaffected
+    {
+        lineage_pool pool1;
+        const goal_lineage*        p1_g0 = pool1.goal(nullptr, 0);
+        const resolution_lineage*  p1_r1 = pool1.resolution(p1_g0, 1);
+        const goal_lineage*        p1_g2 = pool1.goal(p1_r1, 2);
+        assert(pool1.goal_lineages.size() == 2);
+        assert(pool1.resolution_lineages.size() == 1);
+
+        lineage_pool pool2;
+        const goal_lineage* p2_g2 = pool2.import(p1_g2);
+        assert(p2_g2 != p1_g2);
+        assert(p2_g2->idx == 2);
+        assert(pool2.goal_lineages.size() == 2);
+        assert(pool2.resolution_lineages.size() == 1);
+        const resolution_lineage* p2_r1 = p2_g2->parent;
+        assert(p2_r1 != p1_r1);
+        assert(p2_r1->idx == 1);
+        const goal_lineage* p2_g0 = p2_r1->parent;
+        assert(p2_g0 != p1_g0);
+        assert(p2_g0->parent == nullptr);
+        assert(p2_g0->idx == 0);
+        // pool1 must be completely unaffected
+        assert(pool1.goal_lineages.size() == 2);
+        assert(pool1.resolution_lineages.size() == 1);
+    }
+}
+
 void test_sequencer_constructor() {
     trail t;
     
@@ -27597,6 +27770,7 @@ void unit_test_main() {
     TEST(test_lineage_pool_pin_goal);
     TEST(test_lineage_pool_pin_resolution);
     TEST(test_lineage_pool_trim);
+    TEST(test_lineage_pool_import);
     TEST(test_sequencer_constructor);
     TEST(test_sequencer);
     TEST(test_copier_constructor);
