@@ -24848,6 +24848,206 @@ void test_a01_sim() {
     }
 }
 
+void test_a01_constructor_and_destructor() {
+    // Test 1: Basic construction - verify trail frame pushed and all fields stored correctly
+    {
+        trail t;
+        t.push();
+
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+
+        a01_database db;
+        a01_goals goals;
+        std::mt19937 rng(42);
+
+        size_t depth_before = t.depth();
+        assert(depth_before == 1);
+
+        {
+            a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
+
+            // CRITICAL: Constructor pushes one trail frame
+            assert(t.depth() == depth_before + 1);
+
+            // CRITICAL: References stored correctly
+            assert(&solver.db == &db);
+            assert(&solver.goals == &goals);
+            assert(&solver.t == &t);
+            assert(&solver.vars == &seq);
+            assert(&solver.bm == &bm);
+            assert(&solver.rng == &rng);
+
+            // CRITICAL: Scalar fields stored correctly
+            assert(solver.max_resolutions == 100);
+            assert(solver.iterations_per_avoidance == 10);
+            assert(solver.c == 1.414);
+
+            // CRITICAL: Avoidance store initialized empty
+            assert(solver.as.empty());
+        }
+
+        // CRITICAL: Destructor restores trail depth
+        assert(t.depth() == depth_before);
+    }
+
+    // Test 2: Construction on a fresh trail (depth 0 → 1 → 0)
+    {
+        trail t;
+
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+
+        a01_database db;
+        a01_goals goals;
+        std::mt19937 rng(0);
+
+        assert(t.depth() == 0);
+
+        {
+            a01 solver(db, goals, t, seq, bm, 1, 1, 0.0, rng);
+
+            // CRITICAL: Depth goes 0 → 1
+            assert(t.depth() == 1);
+            assert(solver.max_resolutions == 1);
+            assert(solver.iterations_per_avoidance == 1);
+            assert(solver.c == 0.0);
+        }
+
+        // CRITICAL: Depth returns to 0
+        assert(t.depth() == 0);
+    }
+
+    // Test 3: Constructor only adds a frame boundary, no undo actions
+    {
+        trail t;
+        t.push();
+
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+
+        a01_database db;
+        a01_goals goals;
+        std::mt19937 rng(42);
+
+        size_t undo_size_before = t.undo_stack.size();
+        size_t boundary_size_before = t.frame_boundary_stack.size();
+
+        {
+            a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
+
+            // CRITICAL: Only a frame boundary is pushed, not any undo action
+            assert(t.undo_stack.size() == undo_size_before);
+            assert(t.frame_boundary_stack.size() == boundary_size_before + 1);
+        }
+
+        // CRITICAL: Destructor removes the frame boundary; undo stack is unchanged
+        assert(t.frame_boundary_stack.size() == boundary_size_before);
+        assert(t.undo_stack.size() == undo_size_before);
+    }
+
+    // Test 4: Destructor rolls back undo actions logged within the a01 frame
+    {
+        trail t;
+        t.push();
+
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+
+        a01_database db;
+        a01_goals goals;
+        std::mt19937 rng(42);
+
+        bool undone = false;
+
+        {
+            a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
+
+            // Log an undo action into the a01's frame
+            t.log([&undone]() { undone = true; });
+
+            assert(!undone);
+        }
+
+        // CRITICAL: Destructor popped the a01 frame, triggering the logged undo action
+        assert(undone);
+    }
+
+    // Test 5: Destructor only pops the a01's frame, not the caller's frame
+    {
+        trail t;
+        t.push();
+
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+
+        a01_database db;
+        a01_goals goals;
+        std::mt19937 rng(42);
+
+        bool caller_undone = false;
+        t.log([&caller_undone]() { caller_undone = true; });
+
+        {
+            a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
+
+            // a01's frame is stacked on top of the caller's frame
+            assert(t.depth() == 2);
+        }
+
+        // CRITICAL: Only the a01's frame was popped; caller's undo action not triggered
+        assert(!caller_undone);
+        assert(t.depth() == 1);
+    }
+
+    // Test 6: Non-empty db and goals - verify references and contents accessible via solver
+    {
+        trail t;
+        t.push();
+
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+
+        a01_database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.cons(ep.atom("q"), ep.var(seq())), {ep.atom("p")}});
+
+        a01_goals goals;
+        goals.push_back(ep.cons(ep.atom("q"), ep.atom("a")));
+
+        std::mt19937 rng(999);
+
+        size_t depth_before = t.depth();
+
+        {
+            a01 solver(db, goals, t, seq, bm, 50, 5, 1.0, rng);
+
+            // CRITICAL: Frame pushed
+            assert(t.depth() == depth_before + 1);
+
+            // CRITICAL: db reference correct; content accessible through it
+            assert(&solver.db == &db);
+            assert(solver.db.size() == 2);
+
+            // CRITICAL: goals reference correct; content accessible through it
+            assert(&solver.goals == &goals);
+            assert(solver.goals.size() == 1);
+
+            // CRITICAL: Avoidance store empty on construction regardless of db/goals content
+            assert(solver.as.empty());
+        }
+
+        // CRITICAL: Destructor restores depth
+        assert(t.depth() == depth_before);
+    }
+}
+
 void test_a01_sim_one() {
     // Test 1: Immediate solution via unit propagation
     // db: {a.}, goals: {a.}
@@ -24860,7 +25060,6 @@ void test_a01_sim_one() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.atom("a"), {}});  // idx 0: a.
@@ -24869,7 +25068,7 @@ void test_a01_sim_one() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 100, 10, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
 
         monte_carlo::tree_node<a01_decider::choice> root;
         a01_decision_store ds;
@@ -24887,8 +25086,8 @@ void test_a01_sim_one() {
 
         // CRITICAL: rs has the single resolution
         assert(rs.size() == 1);
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = lp.resolution(gl0, 0);
+        const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
+        const resolution_lineage* rl0 = solver.lp.resolution(gl0, 0);
         assert(rs.count(rl0) == 1);
 
         // CRITICAL: Trail depth is invariant (pop + push inside sim_one)
@@ -24911,7 +25110,6 @@ void test_a01_sim_one() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
 
@@ -24919,7 +25117,7 @@ void test_a01_sim_one() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 100, 10, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
 
         monte_carlo::tree_node<a01_decider::choice> root;
         a01_decision_store ds;
@@ -24955,7 +25153,6 @@ void test_a01_sim_one() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.atom("a"), {}});
@@ -24964,7 +25161,7 @@ void test_a01_sim_one() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 100, 10, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
 
         // Create a secondary sequencer on the SAME trail (after a01's constructor push)
         sequencer seq2(t);
@@ -25004,7 +25201,6 @@ void test_a01_sim_one() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
@@ -25016,7 +25212,7 @@ void test_a01_sim_one() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 100, 10, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
 
         monte_carlo::tree_node<a01_decider::choice> root;
         a01_decision_store ds;
@@ -25045,7 +25241,6 @@ void test_a01_sim_one() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
@@ -25057,11 +25252,11 @@ void test_a01_sim_one() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 100, 10, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
 
         // Inject avoidance: singleton {rl(gl0, 0)} causes CDCL elimination of idx 0
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = lp.resolution(gl0, 0);
+        const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
+        const resolution_lineage* rl0 = solver.lp.resolution(gl0, 0);
         a01_decision_store avoid;
         avoid.insert(rl0);
         solver.as.insert(avoid);
@@ -25080,9 +25275,9 @@ void test_a01_sim_one() {
 
         // CRITICAL: 2 resolutions: a via idx 1, c via idx 3
         assert(rs.size() == 2);
-        const resolution_lineage* rl_a = lp.resolution(gl0, 1);
+        const resolution_lineage* rl_a = solver.lp.resolution(gl0, 1);
         assert(rs.count(rl_a) == 1);
-        const resolution_lineage* rl_c = lp.resolution(lp.goal(rl_a, 0), 3);
+        const resolution_lineage* rl_c = solver.lp.resolution(solver.lp.goal(rl_a, 0), 3);
         assert(rs.count(rl_c) == 1);
     }
 
@@ -25096,7 +25291,6 @@ void test_a01_sim_one() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
@@ -25108,13 +25302,13 @@ void test_a01_sim_one() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 100, 10, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
 
         monte_carlo::tree_node<a01_decider::choice> root;
 
         // Pre-populate the MCTS tree so that UCB1 selects idx 1 for the candidate choice.
         // The only goal is gl0; make its child visited so UCB1 is active at the next level.
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
 
         root.m_visits = 100;
         root.m_children[gl0].m_visits = 50;
@@ -25138,12 +25332,12 @@ void test_a01_sim_one() {
         // CRITICAL: Exactly 2 resolutions (decision on a→idx1, unit prop on c→idx3)
         assert(rs.size() == 2);
 
-        const resolution_lineage* rl_a = lp.resolution(gl0, 1);
+        const resolution_lineage* rl_a = solver.lp.resolution(gl0, 1);
         assert(rs.count(rl_a) == 1);
         assert(ds.count(rl_a) == 1);  // This was the decision
 
-        const goal_lineage* gl_c = lp.goal(rl_a, 0);
-        const resolution_lineage* rl_c = lp.resolution(gl_c, 3);
+        const goal_lineage* gl_c = solver.lp.goal(rl_a, 0);
+        const resolution_lineage* rl_c = solver.lp.resolution(gl_c, 3);
         assert(rs.count(rl_c) == 1);
         assert(ds.count(rl_c) == 0);  // Unit propagation, not a decision
 
@@ -25161,7 +25355,6 @@ void test_a01_sim_one() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
@@ -25173,7 +25366,7 @@ void test_a01_sim_one() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 100, 10, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
 
         monte_carlo::tree_node<a01_decider::choice> root;
         a01_decision_store ds;
@@ -25192,214 +25385,6 @@ void test_a01_sim_one() {
     }
 }
 
-void test_a01_constructor_and_destructor() {
-    // Test 1: Basic construction - verify trail frame pushed and all fields stored correctly
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-
-        a01_database db;
-        a01_goals goals;
-        std::mt19937 rng(42);
-
-        size_t depth_before = t.depth();
-        assert(depth_before == 1);
-
-        {
-            a01 solver(db, goals, t, seq, ep, bm, lp, 100, 10, 1.414, rng);
-
-            // CRITICAL: Constructor pushes one trail frame
-            assert(t.depth() == depth_before + 1);
-
-            // CRITICAL: References stored correctly
-            assert(&solver.db == &db);
-            assert(&solver.goals == &goals);
-            assert(&solver.t == &t);
-            assert(&solver.vars == &seq);
-            assert(&solver.ep == &ep);
-            assert(&solver.bm == &bm);
-            assert(&solver.lp == &lp);
-            assert(&solver.rng == &rng);
-
-            // CRITICAL: Scalar fields stored correctly
-            assert(solver.max_resolutions == 100);
-            assert(solver.iterations_per_avoidance == 10);
-            assert(solver.c == 1.414);
-
-            // CRITICAL: Avoidance store initialized empty
-            assert(solver.as.empty());
-        }
-
-        // CRITICAL: Destructor restores trail depth
-        assert(t.depth() == depth_before);
-    }
-
-    // Test 2: Construction on a fresh trail (depth 0 → 1 → 0)
-    {
-        trail t;
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-
-        a01_database db;
-        a01_goals goals;
-        std::mt19937 rng(0);
-
-        assert(t.depth() == 0);
-
-        {
-            a01 solver(db, goals, t, seq, ep, bm, lp, 1, 1, 0.0, rng);
-
-            // CRITICAL: Depth goes 0 → 1
-            assert(t.depth() == 1);
-            assert(solver.max_resolutions == 1);
-            assert(solver.iterations_per_avoidance == 1);
-            assert(solver.c == 0.0);
-        }
-
-        // CRITICAL: Depth returns to 0
-        assert(t.depth() == 0);
-    }
-
-    // Test 3: Constructor only adds a frame boundary, no undo actions
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-
-        a01_database db;
-        a01_goals goals;
-        std::mt19937 rng(42);
-
-        size_t undo_size_before = t.undo_stack.size();
-        size_t boundary_size_before = t.frame_boundary_stack.size();
-
-        {
-            a01 solver(db, goals, t, seq, ep, bm, lp, 100, 10, 1.414, rng);
-
-            // CRITICAL: Only a frame boundary is pushed, not any undo action
-            assert(t.undo_stack.size() == undo_size_before);
-            assert(t.frame_boundary_stack.size() == boundary_size_before + 1);
-        }
-
-        // CRITICAL: Destructor removes the frame boundary; undo stack is unchanged
-        assert(t.frame_boundary_stack.size() == boundary_size_before);
-        assert(t.undo_stack.size() == undo_size_before);
-    }
-
-    // Test 4: Destructor rolls back undo actions logged within the a01 frame
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-
-        a01_database db;
-        a01_goals goals;
-        std::mt19937 rng(42);
-
-        bool undone = false;
-
-        {
-            a01 solver(db, goals, t, seq, ep, bm, lp, 100, 10, 1.414, rng);
-
-            // Log an undo action into the a01's frame
-            t.log([&undone]() { undone = true; });
-
-            assert(!undone);
-        }
-
-        // CRITICAL: Destructor popped the a01 frame, triggering the logged undo action
-        assert(undone);
-    }
-
-    // Test 5: Destructor only pops the a01's frame, not the caller's frame
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-
-        a01_database db;
-        a01_goals goals;
-        std::mt19937 rng(42);
-
-        bool caller_undone = false;
-        t.log([&caller_undone]() { caller_undone = true; });
-
-        {
-            a01 solver(db, goals, t, seq, ep, bm, lp, 100, 10, 1.414, rng);
-
-            // a01's frame is stacked on top of the caller's frame
-            assert(t.depth() == 2);
-        }
-
-        // CRITICAL: Only the a01's frame was popped; caller's undo action not triggered
-        assert(!caller_undone);
-        assert(t.depth() == 1);
-    }
-
-    // Test 6: Non-empty db and goals - verify references and contents accessible via solver
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-
-        a01_database db;
-        db.push_back(rule{ep.atom("p"), {}});
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.var(seq())), {ep.atom("p")}});
-
-        a01_goals goals;
-        goals.push_back(ep.cons(ep.atom("q"), ep.atom("a")));
-
-        std::mt19937 rng(999);
-
-        size_t depth_before = t.depth();
-
-        {
-            a01 solver(db, goals, t, seq, ep, bm, lp, 50, 5, 1.0, rng);
-
-            // CRITICAL: Frame pushed
-            assert(t.depth() == depth_before + 1);
-
-            // CRITICAL: db reference correct; content accessible through it
-            assert(&solver.db == &db);
-            assert(solver.db.size() == 2);
-
-            // CRITICAL: goals reference correct; content accessible through it
-            assert(&solver.goals == &goals);
-            assert(solver.goals.size() == 1);
-
-            // CRITICAL: Avoidance store empty on construction regardless of db/goals content
-            assert(solver.as.empty());
-        }
-
-        // CRITICAL: Destructor restores depth
-        assert(t.depth() == depth_before);
-    }
-}
-
 void test_a01_next_avoidance() {
 
     // Test 1: Immediate refutation — goal has no candidates from the start.
@@ -25411,14 +25396,13 @@ void test_a01_next_avoidance() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         a01_goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         a01_decision_store avoidance;
         std::optional<a01_resolution_store> soln;
@@ -25442,7 +25426,6 @@ void test_a01_next_avoidance() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.atom("a"), {}});  // idx 0: a.
@@ -25451,7 +25434,7 @@ void test_a01_next_avoidance() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         a01_decision_store avoidance;
         std::optional<a01_resolution_store> soln;
@@ -25466,8 +25449,8 @@ void test_a01_next_avoidance() {
 
         // CRITICAL: soln has exactly 1 resolution (unit-prop of a with rule 0)
         assert(soln.value().size() == 1);
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = lp.resolution(gl0, 0);
+        const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
+        const resolution_lineage* rl0 = solver.lp.resolution(gl0, 0);
         assert(soln.value().count(rl0) == 1);
 
         // CRITICAL: avoidance is empty — unit propagation, no MCTS decisions
@@ -25488,7 +25471,6 @@ void test_a01_next_avoidance() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.atom("q"), {ep.atom("r")}});  // idx 0: q :- r.
@@ -25499,7 +25481,7 @@ void test_a01_next_avoidance() {
         goals.push_back(ep.atom("q"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         a01_decision_store avoidance;
         std::optional<a01_resolution_store> soln;
@@ -25515,12 +25497,12 @@ void test_a01_next_avoidance() {
         // CRITICAL: soln has exactly 2 resolutions (q→rule1 as decision, p→rule2 as unit prop)
         assert(soln.value().size() == 2);
 
-        const goal_lineage* gl_q = lp.goal(nullptr, 0);
-        const resolution_lineage* rl_q1 = lp.resolution(gl_q, 1);
+        const goal_lineage* gl_q = solver.lp.goal(nullptr, 0);
+        const resolution_lineage* rl_q1 = solver.lp.resolution(gl_q, 1);
         assert(soln.value().count(rl_q1) == 1);
 
-        const goal_lineage* gl_p = lp.goal(rl_q1, 0);
-        const resolution_lineage* rl_p2 = lp.resolution(gl_p, 2);
+        const goal_lineage* gl_p = solver.lp.goal(rl_q1, 0);
+        const resolution_lineage* rl_p2 = solver.lp.resolution(gl_p, 2);
         assert(soln.value().count(rl_p2) == 1);
 
         // CRITICAL: avoidance = decisions of the solution sim = {rl_q1}
@@ -25543,7 +25525,6 @@ void test_a01_next_avoidance() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("f")}});  // idx 0: a :- f.
@@ -25554,7 +25535,7 @@ void test_a01_next_avoidance() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         a01_decision_store avoidance;
         std::optional<a01_resolution_store> soln;
@@ -25571,9 +25552,9 @@ void test_a01_next_avoidance() {
         assert(avoidance.size() == 1);
 
         // CRITICAL: The avoided resolution is on the initial goal (gl0) with either rule 0 or 1
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = lp.resolution(gl0, 0);
-        const resolution_lineage* rl1 = lp.resolution(gl0, 1);
+        const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
+        const resolution_lineage* rl0 = solver.lp.resolution(gl0, 0);
+        const resolution_lineage* rl1 = solver.lp.resolution(gl0, 1);
         const resolution_lineage* avoided = *avoidance.begin();
         assert(avoided == rl0 || avoided == rl1);
     }
@@ -25594,7 +25575,6 @@ void test_a01_next_avoidance() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("p")}});   // idx 0: a :- p.
@@ -25609,7 +25589,7 @@ void test_a01_next_avoidance() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         a01_decision_store avoidance;
         std::optional<a01_resolution_store> soln;
@@ -25639,7 +25619,6 @@ void test_a01_next_avoidance() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("p")}});   // idx 0
@@ -25662,7 +25641,7 @@ void test_a01_next_avoidance() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         a01_decision_store avoidance;
         std::optional<a01_resolution_store> soln;
@@ -25689,7 +25668,6 @@ void test_a01_next_avoidance() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.atom("a"), {}});  // idx 0: a.
@@ -25698,11 +25676,11 @@ void test_a01_next_avoidance() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         // Inject singleton avoidance: CDCL will eliminate rule 0 for gl0
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = lp.resolution(gl0, 0);
+        const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
+        const resolution_lineage* rl0 = solver.lp.resolution(gl0, 0);
         a01_decision_store avoid;
         avoid.insert(rl0);
         solver.as.insert(avoid);
@@ -25742,7 +25720,6 @@ void test_a01_next_avoidance() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         // Root
@@ -25779,7 +25756,7 @@ void test_a01_next_avoidance() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         a01_decision_store avoidance;
         std::optional<a01_resolution_store> soln;
@@ -25797,8 +25774,8 @@ void test_a01_next_avoidance() {
 
         // CRITICAL: The avoidance must include "a → rule1" (the depth-3 branch entry
         // point). Any 3-decision conflict necessarily begins with that choice.
-        const goal_lineage* gl_a = lp.goal(nullptr, 0);
-        const resolution_lineage* rl_a1 = lp.resolution(gl_a, 1);
+        const goal_lineage* gl_a = solver.lp.goal(nullptr, 0);
+        const resolution_lineage* rl_a1 = solver.lp.resolution(gl_a, 1);
         assert(avoidance.count(rl_a1) == 1);
     }
 
@@ -25819,7 +25796,6 @@ void test_a01_next_avoidance() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         // Three choices for a
@@ -25872,7 +25848,7 @@ void test_a01_next_avoidance() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         a01_decision_store avoidance;
         std::optional<a01_resolution_store> soln;
@@ -25892,8 +25868,8 @@ void test_a01_next_avoidance() {
         // CRITICAL: "a → rule2" (the q branch entry point) is in the avoidance.
         // This is the distinguishing feature of the depth-3 path — rules 0 and 1
         // only appear in 4-decision avoidances, never in 3-decision ones.
-        const goal_lineage* gl_a = lp.goal(nullptr, 0);
-        const resolution_lineage* rl_a2 = lp.resolution(gl_a, 2);
+        const goal_lineage* gl_a = solver.lp.goal(nullptr, 0);
+        const resolution_lineage* rl_a2 = solver.lp.resolution(gl_a, 2);
         assert(avoidance.count(rl_a2) == 1);
     }
 
@@ -25920,7 +25896,6 @@ void test_a01_next_avoidance() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         const expr* X = ep.var(seq());
 
@@ -25935,7 +25910,7 @@ void test_a01_next_avoidance() {
         goals.push_back(ep.cons(ep.atom("b"), X));  // b(X) — shares X with a
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         a01_decision_store avoidance;
         std::optional<a01_resolution_store> soln;
@@ -25951,10 +25926,10 @@ void test_a01_next_avoidance() {
         assert(soln.value().size() == 2);
 
         // CRITICAL: The solution involves rule 1 for a (a→234) and rule 2 for b (b→234)
-        const goal_lineage* gl_a = lp.goal(nullptr, 0);
-        const goal_lineage* gl_b = lp.goal(nullptr, 1);
-        const resolution_lineage* rl_a1 = lp.resolution(gl_a, 1);  // a(234)
-        const resolution_lineage* rl_b2 = lp.resolution(gl_b, 2);  // b(234)
+        const goal_lineage* gl_a = solver.lp.goal(nullptr, 0);
+        const goal_lineage* gl_b = solver.lp.goal(nullptr, 1);
+        const resolution_lineage* rl_a1 = solver.lp.resolution(gl_a, 1);  // a(234)
+        const resolution_lineage* rl_b2 = solver.lp.resolution(gl_b, 2);  // b(234)
         // One of these was the MCTS decision, the other the unit-propagation.
         // Both must appear in the solution's resolution store.
         assert(soln.value().count(rl_a1) == 1);
@@ -25986,7 +25961,6 @@ void test_a01_next_avoidance() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         const expr* X = ep.var(seq());
 
@@ -26004,7 +25978,7 @@ void test_a01_next_avoidance() {
         goals.push_back(ep.cons(ep.atom("c"), X));  // c(X) — shares X with a and b
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         a01_decision_store avoidance;
         std::optional<a01_resolution_store> soln;
@@ -26023,14 +25997,14 @@ void test_a01_next_avoidance() {
 
         // CRITICAL: The avoided resolution is on one of the three initial goals.
         // Whichever goal MCTS chose first, that single decision is the avoidance.
-        const goal_lineage* gl_a = lp.goal(nullptr, 0);
-        const goal_lineage* gl_b = lp.goal(nullptr, 1);
-        const goal_lineage* gl_c = lp.goal(nullptr, 2);
+        const goal_lineage* gl_a = solver.lp.goal(nullptr, 0);
+        const goal_lineage* gl_b = solver.lp.goal(nullptr, 1);
+        const goal_lineage* gl_c = solver.lp.goal(nullptr, 2);
         const resolution_lineage* avoided = *avoidance.begin();
         // The avoided resolution must involve one of the three goals and one of their rules
-        bool is_a_rule = avoided == lp.resolution(gl_a, 0) || avoided == lp.resolution(gl_a, 1);
-        bool is_b_rule = avoided == lp.resolution(gl_b, 2) || avoided == lp.resolution(gl_b, 3);
-        bool is_c_rule = avoided == lp.resolution(gl_c, 4) || avoided == lp.resolution(gl_c, 5);
+        bool is_a_rule = avoided == solver.lp.resolution(gl_a, 0) || avoided == solver.lp.resolution(gl_a, 1);
+        bool is_b_rule = avoided == solver.lp.resolution(gl_b, 2) || avoided == solver.lp.resolution(gl_b, 3);
+        bool is_c_rule = avoided == solver.lp.resolution(gl_c, 4) || avoided == solver.lp.resolution(gl_c, 5);
         assert(is_a_rule || is_b_rule || is_c_rule);
     }
 
@@ -26060,7 +26034,6 @@ void test_a01_next_avoidance() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
@@ -26082,7 +26055,7 @@ void test_a01_next_avoidance() {
         goals.push_back(ep.cons(ep.cons(ep.atom("c"), X), Y));   // c(X, Y)
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         a01_decision_store avoidance;
         std::optional<a01_resolution_store> soln;
@@ -26104,12 +26077,12 @@ void test_a01_next_avoidance() {
         // Picking b (Y∈{1,2}) → c(X, 1/2) immediately fails.
         // Picking c (X=1/2, Y=5/6) → b(5/6) immediately fails.
         // Picking a alone (X∈{1,2}) → c still has 2 candidates → depth-2, NOT chosen.
-        const goal_lineage* gl_b = lp.goal(nullptr, 1);
-        const goal_lineage* gl_c = lp.goal(nullptr, 2);
+        const goal_lineage* gl_b = solver.lp.goal(nullptr, 1);
+        const goal_lineage* gl_c = solver.lp.goal(nullptr, 2);
         const resolution_lineage* avoided = *avoidance.begin();
-        bool is_b_choice = avoided == lp.resolution(gl_b, 2) || avoided == lp.resolution(gl_b, 3);
-        bool is_c_choice = avoided == lp.resolution(gl_c, 4) || avoided == lp.resolution(gl_c, 5)
-                        || avoided == lp.resolution(gl_c, 6) || avoided == lp.resolution(gl_c, 7);
+        bool is_b_choice = avoided == solver.lp.resolution(gl_b, 2) || avoided == solver.lp.resolution(gl_b, 3);
+        bool is_c_choice = avoided == solver.lp.resolution(gl_c, 4) || avoided == solver.lp.resolution(gl_c, 5)
+                        || avoided == solver.lp.resolution(gl_c, 6) || avoided == solver.lp.resolution(gl_c, 7);
         assert(is_b_choice || is_c_choice);
     }
 
@@ -26120,7 +26093,6 @@ void test_a01_next_avoidance() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
 
@@ -26155,7 +26127,7 @@ void test_a01_next_avoidance() {
 
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         a01_decision_store avoidance;
         std::optional<a01_resolution_store> soln;
@@ -26169,17 +26141,17 @@ void test_a01_next_avoidance() {
         assert(avoidance.size() == 4);
 
         // CRITICAL: The first decision in the avoidance is root→rule0 (the needle branch).
-        const goal_lineage* gl_root = lp.goal(nullptr, 0);
-        const resolution_lineage* rl_root = lp.resolution(gl_root, 1);
+        const goal_lineage* gl_root = solver.lp.goal(nullptr, 0);
+        const resolution_lineage* rl_root = solver.lp.resolution(gl_root, 1);
         assert(avoidance.count(rl_root) == 1);
-        const goal_lineage* gl_stuntX = lp.goal(rl_root, 0);
-        const resolution_lineage* rl_stuntX = lp.resolution(gl_stuntX, 3);
+        const goal_lineage* gl_stuntX = solver.lp.goal(rl_root, 0);
+        const resolution_lineage* rl_stuntX = solver.lp.resolution(gl_stuntX, 3);
         assert(avoidance.count(rl_stuntX) == 1);
-        const goal_lineage* gl_stuntY = lp.goal(rl_stuntX, 0);
-        const resolution_lineage* rl_stuntY = lp.resolution(gl_stuntY, 5);
+        const goal_lineage* gl_stuntY = solver.lp.goal(rl_stuntX, 0);
+        const resolution_lineage* rl_stuntY = solver.lp.resolution(gl_stuntY, 5);
         assert(avoidance.count(rl_stuntY) == 1);
-        const goal_lineage* gl_stuntZ = lp.goal(rl_stuntY, 0);
-        const resolution_lineage* rl_stuntZ = lp.resolution(gl_stuntZ, 7);
+        const goal_lineage* gl_stuntZ = solver.lp.goal(rl_stuntY, 0);
+        const resolution_lineage* rl_stuntZ = solver.lp.resolution(gl_stuntZ, 7);
         assert(avoidance.count(rl_stuntZ) == 1);
     }
 
@@ -26190,7 +26162,6 @@ void test_a01_next_avoidance() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
 
@@ -26227,7 +26198,7 @@ void test_a01_next_avoidance() {
 
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         a01_decision_store avoidance;
         std::optional<a01_resolution_store> soln;
@@ -26241,20 +26212,20 @@ void test_a01_next_avoidance() {
         assert(avoidance.size() == 5);
 
         // CRITICAL: The first decision in the avoidance is root→rule0 (the needle branch).
-        const goal_lineage* gl_root = lp.goal(nullptr, 0);
-        const resolution_lineage* rl_root = lp.resolution(gl_root, 1);
+        const goal_lineage* gl_root = solver.lp.goal(nullptr, 0);
+        const resolution_lineage* rl_root = solver.lp.resolution(gl_root, 1);
         assert(avoidance.count(rl_root) == 1);
-        const goal_lineage* gl_stuntX = lp.goal(rl_root, 0);
-        const resolution_lineage* rl_stuntX = lp.resolution(gl_stuntX, 3);
+        const goal_lineage* gl_stuntX = solver.lp.goal(rl_root, 0);
+        const resolution_lineage* rl_stuntX = solver.lp.resolution(gl_stuntX, 3);
         assert(avoidance.count(rl_stuntX) == 1);
-        const goal_lineage* gl_stuntY = lp.goal(rl_stuntX, 0);
-        const resolution_lineage* rl_stuntY = lp.resolution(gl_stuntY, 5);
+        const goal_lineage* gl_stuntY = solver.lp.goal(rl_stuntX, 0);
+        const resolution_lineage* rl_stuntY = solver.lp.resolution(gl_stuntY, 5);
         assert(avoidance.count(rl_stuntY) == 1);
-        const goal_lineage* gl_stuntZ = lp.goal(rl_stuntY, 0);
-        const resolution_lineage* rl_stuntZ = lp.resolution(gl_stuntZ, 7);
+        const goal_lineage* gl_stuntZ = solver.lp.goal(rl_stuntY, 0);
+        const resolution_lineage* rl_stuntZ = solver.lp.resolution(gl_stuntZ, 7);
         assert(avoidance.count(rl_stuntZ) == 1);
-        const goal_lineage* gl_stuntW = lp.goal(rl_stuntZ, 0);
-        const resolution_lineage* rl_stuntW = lp.resolution(gl_stuntW, 9);
+        const goal_lineage* gl_stuntW = solver.lp.goal(rl_stuntZ, 0);
+        const resolution_lineage* rl_stuntW = solver.lp.resolution(gl_stuntW, 9);
         assert(avoidance.count(rl_stuntW) == 1);
     }
 }
@@ -26270,7 +26241,6 @@ void test_a01() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.atom("a"), {}});
@@ -26279,7 +26249,7 @@ void test_a01() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         std::optional<a01_resolution_store> soln;
         bool result = solver(0, soln);
@@ -26300,7 +26270,6 @@ void test_a01() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.atom("a"), {}});  // idx 0: a.
@@ -26309,7 +26278,7 @@ void test_a01() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         std::optional<a01_resolution_store> soln;
         bool result = solver(1, soln);
@@ -26319,8 +26288,8 @@ void test_a01() {
 
         // CRITICAL: exactly one resolution (unit-prop of a with rule 0)
         assert(soln.value().size() == 1);
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = lp.resolution(gl0, 0);
+        const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
+        const resolution_lineage* rl0 = solver.lp.resolution(gl0, 0);
         assert(soln.value().count(rl0) == 1);
 
         // CRITICAL: avoidance store has one entry — the empty decision set from the
@@ -26339,7 +26308,6 @@ void test_a01() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         // idx 0: answer(42).
@@ -26350,7 +26318,7 @@ void test_a01() {
         goals.push_back(ep.cons(ep.atom("answer"), X));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         std::optional<a01_resolution_store> soln;
         bool result = solver(1, soln);
@@ -26360,7 +26328,7 @@ void test_a01() {
 
         // CRITICAL: one resolution, binding X to "42"
         assert(soln.value().size() == 1);
-        assert(soln.value().count(lp.resolution(lp.goal(nullptr, 0), 0)) == 1);
+        assert(soln.value().count(solver.lp.resolution(solver.lp.goal(nullptr, 0), 0)) == 1);
 
         // CRITICAL: normalizer follows bm chain and returns atom("42")
         normalizer norm(ep, bm);
@@ -26378,7 +26346,6 @@ void test_a01() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;  // intentionally empty
 
@@ -26386,7 +26353,7 @@ void test_a01() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         std::optional<a01_resolution_store> soln;
         bool result = solver(1000, soln);
@@ -26411,7 +26378,6 @@ void test_a01() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0: a :- b.
@@ -26421,7 +26387,7 @@ void test_a01() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         std::optional<a01_resolution_store> soln;
 
@@ -26460,7 +26426,6 @@ void test_a01() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.cons(ep.atom("is_a"), ep.atom("1")), {}});  // idx 0
@@ -26474,7 +26439,7 @@ void test_a01() {
         goals.push_back(ep.cons(ep.atom("is_b"), X));  // goal 1: is_b(X)
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
         std::optional<a01_resolution_store> soln;
@@ -26493,10 +26458,10 @@ void test_a01() {
         // Regardless of which goal MCTS decided first, both rl(gl_a,1) and rl(gl_b,2)
         // always appear (one as the decision, the other as unit-propagation).
         assert(soln.value().size() == 2);
-        const goal_lineage* gl_a = lp.goal(nullptr, 0);
-        const goal_lineage* gl_b = lp.goal(nullptr, 1);
-        const resolution_lineage* rl_a1 = lp.resolution(gl_a, 1);  // is_a(2)
-        const resolution_lineage* rl_b2 = lp.resolution(gl_b, 2);  // is_b(2)
+        const goal_lineage* gl_a = solver.lp.goal(nullptr, 0);
+        const goal_lineage* gl_b = solver.lp.goal(nullptr, 1);
+        const resolution_lineage* rl_a1 = solver.lp.resolution(gl_a, 1);  // is_a(2)
+        const resolution_lineage* rl_b2 = solver.lp.resolution(gl_b, 2);  // is_b(2)
         assert(soln.value().count(rl_a1) == 1);
         assert(soln.value().count(rl_b2) == 1);
 
@@ -26524,7 +26489,6 @@ void test_a01() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         // parent(A, B) encoded as cons(cons(atom("parent"), A), B)
@@ -26537,7 +26501,7 @@ void test_a01() {
         goals.push_back(ep.cons(ep.cons(ep.atom("parent"), X), ep.atom("alice")));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
         std::optional<a01_resolution_store> soln;
@@ -26602,7 +26566,6 @@ void test_a01() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("true")),  {}});  // idx 0
@@ -26631,7 +26594,7 @@ void test_a01() {
         goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("or"), NP), Q), ep.atom("true")));
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
         std::optional<a01_resolution_store> soln;
@@ -26699,7 +26662,6 @@ void test_a01() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("red")),  {}});  // idx 0
@@ -26720,7 +26682,7 @@ void test_a01() {
         goals.push_back(ep.cons(ep.cons(ep.atom("diff"), B), C));      // goal 4: diff(B, C)
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
         std::optional<a01_resolution_store> soln;
@@ -26829,7 +26791,6 @@ void test_a01() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("red")),   {}});  // idx 0
@@ -26856,7 +26817,7 @@ void test_a01() {
         goals.push_back(ep.cons(ep.cons(ep.atom("diff"), B), C));      // goal 5: diff(B,C)
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
 
@@ -26910,7 +26871,6 @@ void test_a01() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("true")),  {}});  // idx 0: bool(true).
@@ -26962,7 +26922,7 @@ void test_a01() {
         goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("and"), P), QR), ep.atom("true")));    // goal 4: and(P,QR,true)
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
 
@@ -26999,7 +26959,6 @@ void test_a01() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("red")),   {}});  // idx 0
@@ -27029,7 +26988,7 @@ void test_a01() {
         goals.push_back(ep.cons(ep.cons(ep.atom("diff"), A), D));      // goal 7: diff(A,D)
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
 
@@ -27079,7 +27038,6 @@ void test_a01() {
         expr_pool ep(t);
         bind_map bm(t);
         sequencer seq(t);
-        lineage_pool lp;
 
         a01_database db;
         db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("true")),  {}});  // idx 0
@@ -27146,7 +27104,7 @@ void test_a01() {
         goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("and"), PQ_RS), NPR), ep.atom("true")));   // goal 10: and(PQ_RS,NPR,true)
 
         std::mt19937 rng(42);
-        a01 solver(db, goals, t, seq, ep, bm, lp, 1000, 1000, 1.414, rng);
+        a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
 
