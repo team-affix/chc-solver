@@ -4,8 +4,9 @@ all:
 fastdebug:
 	g++ -std=c++20 -O3 -DDEBUG ./test/main.cpp ./cpp/* -o main
 
-algo:
-	g++ -std=c++20 -g ./test/a01_main.cpp ./cpp/* -o a01_main
+parser:
+	antlr4 -Dlanguage=Cpp -visitor -no-listener -o syntax/generated/ syntax/CHC.g4
 
 clean:
-	rm -f main
+	rm -f main 
+	rm -rf syntax/generated
