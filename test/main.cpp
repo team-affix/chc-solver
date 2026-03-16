@@ -27380,6 +27380,14 @@ void test_a01() {
             assert(expected.count(s) == 1);
             expected.erase(s);
             visited.insert(s);
+
+            std::cout << "Solution: " << std::endl;
+            expr_printer printer(std::cout);
+            for (const auto& e : s) {
+                printer(e);
+                std::cout << std::endl;
+            }
+            std::cout << std::endl;
         }
         // All solutions found — next call must refute
         bool r = solver(iterations, soln);
