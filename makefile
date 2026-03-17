@@ -5,7 +5,7 @@ fastdebug:
 	g++ -std=c++20 -O3 -DDEBUG ./test/main.cpp ./cpp/* -o main
 
 parser:
-	antlr4 -Dlanguage=Cpp -visitor -no-listener -o syntax/generated/ syntax/CHC.g4
+	cd syntax && antlr4 -Dlanguage=Cpp -visitor -no-listener -o generated/ CHC.g4
 
 clean:
 	rm -f main 
