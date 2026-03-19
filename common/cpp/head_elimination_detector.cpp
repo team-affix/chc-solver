@@ -1,15 +1,15 @@
-#include "../hpp/a01_head_elimination_detector.hpp"
+#include "../hpp/head_elimination_detector.hpp"
 
-a01_head_elimination_detector::a01_head_elimination_detector(
+head_elimination_detector::head_elimination_detector(
     trail& t,
     bind_map& bm,
-    const a01_goal_store& gs,
-    const a01_database& db
+    const goal_store& gs,
+    const database& db
 )
     : t(t), bm(bm), gs(gs), db(db)
 {}
 
-bool a01_head_elimination_detector::operator()(const goal_lineage* gl, size_t i) {
+bool head_elimination_detector::operator()(const goal_lineage* gl, size_t i) {
     // push a temporary frame since bindings must be temporary
     t.push();
 

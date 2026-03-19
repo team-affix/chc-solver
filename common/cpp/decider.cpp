@@ -1,20 +1,20 @@
-#include "../hpp/a01_decider.hpp"
+#include "../hpp/decider.hpp"
 
-a01_decider::a01_decider(
-    const a01_goal_store& gs,
-    const a01_candidate_store& cs,
+decider::decider(
+    const goal_store& gs,
+    const candidate_store& cs,
     monte_carlo::simulation<choice, std::mt19937>& sim
 )
     : gs(gs), cs(cs), sim(sim)
 {}
 
-std::pair<const goal_lineage*, size_t> a01_decider::operator()() {
+std::pair<const goal_lineage*, size_t> decider::operator()() {
     const goal_lineage* chosen_gl = choose_goal();
     const size_t chosen_i = choose_candidate(chosen_gl);
     return std::make_pair(chosen_gl, chosen_i);
 }
 
-const goal_lineage* a01_decider::choose_goal() {
+const goal_lineage* decider::choose_goal() {
     // Get the goals to choose from
     std::vector<choice> goals;
     goals.reserve(gs.size());
@@ -27,7 +27,7 @@ const goal_lineage* a01_decider::choose_goal() {
     return std::get<const goal_lineage*>(choice_a);
 }
 
-size_t a01_decider::choose_candidate(const goal_lineage* chosen_gl) {
+size_t decider::choose_candidate(const goal_lineage* chosen_gl) {
     // Get the candidates to choose from
     std::vector<choice> candidates;
     candidates.reserve(cs.count(chosen_gl));

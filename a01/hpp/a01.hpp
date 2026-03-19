@@ -3,14 +3,14 @@
 
 #include <optional>
 #include <random>
-#include "trail.hpp"
-#include "expr.hpp"
-#include "bind_map.hpp"
-#include "lineage.hpp"
-#include "sequencer.hpp"
-#include "a01_defs.hpp"
-#include "a01_decider.hpp"
-#include "../mcts/include/mcts.hpp"
+#include "../../common/hpp/trail.hpp"
+#include "../../common/hpp/expr.hpp"
+#include "../../common/hpp/bind_map.hpp"
+#include "../../common/hpp/lineage.hpp"
+#include "../../common/hpp/sequencer.hpp"
+#include "defs.hpp"
+#include "../../common/hpp/decider.hpp"
+#include "../../mcts/include/mcts.hpp"
 
 struct a01 {
     ~a01();
@@ -29,7 +29,7 @@ struct a01 {
 #ifndef DEBUG
 private:
 #endif
-    bool sim_one(monte_carlo::tree_node<a01_decider::choice>&, a01_decision_store&, a01_resolution_store&);
+    bool sim_one(monte_carlo::tree_node<decider::choice>&, a01_decision_store&, a01_resolution_store&);
     bool next_avoidance(a01_decision_store&, std::optional<a01_resolution_store>&);
     
     const a01_database& db;

@@ -1,5 +1,5 @@
 #include <stdexcept>
-#include "../hpp/a01_goal_resolver.hpp"
+#include "../hpp/goal_resolver.hpp"
 
 a01_goal_resolver::a01_goal_resolver(
     a01_resolution_store& r,

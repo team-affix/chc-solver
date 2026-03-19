@@ -1,14 +1,14 @@
-#ifndef A01_DECIDER_HPP
-#define A01_DECIDER_HPP
+#ifndef DECIDER_HPP
+#define DECIDER_HPP
 
-#include "../mcts/include/mcts.hpp"
-#include "a01_defs.hpp"
+#include "../../mcts/include/mcts.hpp"
+#include "defs.hpp"
 
-struct a01_decider {
+struct decider {
     using choice = std::variant<const goal_lineage*, size_t>;
-    a01_decider(
-        const a01_goal_store& gs,
-        const a01_candidate_store& cs,
+    decider(
+        const goal_store& gs,
+        const candidate_store& cs,
         monte_carlo::simulation<choice, std::mt19937>& sim
     );
     std::pair<const goal_lineage*, size_t> operator()();
@@ -17,8 +17,8 @@ private:
 #endif
     const goal_lineage* choose_goal();
     size_t choose_candidate(const goal_lineage*);
-    const a01_goal_store& gs;
-    const a01_candidate_store& cs;
+    const goal_store& gs;
+    const candidate_store& cs;
     monte_carlo::simulation<choice, std::mt19937>& sim;
 };
 

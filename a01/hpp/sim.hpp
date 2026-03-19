@@ -1,16 +1,16 @@
 #ifndef A01_SIM_HPP
 #define A01_SIM_HPP
 
-#include "../mcts/include/mcts.hpp"
-#include "a01_defs.hpp"
-#include "a01_decider.hpp"
-#include "solution_detector.hpp"
-#include "conflict_detector.hpp"
-#include "a01_head_elimination_detector.hpp"
-#include "a01_cdcl_elimination_detector.hpp"
-#include "unit_propagation_detector.hpp"
-#include "a01_goal_adder.hpp"
-#include "a01_goal_resolver.hpp"
+#include "../../mcts/include/mcts.hpp"
+#include "defs.hpp"
+#include "../../common/hpp/decider.hpp"
+#include "../../common/hpp/solution_detector.hpp"
+#include "../../common/hpp/conflict_detector.hpp"
+#include "../../common/hpp/head_elimination_detector.hpp"
+#include "../../common/hpp/cdcl_elimination_detector.hpp"
+#include "../../common/hpp/unit_propagation_detector.hpp"
+#include "goal_adder.hpp"
+#include "goal_resolver.hpp"
 
 struct a01_sim {
     a01_sim(
@@ -25,7 +25,7 @@ struct a01_sim {
         a01_resolution_store&,
         a01_decision_store&,
         a01_avoidance_store,
-        monte_carlo::simulation<a01_decider::choice, std::mt19937>&
+        monte_carlo::simulation<decider::choice, std::mt19937>&
     );
     bool operator()();
 #ifndef DEBUG
@@ -50,11 +50,11 @@ private:
     solution_detector sd;
     conflict_detector cd;
 
-    a01_head_elimination_detector he;
-    a01_cdcl_elimination_detector ce;
+    head_elimination_detector he;
+    cdcl_elimination_detector ce;
     unit_propagation_detector up;
 
-    a01_decider dec;
+    decider dec;
 
     a01_goal_adder ga;
     a01_goal_resolver gr;

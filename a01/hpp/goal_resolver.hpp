@@ -1,12 +1,11 @@
 #ifndef A01_GOAL_RESOLVER_HPP
 #define A01_GOAL_RESOLVER_HPP
 
-#include "lineage.hpp"
-#include "a01_defs.hpp"
-#include "copier.hpp"
-#include "bind_map.hpp"
-#include "lineage.hpp"
-#include "a01_goal_adder.hpp"
+#include "../../common/hpp/lineage.hpp"
+#include "defs.hpp"
+#include "../../common/hpp/copier.hpp"
+#include "../../common/hpp/bind_map.hpp"
+#include "goal_adder.hpp"
 
 struct a01_goal_resolver {
     a01_goal_resolver(

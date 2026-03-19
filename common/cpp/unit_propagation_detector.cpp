@@ -1,7 +1,7 @@
 #include "../hpp/unit_propagation_detector.hpp"
 
 unit_propagation_detector::unit_propagation_detector(
-    const a01_candidate_store& cs
+    const candidate_store& cs
 )
     : cs(cs)
 {}

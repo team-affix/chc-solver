@@ -1,8 +1,8 @@
 #include "../hpp/conflict_detector.hpp"
 
 conflict_detector::conflict_detector(
-    const a01_goal_store& gs,
-    const a01_candidate_store& cs
+    const goal_store& gs,
+    const candidate_store& cs
 )
     : gs(gs), cs(cs)
 {}

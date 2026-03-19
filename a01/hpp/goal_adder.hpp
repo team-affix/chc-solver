@@ -1,9 +1,9 @@
 #ifndef A01_GOAL_ADDER_HPP
 #define A01_GOAL_ADDER_HPP
 
-#include "lineage.hpp"
-#include "expr.hpp"
-#include "a01_defs.hpp"
+#include "../../common/hpp/lineage.hpp"
+#include "../../common/hpp/expr.hpp"
+#include "defs.hpp"
 
 struct a01_goal_adder {
     a01_goal_adder(
