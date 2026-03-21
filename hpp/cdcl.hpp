@@ -1,0 +1,26 @@
+#ifndef AVOIDANCE_HPP
+#define AVOIDANCE_HPP
+
+#include <set>
+#include "lineage.hpp"
+
+using avoidance = std::set<const resolution_lineage*>;
+
+struct cdcl {
+    size_t insert(const avoidance&);
+    void constrain(const resolution_lineage*);
+    bool refuted() const;
+    const std::set<const resolution_lineage*>& eliminated() const;
+    #ifndef DEBUG
+    private:
+    #endif
+    void upsert(size_t, const avoidance&);
+    void erase(size_t);
+
+    std::map<size_t, avoidance> avoidances;
+    std::map<const goal_lineage*, std::set<size_t>> watched_goals;
+    bool is_refuted;
+    std::set<const resolution_lineage*> eliminated_resolutions;
+};
+
+#endif
