@@ -2,6 +2,7 @@
 #define DEFS_HPP
 
 #include <list>
+#include <map>
 #include "lineage.hpp"
 #include "expr.hpp"
 #include "rule.hpp"
@@ -11,7 +12,9 @@ using goal_store = std::map<const goal_lineage*, const expr*>;
 using candidate_store = std::multimap<const goal_lineage*, size_t>;
 using resolution_store = std::set<const resolution_lineage*>;
 using decision_store = std::set<const resolution_lineage*>;
-using avoidance_store = std::set<decision_store>;
+using avoidance = std::set<const resolution_lineage*>;
+using avoidance_store = std::set<avoidance>;
+using avoidance_map = std::multimap<const goal_lineage*, avoidance_store::iterator>;
 using database = std::vector<rule>;
 
 #endif
