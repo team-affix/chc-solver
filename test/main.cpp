@@ -20108,12 +20108,13 @@ void test_mcts_decider() {
 }
 
 void test_cdcl_constructor() {
-    // Test 1: Default construction - all containers empty
+    // Test 1: Default construction - all containers empty, is_refuted false
     {
         cdcl c;
         assert(c.avoidances.empty());
         assert(c.watched_goals.empty());
         assert(c.eliminated_resolutions.empty());
+        assert(!c.is_refuted);
     }
 
     // Test 2: Two independently constructed instances are independent
@@ -20125,6 +20126,8 @@ void test_cdcl_constructor() {
         assert(&c1.eliminated_resolutions != &c2.eliminated_resolutions);
         assert(c1.avoidances.empty());
         assert(c2.avoidances.empty());
+        assert(!c1.is_refuted);
+        assert(!c2.is_refuted);
     }
 }
 
