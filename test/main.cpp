@@ -6,14 +6,14 @@
 #include "../hpp/normalizer.hpp"
 #include "../hpp/rule.hpp"
 #include "../hpp/a01_defs.hpp"
-#include "../hpp/a01_goal_adder.hpp"
-#include "../hpp/a01_goal_resolver.hpp"
-#include "../hpp/a01_head_elimination_detector.hpp"
+#include "../hpp/goal_adder.hpp"
+#include "../hpp/goal_resolver.hpp"
+#include "../hpp/head_elimination_detector.hpp"
 #include "../hpp/unit_propagation_detector.hpp"
 #include "../hpp/solution_detector.hpp"
 #include "../hpp/conflict_detector.hpp"
-#include "../hpp/a01_cdcl_elimination_detector.hpp"
-#include "../hpp/a01_decider.hpp"
+#include "../hpp/cdcl_elimination_detector.hpp"
+#include "../hpp/mcts_decider.hpp"
 #include "../hpp/a01_sim.hpp"
 #include "../hpp/a01.hpp"
 #include "../hpp/expr_printer.hpp"
@@ -11928,14 +11928,14 @@ void test_normalizer() {
     }
 }
 
-void test_a01_goal_adder_constructor() {
+void test_goal_adder_constructor() {
     // Test 1: Basic construction with empty stores and empty database
     {
         std::map<const goal_lineage*, const expr*> goals;
         std::multimap<const goal_lineage*, size_t> candidates;
         std::vector<rule> database;
         
-        a01_goal_adder adder(goals, candidates, database);
+        goal_adder adder(goals, candidates, database);
         
         assert(adder.goals.size() == 0);
         assert(adder.candidates.size() == 0);
@@ -11957,7 +11957,7 @@ void test_a01_goal_adder_constructor() {
         
         std::vector<rule> database = {r1, r2};
         
-        a01_goal_adder adder(goals, candidates, database);
+        goal_adder adder(goals, candidates, database);
         
         assert(adder.goals.size() == 0);
         assert(adder.candidates.size() == 0);
@@ -11981,7 +11981,7 @@ void test_a01_goal_adder_constructor() {
         rule r1{&e2, {}};
         std::vector<rule> database = {r1};
         
-        a01_goal_adder adder(goals, candidates, database);
+        goal_adder adder(goals, candidates, database);
         
         assert(adder.goals.size() == 1);
         assert(adder.candidates.size() == 2);
@@ -11994,7 +11994,7 @@ void test_a01_goal_adder_constructor() {
         std::multimap<const goal_lineage*, size_t> candidates;
         std::vector<rule> database;
         
-        a01_goal_adder adder(goals, candidates, database);
+        goal_adder adder(goals, candidates, database);
         
         // Add to the stores directly
         goal_lineage g1{nullptr, 1};
@@ -12007,14 +12007,14 @@ void test_a01_goal_adder_constructor() {
     }
 }
 
-void test_a01_goal_adder() {
+void test_goal_adder() {
     // Test 1: Add goal with empty database - no candidates added
     {
         std::map<const goal_lineage*, const expr*> goals;
         std::multimap<const goal_lineage*, size_t> candidates;
         std::vector<rule> database;
         
-        a01_goal_adder adder(goals, candidates, database);
+        goal_adder adder(goals, candidates, database);
         
         goal_lineage g1{nullptr, 1};
         expr::atom a1{"goal1"};
@@ -12038,7 +12038,7 @@ void test_a01_goal_adder() {
         rule r1{&e_rule, {}};
         std::vector<rule> database = {r1};
         
-        a01_goal_adder adder(goals, candidates, database);
+        goal_adder adder(goals, candidates, database);
         
         goal_lineage g1{nullptr, 1};
         expr::atom a1{"goal1"};
@@ -12077,7 +12077,7 @@ void test_a01_goal_adder() {
         
         std::vector<rule> database = {r1, r2, r3};
         
-        a01_goal_adder adder(goals, candidates, database);
+        goal_adder adder(goals, candidates, database);
         
         goal_lineage g1{nullptr, 10};
         expr::atom goal_atom{"test_goal"};
@@ -12124,7 +12124,7 @@ void test_a01_goal_adder() {
         
         std::vector<rule> database = {r1, r2};
         
-        a01_goal_adder adder(goals, candidates, database);
+        goal_adder adder(goals, candidates, database);
         
         goal_lineage g1{nullptr, 5};
         expr::atom goal_atom{"my_goal"};
@@ -12162,7 +12162,7 @@ void test_a01_goal_adder() {
         
         std::vector<rule> database = {r1, r2};
         
-        a01_goal_adder adder(goals, candidates, database);
+        goal_adder adder(goals, candidates, database);
         
         // Add first goal
         goal_lineage g1{nullptr, 1};
@@ -12197,7 +12197,7 @@ void test_a01_goal_adder() {
         rule r1{&e1, {}};
         std::vector<rule> database = {r1};
         
-        a01_goal_adder adder(goals, candidates, database);
+        goal_adder adder(goals, candidates, database);
         
         // Create goal_lineage with parent
         resolution_lineage parent{nullptr, 5};
@@ -12228,7 +12228,7 @@ void test_a01_goal_adder() {
         
         std::vector<rule> database = {r1, r2};
         
-        a01_goal_adder adder(goals, candidates, database);
+        goal_adder adder(goals, candidates, database);
         
         // Create nested goal expression: cons(var(0), atom("test"))
         expr::var v1{0};
@@ -12270,7 +12270,7 @@ void test_a01_goal_adder() {
             rules[5], rules[6], rules[7], rules[8], rules[9]
         };
         
-        a01_goal_adder adder(goals, candidates, database);
+        goal_adder adder(goals, candidates, database);
         
         goal_lineage g1{nullptr, 100};
         expr::atom goal_atom{"big_goal"};
@@ -12314,7 +12314,7 @@ void test_a01_goal_adder() {
         
         std::vector<rule> database = {r1, r2, r3};
         
-        a01_goal_adder adder(goals, candidates, database);
+        goal_adder adder(goals, candidates, database);
         
         // Add first goal
         goal_lineage g1{nullptr, 1};
@@ -12378,7 +12378,7 @@ void test_a01_goal_adder() {
         
         std::vector<rule> database = {r1, r2, r3};
         
-        a01_goal_adder adder(goals, candidates, database);
+        goal_adder adder(goals, candidates, database);
         
         goal_lineage g1{nullptr, 42};
         expr::atom goal_atom{"complex_goal"};
@@ -12408,7 +12408,7 @@ void test_a01_goal_adder() {
     }
 }
 
-void test_a01_goal_resolver_constructor() {
+void test_goal_resolver_constructor() {
     // Test 1: Basic construction with all required references
     {
         trail t;
@@ -12423,9 +12423,9 @@ void test_a01_goal_resolver_constructor() {
         a01_candidate_store cs;
         a01_database db;
         a01_avoidance_store as;
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         assert(&resolver.rs == &rs);
         assert(&resolver.gs == &gs);
@@ -12481,8 +12481,8 @@ void test_a01_goal_resolver_constructor() {
         avoidance2.insert(rl2);
         as.insert(avoidance2);
         
-        a01_goal_adder ga(gs, cs, db);
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_adder ga(gs, cs, db);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         assert(resolver.rs.size() == 1);
         assert(resolver.gs.size() == 1);
@@ -12492,7 +12492,7 @@ void test_a01_goal_resolver_constructor() {
     }
 }
 
-void test_a01_goal_resolver() {
+void test_goal_resolver() {
     // Test 1: Resolve with simple fact (empty body) - no new goals
     {
         trail t;
@@ -12512,7 +12512,7 @@ void test_a01_goal_resolver() {
         rule r_fact{p_expr, {}};
         a01_database db = {r_fact};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
         
         // Pre-populate avoidance store: single avoidance containing the rl we're about to create
@@ -12527,7 +12527,7 @@ void test_a01_goal_resolver() {
         assert(as.begin()->size() == 1);
         assert(as.begin()->count(rl_expected) == 1);
         
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal "p" using goal_adder
         const expr* goal_p = ep.atom("p");
@@ -12610,7 +12610,7 @@ void test_a01_goal_resolver() {
         rule r1{p_expr, {q_expr}};
         a01_database db = {r1};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
         
         // Pre-populate avoidance store with mixed avoidances
@@ -12642,7 +12642,7 @@ void test_a01_goal_resolver() {
         
         assert(as.size() == 3);
         
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal "p" using goal_adder
         const expr* goal_p = ep.atom("p");
@@ -12761,13 +12761,13 @@ void test_a01_goal_resolver() {
         rule r1{p_expr, {q_expr, r_expr, s_expr}};
         a01_database db = {r1};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
         
         // Empty avoidance store for this test (baseline)
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal "p" using goal_adder
         const expr* goal_p = ep.atom("p");
@@ -12863,7 +12863,7 @@ void test_a01_goal_resolver() {
         rule r1{p_x, {q_x}};
         a01_database db = {r1};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
         
         // Pre-populate: avoidance containing the rl about to be created
@@ -12873,7 +12873,7 @@ void test_a01_goal_resolver() {
         avoidance1.insert(rl_expected);
         as.insert(avoidance1);
         
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Record sequencer state before resolution
         uint32_t seq_before = seq.index;
@@ -12994,9 +12994,9 @@ void test_a01_goal_resolver() {
         rule r2{q_expr, {}};
         a01_database db = {r1, r2};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add two goals using goal_adder
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -13066,9 +13066,9 @@ void test_a01_goal_resolver() {
         rule r1{p_expr, {q_expr, r_expr}};
         a01_database db = {r1};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal with specific parent lineage using goal_adder
         const resolution_lineage* parent_rl = lp.resolution(nullptr, 5);
@@ -13156,9 +13156,9 @@ void test_a01_goal_resolver() {
         rule r1{p_x, {q_x, r_x}};
         a01_database db = {r1};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Record sequencer state
         uint32_t seq_before = seq.index;
@@ -13309,9 +13309,9 @@ void test_a01_goal_resolver() {
         rule r3{r_expr, {}};         // Rule 2: r
         a01_database db = {r1, r2, r3};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal "q" using goal_adder (adds all rules as candidates)
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -13383,9 +13383,9 @@ void test_a01_goal_resolver() {
         rule r1{p_expr, {q_expr}};
         a01_database db = {r1};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Create a goal that's deep in the tree (Level 0 -> Level 1 -> Level 2)
         const goal_lineage* root = lp.goal(nullptr, 0);
@@ -13479,9 +13479,9 @@ void test_a01_goal_resolver() {
         rule r1{p_xy, {q_x, r_y}};
         a01_database db = {r1};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Record sequencer state
         uint32_t seq_before = seq.index;
@@ -13649,9 +13649,9 @@ void test_a01_goal_resolver() {
         rule r1{p_y, {q_y}};
         a01_database db = {r1};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Record sequencer state
         uint32_t seq_before = seq.index;
@@ -13777,9 +13777,9 @@ void test_a01_goal_resolver() {
         rule r4{t_expr, {}};                    // Rule 4: t
         a01_database db = {r0, r1, r2, r3, r4};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal "r" which matches rule 2
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -13868,9 +13868,9 @@ void test_a01_goal_resolver() {
         rule r4{t_expr, {}};                    // t
         a01_database db = {r0, r1, r2, r3, r4};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add 5 different goals with different lineage structures
         const goal_lineage* g0 = lp.goal(nullptr, 0);
@@ -14014,9 +14014,9 @@ void test_a01_goal_resolver() {
         rule r3{r_v2, {}};                      // Rule 3: r(Z)  <-- We'll use this (last)
         a01_database db = {r0, r1, r2, r3};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal "r(a)"
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -14085,9 +14085,9 @@ void test_a01_goal_resolver() {
         rule r2{r_expr, {}};            // r
         a01_database db = {r0, r1, r2};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add three goals
         const goal_lineage* g_p = lp.goal(nullptr, 10);
@@ -14205,9 +14205,9 @@ void test_a01_goal_resolver() {
         rule r1{q_expr, {}};
         a01_database db = {r0, r1};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Pre-populate resolution store with some existing resolutions
         const goal_lineage* g_old1 = lp.goal(nullptr, 100);
@@ -14281,9 +14281,9 @@ void test_a01_goal_resolver() {
         rule r1{p_nested, {q_nested}};
         a01_database db = {r1};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal with concrete value: p(f(g(h(a))))
         const expr* atom_a = ep.atom("a");
@@ -14392,9 +14392,9 @@ void test_a01_goal_resolver() {
         rule r1{p_expr, {body_literals.begin(), body_literals.end()}};
         a01_database db = {r1};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -14466,9 +14466,9 @@ void test_a01_goal_resolver() {
         rule r1{p_ab, {q_a, r_b}};
         a01_database db = {r1};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // CRITICAL: Create goal with VARIABLES: p(X, Y) where X and Y are goal variables
         const expr* goal_var_x = ep.var(seq());
@@ -14579,9 +14579,9 @@ void test_a01_goal_resolver() {
         rule r1{p_xy, {q_x, r_y}};
         a01_database db = {r1};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Goal: p(a, b) - instantiated
         const expr* atom_a = ep.atom("a");
@@ -14682,9 +14682,9 @@ void test_a01_goal_resolver() {
         rule r1{p_x, {q_x, r_x}};
         a01_database db = {r1};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Store original expression pointers
         const expr* original_head = r1.head;
@@ -14762,9 +14762,9 @@ void test_a01_goal_resolver() {
         rule r4{p, {q, q}};
         a01_database db = {r0, r1, r2, r3, r4};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal p
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -14848,9 +14848,9 @@ void test_a01_goal_resolver() {
         rule r2{r_a, {}};
         a01_database db = {r0, r1, r2};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Start with goal p(Z) where Z is a variable
         const expr* var_z = ep.var(seq());
@@ -14943,9 +14943,9 @@ void test_a01_goal_resolver() {
         rule r1{p_x, {}};  // Empty body
         a01_database db = {r1};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Goal: p(a) - concrete atom
         const expr* atom_a = ep.atom("a");
@@ -15038,9 +15038,9 @@ void test_a01_goal_resolver() {
         rule r2{p_x3, {s_x3}};  // p(X) :- s(X)
         a01_database db = {r0, r1, r2};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Goal: p(a)
         const expr* goal_p_a = ep.cons(ep.atom("p"), ep.atom("a"));
@@ -15099,9 +15099,9 @@ void test_a01_goal_resolver() {
         rule r2{r, {}};       // r
         a01_database db = {r0, r1, r2};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add root goal p
         const goal_lineage* g_p = lp.goal(nullptr, 0);
@@ -15184,9 +15184,9 @@ void test_a01_goal_resolver() {
         rule r4{z, {}};       // z
         a01_database db = {r0, r1, r2, r3, r4};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add two independent root goals
         const goal_lineage* g_p = lp.goal(nullptr, 0);
@@ -15305,9 +15305,9 @@ void test_a01_goal_resolver() {
         rule r4{t_atom, {}};  // t
         a01_database db = {r0, r1, r2, r3, r4};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Start with root p
         const goal_lineage* g_p = lp.goal(nullptr, 0);
@@ -15428,9 +15428,9 @@ void test_a01_goal_resolver() {
         rule r6{g, {}};       // g
         a01_database db = {r0, r1, r2, r3, r4, r5, r6};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Root: a
         const goal_lineage* g_a = lp.goal(nullptr, 0);
@@ -15572,9 +15572,9 @@ void test_a01_goal_resolver() {
         
         a01_database db(rules.begin(), rules.end());
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Start with root p0
         const goal_lineage* g_p0 = lp.goal(nullptr, 0);
@@ -15674,9 +15674,9 @@ void test_a01_goal_resolver() {
         rule r5{q3, {}};      // q3
         a01_database db = {r0, r1, r2, r3, r4, r5};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Create TWO independent root goals
         const goal_lineage* g_p1 = lp.goal(nullptr, 10);
@@ -15812,9 +15812,9 @@ void test_a01_goal_resolver() {
         rule r6{c1, {}};           // c1
         a01_database db = {r0, r1, r2, r3, r4, r5, r6};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Root
         const goal_lineage* g_root = lp.goal(nullptr, 0);
@@ -15943,9 +15943,9 @@ void test_a01_goal_resolver() {
         rule r5{u, {}};       // u
         a01_database db = {r0, r1, r2, r3, r4, r5};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         a01_avoidance_store as;
-        a01_goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Root
         const goal_lineage* g_p = lp.goal(nullptr, 0);
@@ -16038,7 +16038,7 @@ void test_a01_goal_resolver() {
     }
 }
 
-void test_a01_head_elimination_detector_constructor() {
+void test_head_elimination_detector_constructor() {
     // Test 1: Basic construction - should not crash
     {
         trail t;
@@ -16050,7 +16050,7 @@ void test_a01_head_elimination_detector_constructor() {
         a01_goal_store gs;
         a01_database db;
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Constructor should succeed without crashing
         // Members are private, so we can't verify directly
@@ -16076,7 +16076,7 @@ void test_a01_head_elimination_detector_constructor() {
         rule r1{p, {}};
         db.push_back(r1);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Constructor should succeed with pre-populated stores
         // Verify stores still contain data (not modified by constructor)
@@ -16085,7 +16085,7 @@ void test_a01_head_elimination_detector_constructor() {
     }
 }
 
-void test_a01_head_elimination_detector() {
+void test_head_elimination_detector() {
     // Test 1: Unification succeeds - candidate should NOT be eliminated
     {
         trail t;
@@ -16103,7 +16103,7 @@ void test_a01_head_elimination_detector() {
         rule r0{p_a, {}};
         db.push_back(r0);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal: p(a) - matches perfectly
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -16149,7 +16149,7 @@ void test_a01_head_elimination_detector() {
         rule r0{p_a, {}};
         db.push_back(r0);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal: p(b) - does NOT match
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -16197,7 +16197,7 @@ void test_a01_head_elimination_detector() {
         rule r0{p_x, {}};
         db.push_back(r0);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal: p(a) - should unify with p(X)
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -16252,7 +16252,7 @@ void test_a01_head_elimination_detector() {
         db.push_back(r1);
         db.push_back(r2);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goals
         const goal_lineage* g_pa = lp.goal(nullptr, 1);
@@ -16316,7 +16316,7 @@ void test_a01_head_elimination_detector() {
         rule r0{p_x_x, {}};
         db.push_back(r0);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal 1: p(a, a) - SHOULD unify (X=a)
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -16372,7 +16372,7 @@ void test_a01_head_elimination_detector() {
         rule r0{p_xy, {}};
         db.push_back(r0);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal: p(a, b)
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -16416,7 +16416,7 @@ void test_a01_head_elimination_detector() {
         rule r0{p_x, {}};
         db.push_back(r0);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal: p(Y) where Y is also a variable
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -16460,7 +16460,7 @@ void test_a01_head_elimination_detector() {
         rule r0{p_x, {}};
         db.push_back(r0);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Pre-bind some other variable
         const expr* var_z = ep.var(seq());
@@ -16512,7 +16512,7 @@ void test_a01_head_elimination_detector() {
         rule r0{p_nested, {}};
         db.push_back(r0);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal: p(f(g(a)))
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -16556,7 +16556,7 @@ void test_a01_head_elimination_detector() {
         rule r0{p_fga, {}};
         db.push_back(r0);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal: p(f(g(b))) - 'b' instead of 'a'
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -16597,7 +16597,7 @@ void test_a01_head_elimination_detector() {
         rule r0{p_xxx, {}};
         db.push_back(r0);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal 1: p(a, a, a) - should unify (X=a consistently)
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -16659,7 +16659,7 @@ void test_a01_head_elimination_detector() {
         rule r0{p_xy, {}};
         db.push_back(r0);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal: p(A, B) where A and B are also variables
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -16706,7 +16706,7 @@ void test_a01_head_elimination_detector() {
         rule r0{p_a, {}};
         db.push_back(r0);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal: q(a) - different predicate
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -16737,7 +16737,7 @@ void test_a01_head_elimination_detector() {
         rule r0{p_ab, {}};
         db.push_back(r0);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal: p(a) - different arity
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -16783,7 +16783,7 @@ void test_a01_head_elimination_detector() {
         db.push_back(r1);
         db.push_back(r2);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal: p(a)
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -16835,7 +16835,7 @@ void test_a01_head_elimination_detector() {
             db.push_back(r);
         }
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal: p5(a) - will match rule 5 only
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -16884,7 +16884,7 @@ void test_a01_head_elimination_detector() {
         rule r0{p_a, {}};
         db.push_back(r0);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal: p(a)
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -16940,7 +16940,7 @@ void test_a01_head_elimination_detector() {
         rule r0{p_xyx, {}};
         db.push_back(r0);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal: p(A, B, A) where A and B are goal variables
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -17006,7 +17006,7 @@ void test_a01_head_elimination_detector() {
         rule r0{p_xy, {}};
         db.push_back(r0);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal: p(a, b)
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -17050,7 +17050,7 @@ void test_a01_head_elimination_detector() {
         rule r0{p_x, {}};
         db.push_back(r0);
         
-        a01_head_elimination_detector detector(t, bm, gs, db);
+        head_elimination_detector detector(t, bm, gs, db);
         
         // Goal: p(f(X)) - X occurs inside its own binding (occurs check)
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -17923,7 +17923,7 @@ void test_solution_detector() {
         rule r2{r, {}};
         a01_database db = {r0, r1, r2};
         
-        a01_goal_adder ga(gs, cs, db);
+        goal_adder ga(gs, cs, db);
         solution_detector detector(gs);
         
         // Initially empty - solution found (trivially)
@@ -18783,13 +18783,13 @@ void test_conflict_detector() {
     }
 }
 
-void test_a01_cdcl_elimination_detector_constructor() {
+void test_cdcl_elimination_detector_constructor() {
     // Test 1: Basic construction with empty stores
     {
         lineage_pool lp;
         a01_avoidance_store as;
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // Verify references stored
         assert(&detector.as == &as);
@@ -18818,7 +18818,7 @@ void test_a01_cdcl_elimination_detector_constructor() {
         
         assert(as.size() == 2);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // Verify references and stores unchanged
         assert(&detector.as == &as);
@@ -18827,7 +18827,7 @@ void test_a01_cdcl_elimination_detector_constructor() {
     }
 }
 
-void test_a01_cdcl_elimination_detector() {
+void test_cdcl_elimination_detector() {
     // Test 1: Empty avoidance store - no eliminations
     {
         lineage_pool lp;
@@ -18835,7 +18835,7 @@ void test_a01_cdcl_elimination_detector() {
         
         assert(as.empty());
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // Test arbitrary goal/index combination
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -18864,7 +18864,7 @@ void test_a01_cdcl_elimination_detector() {
         
         assert(as.size() == 1);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // Test the exact goal/index combination
         bool result = detector(g1, 0);
@@ -18890,7 +18890,7 @@ void test_a01_cdcl_elimination_detector() {
         avoidance.insert(rl_in_avoidance);
         as.insert(avoidance);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // Test different goal/index (g2, 0)
         bool result = detector(g2, 0);
@@ -18921,7 +18921,7 @@ void test_a01_cdcl_elimination_detector() {
         assert(as.size() == 1);
         assert(as.begin()->size() == 2);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // Test rl1 - should NOT eliminate (not singleton)
         bool result1 = detector(g1, 0);
@@ -18966,7 +18966,7 @@ void test_a01_cdcl_elimination_detector() {
         
         assert(as.size() == 3);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // Test rl1 - should NOT eliminate (in non-singletons only)
         bool result1 = detector(g1, 0);
@@ -18996,7 +18996,7 @@ void test_a01_cdcl_elimination_detector() {
         avoidance.insert(rl_idx1);
         as.insert(avoidance);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // Test different indices for same goal
         bool result0 = detector(g1, 0);  // rl_idx0
@@ -19038,7 +19038,7 @@ void test_a01_cdcl_elimination_detector() {
         avoidance2.insert(rl3_0);
         as.insert(avoidance2);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // g1, idx 0 - SHOULD ELIMINATE (singleton)
         assert(detector(g1, 0) == true);
@@ -19065,7 +19065,7 @@ void test_a01_cdcl_elimination_detector() {
         avoidance.insert(rl);
         as.insert(avoidance);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // Call 100 times
         for (int i = 0; i < 100; i++) {
@@ -19097,7 +19097,7 @@ void test_a01_cdcl_elimination_detector() {
         avoidance.insert(rl3);
         as.insert(avoidance);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // Initially none should be eliminated (not singletons)
         assert(detector(g1, 0) == false);
@@ -19151,7 +19151,7 @@ void test_a01_cdcl_elimination_detector() {
         
         assert(as.size() == 2);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // CRITICAL: idx 0 and 1 should be eliminated, idx 2 should not
         assert(detector(g1, 0) == true);   // In singleton
@@ -19177,7 +19177,7 @@ void test_a01_cdcl_elimination_detector() {
         avoidance.insert(rl_grandchild);
         as.insert(avoidance);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // Test the grandchild resolution - should eliminate
         bool result = detector(g_grandchild, 3);
@@ -19200,10 +19200,10 @@ void test_a01_cdcl_elimination_detector() {
         avoidance.insert(rl);
         as.insert(avoidance);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // Multiple detectors on same stores
-        a01_cdcl_elimination_detector detector2(as, lp);
+        cdcl_elimination_detector detector2(as, lp);
         
         // Both should give same result
         assert(detector(g1, 0) == true);
@@ -19230,7 +19230,7 @@ void test_a01_cdcl_elimination_detector() {
         assert(as.size() == 1);
         assert(as.begin()->size() == 0);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         
@@ -19275,7 +19275,7 @@ void test_a01_cdcl_elimination_detector() {
         
         assert(as.size() == 3);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // CRITICAL: Only rl1 and rl3 should be eliminated
         assert(detector(g1, 0) == true);   // In singleton
@@ -19300,7 +19300,7 @@ void test_a01_cdcl_elimination_detector() {
         avoidance.insert(rl_first);
         as.insert(avoidance);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // CRITICAL: detector internally calls lp.resolution(g1, 0) again
         // Due to interning, it should get the SAME pointer
@@ -19353,7 +19353,7 @@ void test_a01_cdcl_elimination_detector() {
         
         assert(as.size() == 4);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // CRITICAL: Only rl1 should be eliminated (exists as singleton)
         assert(detector(g1, 0) == true);   // In singleton av1
@@ -19390,7 +19390,7 @@ void test_a01_cdcl_elimination_detector() {
         
         assert(as.size() == 26);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // CRITICAL: Only goal 25, idx 0 should be eliminated
         for (int i = 0; i < 50; i++) {
@@ -19418,7 +19418,7 @@ void test_a01_cdcl_elimination_detector() {
         avoidance.insert(rl);
         as.insert(avoidance);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // Should eliminate (rl exists as singleton)
         bool result = detector(g1, 0);
@@ -19440,7 +19440,7 @@ void test_a01_cdcl_elimination_detector() {
         avoidance.insert(rl_g1_idx5);
         as.insert(avoidance);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // CRITICAL: Only g1,idx5 should eliminate
         assert(detector(g1, 5) == true);   // Exact match
@@ -19469,7 +19469,7 @@ void test_a01_cdcl_elimination_detector() {
         // std::set deduplicates
         assert(as.size() == 1);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // Should still eliminate
         bool result = detector(g1, 0);
@@ -19498,7 +19498,7 @@ void test_a01_cdcl_elimination_detector() {
         
         assert(as.size() == 2);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // CRITICAL: rl1 should eliminate because {rl1} exists as singleton
         // Even though rl1 also appears in a non-singleton
@@ -19527,7 +19527,7 @@ void test_a01_cdcl_elimination_detector() {
         learned_clause.insert(rl_r);
         as.insert(learned_clause);
         
-        a01_cdcl_elimination_detector detector(as, lp);
+        cdcl_elimination_detector detector(as, lp);
         
         // Phase 1: No eliminations yet (all in 3-way avoidance)
         assert(detector(g_p, 0) == false);
@@ -19560,7 +19560,7 @@ void test_a01_cdcl_elimination_detector() {
     }
 }
 
-void test_a01_decider_constructor() {
+void test_mcts_decider_constructor() {
     // Test 1: Basic construction with empty stores
     {
         trail t;
@@ -19570,11 +19570,11 @@ void test_a01_decider_constructor() {
         a01_goal_store gs;
         a01_candidate_store cs;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         // Verify references stored
         assert(&decider.gs == &gs);
@@ -19601,11 +19601,11 @@ void test_a01_decider_constructor() {
         cs.insert({g1, 1});
         cs.insert({g2, 0});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 2.0, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 2.0, rng);
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         // Verify references and stores unchanged
         assert(&decider.gs == &gs);
@@ -19615,7 +19615,7 @@ void test_a01_decider_constructor() {
     }
 }
 
-void test_a01_decider_choose_goal() {
+void test_mcts_decider_choose_goal() {
     // Test 1: Single goal - should return that goal
     {
         trail t;
@@ -19628,11 +19628,11 @@ void test_a01_decider_choose_goal() {
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         size_t length_before = sim.length();
         
@@ -19665,9 +19665,9 @@ void test_a01_decider_choose_goal() {
         gs.insert({g2, ep.atom("q")});
         gs.insert({g3, ep.atom("r")});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         // Pre-populate tree: g1 and g3 visited, g2 unvisited
         root.m_visits = 10;
@@ -19680,7 +19680,7 @@ void test_a01_decider_choose_goal() {
         root.m_children[g3].m_visits = 5;
         root.m_children[g3].m_value = 10.0;
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         const goal_lineage* chosen = decider.choose_goal();
         
@@ -19708,9 +19708,9 @@ void test_a01_decider_choose_goal() {
         gs.insert({g2, ep.atom("q")});
         gs.insert({g3, ep.atom("r")});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         // Pre-populate tree: all visited, g2 has highest average reward
         root.m_visits = 100;
@@ -19727,7 +19727,7 @@ void test_a01_decider_choose_goal() {
         root.m_children[g3].m_visits = 10;
         root.m_children[g3].m_value = 30.0;
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         const goal_lineage* chosen = decider.choose_goal();
         
@@ -19755,11 +19755,11 @@ void test_a01_decider_choose_goal() {
         gs.insert({g2, ep.atom("q")});
         gs.insert({g3, ep.atom("r")});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 2.0, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 2.0, rng);
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         // Call multiple times
         for (int i = 0; i < 20; i++) {
@@ -19789,9 +19789,9 @@ void test_a01_decider_choose_goal() {
         gs.insert({g1, ep.atom("p")});
         gs.insert({g2, ep.atom("q")});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.5, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.5, rng);
         
         // Pre-populate with similar rewards
         root.m_visits = 50;
@@ -19800,7 +19800,7 @@ void test_a01_decider_choose_goal() {
         root.m_children[g2].m_visits = 20;
         root.m_children[g2].m_value = 62.0;  // avg = 3.1 (slightly higher)
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         const goal_lineage* chosen = decider.choose_goal();
         
@@ -19825,11 +19825,11 @@ void test_a01_decider_choose_goal() {
             goals.push_back(g);
         }
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(123);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         size_t length_before = sim.length();
         const goal_lineage* chosen = decider.choose_goal();
@@ -19852,7 +19852,7 @@ void test_a01_decider_choose_goal() {
     }
 }
 
-void test_a01_decider_choose_candidate() {
+void test_mcts_decider_choose_candidate() {
     // Test 1: Single candidate - should return that candidate
     {
         trail t;
@@ -19866,11 +19866,11 @@ void test_a01_decider_choose_candidate() {
         gs.insert({g1, ep.atom("p")});
         cs.insert({g1, 5});  // Only candidate is index 5
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         size_t length_before = sim.length();
         
@@ -19902,9 +19902,9 @@ void test_a01_decider_choose_candidate() {
         cs.insert({g1, 1});
         cs.insert({g1, 2});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         // Pre-populate tree: indices 0 and 2 visited, index 1 unvisited
         root.m_visits = 10;
@@ -19918,7 +19918,7 @@ void test_a01_decider_choose_candidate() {
         root.m_children[size_t(2)].m_visits = 3;
         root.m_children[size_t(2)].m_value = 9.0;
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         size_t chosen = decider.choose_candidate(g1);
         
@@ -19946,9 +19946,9 @@ void test_a01_decider_choose_candidate() {
         cs.insert({g1, 2});
         cs.insert({g1, 3});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         // Pre-populate tree: all visited, index 2 has highest average reward
         root.m_visits = 100;
@@ -19969,7 +19969,7 @@ void test_a01_decider_choose_candidate() {
         root.m_children[size_t(3)].m_visits = 10;
         root.m_children[size_t(3)].m_value = 30.0;
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         size_t chosen = decider.choose_candidate(g1);
         
@@ -19998,11 +19998,11 @@ void test_a01_decider_choose_candidate() {
         cs.insert({g1, 3});
         cs.insert({g1, 4});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(999);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 2.0, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 2.0, rng);
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         // Call multiple times
         for (int i = 0; i < 15; i++) {
@@ -20044,9 +20044,9 @@ void test_a01_decider_choose_candidate() {
         cs.insert({g1, 17});
         cs.insert({g1, 42});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         // Pre-populate: index 42 has highest reward
         root.m_visits = 50;
@@ -20060,7 +20060,7 @@ void test_a01_decider_choose_candidate() {
         root.m_children[size_t(42)].m_visits = 10;
         root.m_children[size_t(42)].m_value = 500.0; // avg = 50.0 (HIGHEST!)
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         size_t chosen = decider.choose_candidate(g1);
         
@@ -20086,11 +20086,11 @@ void test_a01_decider_choose_candidate() {
             cs.insert({g1, i});
         }
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(777);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         size_t chosen = decider.choose_candidate(g1);
         
@@ -20126,9 +20126,9 @@ void test_a01_decider_choose_candidate() {
         cs.insert({g1, 0});
         cs.insert({g1, 1});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 2.0, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 2.0, rng);
         
         // Pre-populate: idx 0 higher reward BUT much more visited (less exploration bonus)
         // idx 1 lower reward but less visited (higher exploration bonus)
@@ -20143,7 +20143,7 @@ void test_a01_decider_choose_candidate() {
         root.m_children[size_t(1)].m_visits = 1;
         root.m_children[size_t(1)].m_value = 5.0;
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         size_t chosen = decider.choose_candidate(g1);
         
@@ -20152,7 +20152,7 @@ void test_a01_decider_choose_candidate() {
     }
 }
 
-void test_a01_decider() {
+void test_mcts_decider() {
     // Test 1: Single goal, single candidate - both chosen
     {
         trail t;
@@ -20166,11 +20166,11 @@ void test_a01_decider() {
         gs.insert({g1, ep.atom("p")});
         cs.insert({g1, 0});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         size_t length_before = sim.length();
         
@@ -20212,9 +20212,9 @@ void test_a01_decider() {
         cs.insert({g2, 2});
         cs.insert({g3, 0});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         // Pre-populate tree to force g2 selection (level 1)
         root.m_visits = 100;
@@ -20246,7 +20246,7 @@ void test_a01_decider() {
         root.m_children[g2].m_children[size_t(2)].m_visits = 10;
         root.m_children[g2].m_children[size_t(2)].m_value = 20.0;
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         size_t length_before = sim.length();
         
@@ -20279,9 +20279,9 @@ void test_a01_decider() {
         cs.insert({g1, 20});
         cs.insert({g2, 30});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         // Force g1 selection at level 1 (highest reward)
         root.m_visits = 100;
@@ -20298,7 +20298,7 @@ void test_a01_decider() {
         
         root.m_children[g1].m_children[size_t(20)].m_visits = 0;  // UNVISITED - infinity UCB1!
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         auto [chosen_goal, chosen_candidate] = decider();
         
@@ -20331,11 +20331,11 @@ void test_a01_decider() {
         cs.insert({g2, 1});
         cs.insert({g2, 2});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(555);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.5, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.5, rng);
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         // Call 10 times
         for (int i = 0; i < 10; i++) {
@@ -20388,9 +20388,9 @@ void test_a01_decider() {
         cs.insert({g3, 2});
         cs.insert({g3, 3});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.0, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.0, rng);
         
         // Force selection of g3 (level 1): give it massively higher average reward
         root.m_visits = 200;
@@ -20419,7 +20419,7 @@ void test_a01_decider() {
         root.m_children[g3].m_children[size_t(3)].m_visits = 10;
         root.m_children[g3].m_children[size_t(3)].m_value = 40.0;  // avg = 4.0
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         auto [chosen_goal, chosen_candidate] = decider();
         
@@ -20452,9 +20452,9 @@ void test_a01_decider() {
         cs.insert({g2, 1});
         cs.insert({g2, 2});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         // Force g1 (highest reward at level 1)
         root.m_visits = 100;
@@ -20470,7 +20470,7 @@ void test_a01_decider() {
         root.m_children[g1].m_children[size_t(0)].m_value = 50.0;
         root.m_children[g1].m_children[size_t(1)].m_visits = 0;  // UNVISITED - infinity UCB1!
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         auto [chosen_goal, chosen_candidate] = decider();
         
@@ -20503,11 +20503,11 @@ void test_a01_decider() {
         cs.insert({g2, 20});
         cs.insert({g2, 25});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(999);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 2.0, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 2.0, rng);
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         // Call 15 times
         for (int i = 0; i < 15; i++) {
@@ -20560,9 +20560,9 @@ void test_a01_decider() {
         cs.insert({g4, 0});
         cs.insert({g4, 1});
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(12345);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.5, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.5, rng);
         
         // Setup level 1: force g3 selection
         root.m_visits = 150;
@@ -20591,7 +20591,7 @@ void test_a01_decider() {
         root.m_children[g3].m_children[size_t(2)].m_visits = 10;
         root.m_children[g3].m_children[size_t(2)].m_value = 50.0;  // avg = 5.0
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         auto [chosen_goal, chosen_candidate] = decider();
         
@@ -20624,11 +20624,11 @@ void test_a01_decider() {
         size_t gs_size_before = gs.size();
         size_t cs_size_before = cs.size();
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_decider decider(gs, cs, sim);
+        mcts_decider decider(gs, cs, sim);
         
         // Call 10 times
         for (int i = 0; i < 10; i++) {
@@ -20663,9 +20663,9 @@ void test_a01_sim_constructor() {
         a01_goals goals;  // Empty
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         {
             a01_resolution_store rs;
@@ -20742,9 +20742,9 @@ void test_a01_sim_constructor() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
 
         {
             a01_resolution_store rs;
@@ -20799,9 +20799,9 @@ void test_a01_sim_constructor() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -20902,9 +20902,9 @@ void test_a01_sim_constructor() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -20972,9 +20972,9 @@ void test_a01_sim_constructor() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -21037,9 +21037,9 @@ void test_a01_sim_constructor() {
         
         size_t as_size_before = as.size();
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -21083,9 +21083,9 @@ void test_a01_sim_constructor() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -21199,9 +21199,9 @@ void test_a01_sim_constructor() {
         as.insert(avoid1);
         as.insert(avoid2);
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         size_t as_size_before = as.size();
         
@@ -21234,9 +21234,9 @@ void test_a01_sim_constructor() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -21262,9 +21262,9 @@ void test_a01_sim_constructor() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         // Test various limits
         {
@@ -21303,9 +21303,9 @@ void test_a01_sim_constructor() {
         a01_goals goals;
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -21339,9 +21339,9 @@ void test_a01_sim_constructor() {
         avoid.insert(rl2);
         as.insert(avoid);
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -21381,9 +21381,9 @@ void test_a01_sim_constructor() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -21435,9 +21435,9 @@ void test_a01_sim_constructor() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -21497,9 +21497,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -21554,9 +21554,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -21601,9 +21601,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -21664,9 +21664,9 @@ void test_a01_sim() {
         a01_avoidance_store as;
         as.insert(avoid);
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -21724,9 +21724,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -21789,9 +21789,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -21866,9 +21866,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -21926,9 +21926,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -22004,9 +22004,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -22076,9 +22076,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -22150,9 +22150,9 @@ void test_a01_sim() {
         a01_avoidance_store as;
         as.insert(avoid);
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -22210,9 +22210,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -22279,9 +22279,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -22327,9 +22327,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -22393,9 +22393,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -22452,9 +22452,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -22518,9 +22518,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -22582,9 +22582,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -22651,9 +22651,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -22705,9 +22705,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -22773,9 +22773,9 @@ void test_a01_sim() {
         a01_avoidance_store as;
         as.insert(avoid);
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -22846,9 +22846,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -22904,9 +22904,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -22997,9 +22997,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -23063,9 +23063,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -23129,9 +23129,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -23191,9 +23191,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -23235,9 +23235,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -23280,9 +23280,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -23324,9 +23324,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -23386,9 +23386,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -23455,9 +23455,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -23522,9 +23522,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -23569,9 +23569,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -23659,9 +23659,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -23738,9 +23738,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -23807,9 +23807,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -23896,9 +23896,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -23970,9 +23970,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -24021,9 +24021,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -24086,9 +24086,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -24140,9 +24140,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -24201,9 +24201,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -24272,9 +24272,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -24362,9 +24362,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -24439,9 +24439,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -24491,9 +24491,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -24567,9 +24567,9 @@ void test_a01_sim() {
         a01_avoidance_store as;
         as.insert(avoidance);
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -24627,9 +24627,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -24682,9 +24682,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -24726,9 +24726,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -24770,9 +24770,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -24839,9 +24839,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -24929,9 +24929,9 @@ void test_a01_sim() {
         as.insert(avoidance1);
         as.insert(avoidance2);
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -24979,9 +24979,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -25028,9 +25028,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -25084,9 +25084,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -25126,9 +25126,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -25177,9 +25177,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -25242,9 +25242,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -25288,9 +25288,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -25350,9 +25350,9 @@ void test_a01_sim() {
         as.insert(av1);
         as.insert(av2);
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -25390,9 +25390,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -25434,9 +25434,9 @@ void test_a01_sim() {
         
         a01_avoidance_store as;
         
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
-        monte_carlo::simulation<a01_decider::choice, std::mt19937> sim(root, 1.414, rng);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         a01_resolution_store rs;
         a01_decision_store ds;
@@ -25687,7 +25687,7 @@ void test_a01_sim_one() {
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
 
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         a01_decision_store ds;
         a01_resolution_store rs;
 
@@ -25736,7 +25736,7 @@ void test_a01_sim_one() {
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
 
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         a01_decision_store ds;
         a01_resolution_store rs;
 
@@ -25789,7 +25789,7 @@ void test_a01_sim_one() {
         assert(v == 0);
         assert(seq2.index == 1);
 
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         a01_decision_store ds;
         a01_resolution_store rs;
 
@@ -25831,7 +25831,7 @@ void test_a01_sim_one() {
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
 
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         a01_decision_store ds;
         a01_resolution_store rs;
 
@@ -25878,7 +25878,7 @@ void test_a01_sim_one() {
         avoid.insert(rl0);
         solver.as.insert(avoid);
 
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         a01_decision_store ds;
         a01_resolution_store rs;
 
@@ -25921,7 +25921,7 @@ void test_a01_sim_one() {
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
 
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
 
         // Pre-populate the MCTS tree so that UCB1 selects idx 1 for the candidate choice.
         // The only goal is gl0; make its child visited so UCB1 is active at the next level.
@@ -25985,7 +25985,7 @@ void test_a01_sim_one() {
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
 
-        monte_carlo::tree_node<a01_decider::choice> root;
+        monte_carlo::tree_node<mcts_decider::choice> root;
         a01_decision_store ds;
         a01_resolution_store rs;
 
@@ -28368,24 +28368,24 @@ void unit_test_main() {
     TEST(test_copier);
     TEST(test_normalizer_constructor);
     TEST(test_normalizer);
-    TEST(test_a01_goal_adder_constructor);
-    TEST(test_a01_goal_adder);
-    TEST(test_a01_goal_resolver_constructor);
-    TEST(test_a01_goal_resolver);
-    TEST(test_a01_head_elimination_detector_constructor);
-    TEST(test_a01_head_elimination_detector);
+    TEST(test_goal_adder_constructor);
+    TEST(test_goal_adder);
+    TEST(test_goal_resolver_constructor);
+    TEST(test_goal_resolver);
+    TEST(test_head_elimination_detector_constructor);
+    TEST(test_head_elimination_detector);
     TEST(test_unit_propagation_detector_constructor);
     TEST(test_unit_propagation_detector);
     TEST(test_solution_detector_constructor);
     TEST(test_solution_detector);
     TEST(test_conflict_detector_constructor);
     TEST(test_conflict_detector);
-    TEST(test_a01_cdcl_elimination_detector_constructor);
-    TEST(test_a01_cdcl_elimination_detector);
-    TEST(test_a01_decider_constructor);
-    TEST(test_a01_decider_choose_goal);
-    TEST(test_a01_decider_choose_candidate);
-    TEST(test_a01_decider);
+    TEST(test_cdcl_elimination_detector_constructor);
+    TEST(test_cdcl_elimination_detector);
+    TEST(test_mcts_decider_constructor);
+    TEST(test_mcts_decider_choose_goal);
+    TEST(test_mcts_decider_choose_candidate);
+    TEST(test_mcts_decider);
     TEST(test_a01_sim_constructor);
     TEST(test_a01_sim);
     TEST(test_a01_constructor_and_destructor);

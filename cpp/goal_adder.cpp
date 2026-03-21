@@ -1,6 +1,6 @@
-#include "../hpp/a01_goal_adder.hpp"
+#include "../hpp/goal_adder.hpp"
 
-a01_goal_adder::a01_goal_adder(
+goal_adder::goal_adder(
     a01_goal_store& g,
     a01_candidate_store& c,
     const a01_database& d)
@@ -8,7 +8,7 @@ a01_goal_adder::a01_goal_adder(
 {
 }
 
-void a01_goal_adder::operator()(const goal_lineage* l, const expr* e)
+void goal_adder::operator()(const goal_lineage* l, const expr* e)
 {
     goals.insert({l, e});
 

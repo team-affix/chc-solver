@@ -1,7 +1,7 @@
 #include <stdexcept>
-#include "../hpp/a01_goal_resolver.hpp"
+#include "../hpp/goal_resolver.hpp"
 
-a01_goal_resolver::a01_goal_resolver(
+goal_resolver::goal_resolver(
     a01_resolution_store& r,
     a01_goal_store& g,
     a01_candidate_store& c,
@@ -9,13 +9,13 @@ a01_goal_resolver::a01_goal_resolver(
     copier& copier,
     bind_map& b,
     lineage_pool& l,
-    a01_goal_adder& a,
+    goal_adder& a,
     a01_avoidance_store& ast)
     : rs(r), gs(g), cs(c), db(d), cp(copier), bm(b), lp(l), ga(a), as(ast)
 {
 }
 
-void a01_goal_resolver::operator()(const goal_lineage* gl, size_t i)
+void goal_resolver::operator()(const goal_lineage* gl, size_t i)
 {
     // get the goal expression
     const expr* goal_expr = gs.at(gl);

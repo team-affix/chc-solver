@@ -1,11 +1,11 @@
-#ifndef A01_CDCL_ELIMINATION_DETECTOR_HPP
-#define A01_CDCL_ELIMINATION_DETECTOR_HPP
+#ifndef CDCL_ELIMINATION_DETECTOR_HPP
+#define CDCL_ELIMINATION_DETECTOR_HPP
 
 #include "a01_defs.hpp"
 #include "lineage.hpp"
 
-struct a01_cdcl_elimination_detector {
-    a01_cdcl_elimination_detector(
+struct cdcl_elimination_detector {
+    cdcl_elimination_detector(
         const a01_avoidance_store&,
         lineage_pool&
     );

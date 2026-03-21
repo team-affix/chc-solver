@@ -1,15 +1,15 @@
-#ifndef A01_GOAL_RESOLVER_HPP
-#define A01_GOAL_RESOLVER_HPP
+#ifndef GOAL_RESOLVER_HPP
+#define GOAL_RESOLVER_HPP
 
 #include "lineage.hpp"
 #include "a01_defs.hpp"
 #include "copier.hpp"
 #include "bind_map.hpp"
 #include "lineage.hpp"
-#include "a01_goal_adder.hpp"
+#include "goal_adder.hpp"
 
-struct a01_goal_resolver {
-    a01_goal_resolver(
+struct goal_resolver {
+    goal_resolver(
         a01_resolution_store&,
         a01_goal_store&,
         a01_candidate_store&,
@@ -17,7 +17,7 @@ struct a01_goal_resolver {
         copier&,
         bind_map&,
         lineage_pool&,
-        a01_goal_adder&,
+        goal_adder&,
         a01_avoidance_store&
     );
     void operator()(const goal_lineage*, size_t);
@@ -31,7 +31,7 @@ private:
     copier& cp;
     bind_map& bm;
     lineage_pool& lp;
-    a01_goal_adder& ga;
+    goal_adder& ga;
     a01_avoidance_store& as;
 };
 

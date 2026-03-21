@@ -3,14 +3,14 @@
 
 #include "../mcts/include/mcts.hpp"
 #include "a01_defs.hpp"
-#include "a01_decider.hpp"
+#include "mcts_decider.hpp"
 #include "solution_detector.hpp"
 #include "conflict_detector.hpp"
-#include "a01_head_elimination_detector.hpp"
-#include "a01_cdcl_elimination_detector.hpp"
+#include "head_elimination_detector.hpp"
+#include "cdcl_elimination_detector.hpp"
 #include "unit_propagation_detector.hpp"
-#include "a01_goal_adder.hpp"
-#include "a01_goal_resolver.hpp"
+#include "goal_adder.hpp"
+#include "goal_resolver.hpp"
 
 struct a01_sim {
     a01_sim(
@@ -25,7 +25,7 @@ struct a01_sim {
         a01_resolution_store&,
         a01_decision_store&,
         a01_avoidance_store,
-        monte_carlo::simulation<a01_decider::choice, std::mt19937>&
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937>&
     );
     bool operator()();
 #ifndef DEBUG
@@ -50,14 +50,14 @@ private:
     solution_detector sd;
     conflict_detector cd;
 
-    a01_head_elimination_detector he;
-    a01_cdcl_elimination_detector ce;
+    head_elimination_detector he;
+    cdcl_elimination_detector ce;
     unit_propagation_detector up;
 
-    a01_decider dec;
+    mcts_decider dec;
 
-    a01_goal_adder ga;
-    a01_goal_resolver gr;
+    goal_adder ga;
+    goal_resolver gr;
 };
 
 #endif
