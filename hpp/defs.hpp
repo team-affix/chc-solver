@@ -13,7 +13,7 @@ using candidate_store = std::multimap<const goal_lineage*, size_t>;
 using resolution_store = std::set<const resolution_lineage*>;
 using decision_store = std::set<const resolution_lineage*>;
 using avoidance = std::set<const resolution_lineage*>;
-using avoidance_store = std::set<avoidance>;
+using avoidance_store = std::list<avoidance>;
 using avoidance_map = std::multimap<const goal_lineage*, avoidance_store::iterator>;
 using database = std::vector<rule>;
 

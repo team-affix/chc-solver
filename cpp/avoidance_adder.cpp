@@ -8,11 +8,8 @@ avoidance_adder::avoidance_adder(
 
 void avoidance_adder::operator()(const avoidance& avoidance) {
     
-    auto [it, inserted] = as.insert(avoidance);
+    auto it = as.insert(as.end(), avoidance);
     
-    if (!inserted)
-        return;
-
     for (const auto& rl : avoidance)
         am.insert({rl->parent, it});
 
