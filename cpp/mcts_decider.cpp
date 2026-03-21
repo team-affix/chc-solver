@@ -1,8 +1,8 @@
 #include "../hpp/mcts_decider.hpp"
 
 mcts_decider::mcts_decider(
-    const a01_goal_store& gs,
-    const a01_candidate_store& cs,
+    const goal_store& gs,
+    const candidate_store& cs,
     monte_carlo::simulation<choice, std::mt19937>& sim
 )
     : gs(gs), cs(cs), sim(sim)

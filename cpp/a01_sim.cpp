@@ -2,16 +2,16 @@
 
 a01_sim::a01_sim(
     size_t max_resolutions,
-    const a01_database& db,
-    const a01_goals& goals,
+    const database& db,
+    const goals& goals,
     trail& t,
     sequencer& vars,
     expr_pool& ep,
     bind_map& bm,
     lineage_pool& lp,
-    a01_resolution_store& rs,
-    a01_decision_store& ds,
-    a01_avoidance_store as,
+    resolution_store& rs,
+    decision_store& ds,
+    avoidance_store as,
     monte_carlo::simulation<mcts_decider::choice, std::mt19937>& sim
 ) :
     max_resolutions(max_resolutions),

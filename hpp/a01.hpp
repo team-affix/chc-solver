@@ -8,15 +8,15 @@
 #include "bind_map.hpp"
 #include "lineage.hpp"
 #include "sequencer.hpp"
-#include "a01_defs.hpp"
+#include "defs.hpp"
 #include "mcts_decider.hpp"
 #include "../mcts/include/mcts.hpp"
 
 struct a01 {
     ~a01();
     a01(
-        const a01_database&,
-        const a01_goals&,
+        const database&,
+        const goals&,
         trail&,
         sequencer&,
         bind_map&,
@@ -25,15 +25,15 @@ struct a01 {
         double,
         std::mt19937&
     );
-    bool operator()(size_t, std::optional<a01_resolution_store>&);
+    bool operator()(size_t, std::optional<resolution_store>&);
 #ifndef DEBUG
 private:
 #endif
-    bool sim_one(monte_carlo::tree_node<mcts_decider::choice>&, a01_decision_store&, a01_resolution_store&);
-    bool next_avoidance(a01_decision_store&, std::optional<a01_resolution_store>&);
+    bool sim_one(monte_carlo::tree_node<mcts_decider::choice>&, decision_store&, resolution_store&);
+    bool next_avoidance(decision_store&, std::optional<resolution_store>&);
     
-    const a01_database& db;
-    const a01_goals& goals;
+    const database& db;
+    const goals& gl;
     trail& t;
     sequencer& vars;
     bind_map& bm;
@@ -46,7 +46,7 @@ private:
     double c;
     std::mt19937& rng;
 
-    a01_avoidance_store as;
+    avoidance_store as;
 };
 
 #endif

@@ -2,15 +2,15 @@
 #include "../hpp/goal_resolver.hpp"
 
 goal_resolver::goal_resolver(
-    a01_resolution_store& r,
-    a01_goal_store& g,
-    a01_candidate_store& c,
-    const a01_database& d,
+    resolution_store& r,
+    goal_store& g,
+    candidate_store& c,
+    const database& d,
     copier& copier,
     bind_map& b,
     lineage_pool& l,
     goal_adder& a,
-    a01_avoidance_store& ast)
+    avoidance_store& ast)
     : rs(r), gs(g), cs(c), db(d), cp(copier), bm(b), lp(l), ga(a), as(ast)
 {
 }

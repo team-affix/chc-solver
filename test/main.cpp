@@ -5,7 +5,7 @@
 #include "../hpp/copier.hpp"
 #include "../hpp/normalizer.hpp"
 #include "../hpp/rule.hpp"
-#include "../hpp/a01_defs.hpp"
+#include "../hpp/defs.hpp"
 #include "../hpp/goal_adder.hpp"
 #include "../hpp/goal_resolver.hpp"
 #include "../hpp/head_elimination_detector.hpp"
@@ -11939,7 +11939,7 @@ void test_goal_adder_constructor() {
         
         assert(adder.goals.size() == 0);
         assert(adder.candidates.size() == 0);
-        assert(adder.database.size() == 0);
+        assert(adder.db.size() == 0);
     }
     
     // Test 2: Construction with empty stores but non-empty database
@@ -11961,7 +11961,7 @@ void test_goal_adder_constructor() {
         
         assert(adder.goals.size() == 0);
         assert(adder.candidates.size() == 0);
-        assert(adder.database.size() == 2);
+        assert(adder.db.size() == 2);
     }
     
     // Test 3: Construction with non-empty stores
@@ -11985,7 +11985,7 @@ void test_goal_adder_constructor() {
         
         assert(adder.goals.size() == 1);
         assert(adder.candidates.size() == 2);
-        assert(adder.database.size() == 1);
+        assert(adder.db.size() == 1);
     }
     
     // Test 4: Verify references are stored correctly (modification propagates)
@@ -12418,11 +12418,11 @@ void test_goal_resolver_constructor() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
-        a01_database db;
-        a01_avoidance_store as;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
+        database db;
+        avoidance_store as;
         goal_adder ga(gs, cs, db);
         
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
@@ -12447,10 +12447,10 @@ void test_goal_resolver_constructor() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
-        a01_avoidance_store as;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
+        avoidance_store as;
         
         // Add some initial data to resolution store
         const goal_lineage* g0 = lp.goal(nullptr, 0);
@@ -12467,16 +12467,16 @@ void test_goal_resolver_constructor() {
         expr::atom a1{"rule1"};
         expr rule_expr{a1};
         rule r1{&rule_expr, {}};
-        a01_database db = {r1};
+        database db = {r1};
         
         // Pre-populate avoidance store with some avoidances
-        a01_decision_store avoidance1;
+        decision_store avoidance1;
         avoidance1.insert(rl0);
         as.insert(avoidance1);
         
         const goal_lineage* g2 = lp.goal(nullptr, 2);
         const resolution_lineage* rl2 = lp.resolution(g2, 0);
-        a01_decision_store avoidance2;
+        decision_store avoidance2;
         avoidance2.insert(rl0);
         avoidance2.insert(rl2);
         as.insert(avoidance2);
@@ -12503,23 +12503,23 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: single fact "p"
         const expr* p_expr = ep.atom("p");
         rule r_fact{p_expr, {}};
-        a01_database db = {r_fact};
+        database db = {r_fact};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         
         // Pre-populate avoidance store: single avoidance containing the rl we're about to create
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const resolution_lineage* rl_expected = lp.resolution(g1, 0);
         
-        a01_decision_store avoidance1;
+        decision_store avoidance1;
         avoidance1.insert(rl_expected);
         as.insert(avoidance1);
         
@@ -12600,18 +12600,18 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: rule "p :- q"
         const expr* p_expr = ep.atom("p");
         const expr* q_expr = ep.atom("q");
         rule r1{p_expr, {q_expr}};
-        a01_database db = {r1};
+        database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         
         // Pre-populate avoidance store with mixed avoidances
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -12624,18 +12624,18 @@ void test_goal_resolver() {
         const resolution_lineage* rl_other2 = lp.resolution(g_other2, 1);
         
         // Avoidance 1: contains rl_expected + another resolution
-        a01_decision_store avoidance1;
+        decision_store avoidance1;
         avoidance1.insert(rl_expected);
         avoidance1.insert(rl_other1);
         as.insert(avoidance1);
         
         // Avoidance 2: contains only rl_expected
-        a01_decision_store avoidance2;
+        decision_store avoidance2;
         avoidance2.insert(rl_expected);
         as.insert(avoidance2);
         
         // Avoidance 3: doesn't contain rl_expected at all
-        a01_decision_store avoidance3;
+        decision_store avoidance3;
         avoidance3.insert(rl_other1);
         avoidance3.insert(rl_other2);
         as.insert(avoidance3);
@@ -12749,9 +12749,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: rule "p :- q, r, s"
         const expr* p_expr = ep.atom("p");
@@ -12759,10 +12759,10 @@ void test_goal_resolver() {
         const expr* r_expr = ep.atom("r");
         const expr* s_expr = ep.atom("s");
         rule r1{p_expr, {q_expr, r_expr, s_expr}};
-        a01_database db = {r1};
+        database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         
         // Empty avoidance store for this test (baseline)
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -12851,9 +12851,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: rule "p(X) :- q(X)" where X is an original variable
         const expr* var_x = ep.var(seq());
@@ -12861,15 +12861,15 @@ void test_goal_resolver() {
         const expr* p_x = ep.cons(ep.atom("p"), var_x);
         const expr* q_x = ep.cons(ep.atom("q"), var_x);
         rule r1{p_x, {q_x}};
-        a01_database db = {r1};
+        database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         
         // Pre-populate: avoidance containing the rl about to be created
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const resolution_lineage* rl_expected = lp.resolution(g1, 0);
-        a01_decision_store avoidance1;
+        decision_store avoidance1;
         avoidance1.insert(rl_expected);
         as.insert(avoidance1);
         
@@ -12983,19 +12983,19 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: two facts
         const expr* p_expr = ep.atom("p");
         const expr* q_expr = ep.atom("q");
         rule r1{p_expr, {}};
         rule r2{q_expr, {}};
-        a01_database db = {r1, r2};
+        database db = {r1, r2};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add two goals using goal_adder
@@ -13055,19 +13055,19 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: rule "p :- q, r"
         const expr* p_expr = ep.atom("p");
         const expr* q_expr = ep.atom("q");
         const expr* r_expr = ep.atom("r");
         rule r1{p_expr, {q_expr, r_expr}};
-        a01_database db = {r1};
+        database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal with specific parent lineage using goal_adder
@@ -13142,9 +13142,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: rule "p(X) :- q(X), r(X)"
         // The same variable X appears in head and both body literals
@@ -13154,10 +13154,10 @@ void test_goal_resolver() {
         const expr* q_x = ep.cons(ep.atom("q"), var_x);
         const expr* r_x = ep.cons(ep.atom("r"), var_x);
         rule r1{p_x, {q_x, r_x}};
-        a01_database db = {r1};
+        database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Record sequencer state
@@ -13296,9 +13296,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: multiple rules
         const expr* p_expr = ep.atom("p");
@@ -13307,10 +13307,10 @@ void test_goal_resolver() {
         rule r1{p_expr, {}};         // Rule 0: p
         rule r2{q_expr, {r_expr}};   // Rule 1: q :- r
         rule r3{r_expr, {}};         // Rule 2: r
-        a01_database db = {r1, r2, r3};
+        database db = {r1, r2, r3};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal "q" using goal_adder (adds all rules as candidates)
@@ -13373,18 +13373,18 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: rule "p :- q"
         const expr* p_expr = ep.atom("p");
         const expr* q_expr = ep.atom("q");
         rule r1{p_expr, {q_expr}};
-        a01_database db = {r1};
+        database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Create a goal that's deep in the tree (Level 0 -> Level 1 -> Level 2)
@@ -13462,9 +13462,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: rule "p(X, Y) :- q(X), r(Y)"
         // Two distinct variables X and Y
@@ -13477,10 +13477,10 @@ void test_goal_resolver() {
         const expr* q_x = ep.cons(ep.atom("q"), var_x);
         const expr* r_y = ep.cons(ep.atom("r"), var_y);
         rule r1{p_xy, {q_x, r_y}};
-        a01_database db = {r1};
+        database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Record sequencer state
@@ -13637,9 +13637,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: rule "p(Y) :- q(Y)" where Y is a variable in the rule
         const expr* var_y = ep.var(seq());
@@ -13647,10 +13647,10 @@ void test_goal_resolver() {
         const expr* p_y = ep.cons(ep.atom("p"), var_y);
         const expr* q_y = ep.cons(ep.atom("q"), var_y);
         rule r1{p_y, {q_y}};
-        a01_database db = {r1};
+        database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Record sequencer state
@@ -13757,9 +13757,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: 5 different rules with different heads and bodies
         // We'll resolve using rule at index 2 (middle)
@@ -13775,10 +13775,10 @@ void test_goal_resolver() {
         rule r2{r_expr, {s_expr, t_expr}};      // Rule 2: r :- s, t  <-- We'll use this one
         rule r3{s_expr, {u_expr}};              // Rule 3: s :- u
         rule r4{t_expr, {}};                    // Rule 4: t
-        a01_database db = {r0, r1, r2, r3, r4};
+        database db = {r0, r1, r2, r3, r4};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal "r" which matches rule 2
@@ -13850,9 +13850,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: simple rules for various predicates
         const expr* p_expr = ep.atom("p");
@@ -13866,10 +13866,10 @@ void test_goal_resolver() {
         rule r2{r_expr, {}};                    // r
         rule r3{s_expr, {}};                    // s
         rule r4{t_expr, {}};                    // t
-        a01_database db = {r0, r1, r2, r3, r4};
+        database db = {r0, r1, r2, r3, r4};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add 5 different goals with different lineage structures
@@ -13989,9 +13989,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: rules with variables at different indices
         const expr* var0 = ep.var(seq());
@@ -14012,10 +14012,10 @@ void test_goal_resolver() {
         rule r1{p_expr, {}};                    // Rule 1: p
         rule r2{q_v1, {r_v1}};                  // Rule 2: q(Y) :- r(Y)
         rule r3{r_v2, {}};                      // Rule 3: r(Z)  <-- We'll use this (last)
-        a01_database db = {r0, r1, r2, r3};
+        database db = {r0, r1, r2, r3};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal "r(a)"
@@ -14071,9 +14071,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database
         const expr* p_expr = ep.atom("p");
@@ -14083,10 +14083,10 @@ void test_goal_resolver() {
         rule r0{p_expr, {q_expr}};      // p :- q
         rule r1{q_expr, {r_expr}};      // q :- r
         rule r2{r_expr, {}};            // r
-        a01_database db = {r0, r1, r2};
+        database db = {r0, r1, r2};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add three goals
@@ -14194,19 +14194,19 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database
         const expr* p_expr = ep.atom("p");
         const expr* q_expr = ep.atom("q");
         rule r0{p_expr, {}};
         rule r1{q_expr, {}};
-        a01_database db = {r0, r1};
+        database db = {r0, r1};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Pre-populate resolution store with some existing resolutions
@@ -14264,9 +14264,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Build nested expression with VARIABLE: p(f(g(h(X))))
         const expr* var_x = ep.var(seq());
@@ -14279,10 +14279,10 @@ void test_goal_resolver() {
         // Build rule with nested expression in body: p(f(g(h(X)))) :- q(f(g(h(X))))
         const expr* q_nested = ep.cons(ep.atom("q"), f_g_h_x);
         rule r1{p_nested, {q_nested}};
-        a01_database db = {r1};
+        database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal with concrete value: p(f(g(h(a))))
@@ -14378,9 +14378,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Create rule with 15 body literals: p :- q1, q2, ..., q15
         const expr* p_expr = ep.atom("p");
@@ -14390,10 +14390,10 @@ void test_goal_resolver() {
         }
         
         rule r1{p_expr, {body_literals.begin(), body_literals.end()}};
-        a01_database db = {r1};
+        database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal
@@ -14450,9 +14450,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: rule "p(A, B) :- q(A), r(B)"
         const expr* var_a = ep.var(seq());
@@ -14464,10 +14464,10 @@ void test_goal_resolver() {
         const expr* q_a = ep.cons(ep.atom("q"), var_a);
         const expr* r_b = ep.cons(ep.atom("r"), var_b);
         rule r1{p_ab, {q_a, r_b}};
-        a01_database db = {r1};
+        database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // CRITICAL: Create goal with VARIABLES: p(X, Y) where X and Y are goal variables
@@ -14563,9 +14563,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: rule "p(X, Y) :- q(X), r(Y)"
         const expr* var_x = ep.var(seq());
@@ -14577,10 +14577,10 @@ void test_goal_resolver() {
         const expr* q_x = ep.cons(ep.atom("q"), var_x);
         const expr* r_y = ep.cons(ep.atom("r"), var_y);
         rule r1{p_xy, {q_x, r_y}};
-        a01_database db = {r1};
+        database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Goal: p(a, b) - instantiated
@@ -14670,9 +14670,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: rule "p(X) :- q(X), r(X)"
         const expr* var_x = ep.var(seq());
@@ -14680,10 +14680,10 @@ void test_goal_resolver() {
         const expr* q_x = ep.cons(ep.atom("q"), var_x);
         const expr* r_x = ep.cons(ep.atom("r"), var_x);
         rule r1{p_x, {q_x, r_x}};
-        a01_database db = {r1};
+        database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Store original expression pointers
@@ -14748,9 +14748,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: 5 rules
         const expr* p = ep.atom("p");
@@ -14760,10 +14760,10 @@ void test_goal_resolver() {
         rule r2{q, {}};
         rule r3{q, {p}};
         rule r4{p, {q, q}};
-        a01_database db = {r0, r1, r2, r3, r4};
+        database db = {r0, r1, r2, r3, r4};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add goal p
@@ -14825,9 +14825,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database:
         // p(X) :- q(X)
@@ -14846,10 +14846,10 @@ void test_goal_resolver() {
         rule r0{p_x, {q_x}};
         rule r1{q_y, {r_y}};
         rule r2{r_a, {}};
-        a01_database db = {r0, r1, r2};
+        database db = {r0, r1, r2};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Start with goal p(Z) where Z is a variable
@@ -14932,19 +14932,19 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: p(X). (fact with variable - empty body)
         const expr* var_x = ep.var(seq());
         uint32_t original_x_idx = std::get<expr::var>(var_x->content).index;
         const expr* p_x = ep.cons(ep.atom("p"), var_x);
         rule r1{p_x, {}};  // Empty body
-        a01_database db = {r1};
+        database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Goal: p(a) - concrete atom
@@ -15016,9 +15016,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: Three rules all with head p(X)
         const expr* var_x1 = ep.var(seq());
@@ -15036,10 +15036,10 @@ void test_goal_resolver() {
         rule r0{p_x1, {q_x1}};  // p(X) :- q(X)
         rule r1{p_x2, {r_x2}};  // p(X) :- r(X)
         rule r2{p_x3, {s_x3}};  // p(X) :- s(X)
-        a01_database db = {r0, r1, r2};
+        database db = {r0, r1, r2};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Goal: p(a)
@@ -15085,9 +15085,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: chained rules
         const expr* p = ep.atom("p");
@@ -15097,10 +15097,10 @@ void test_goal_resolver() {
         rule r0{p, {q}};      // p :- q
         rule r1{q, {r}};      // q :- r
         rule r2{r, {}};       // r
-        a01_database db = {r0, r1, r2};
+        database db = {r0, r1, r2};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add root goal p
@@ -15166,9 +15166,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database
         const expr* p = ep.atom("p");
@@ -15182,10 +15182,10 @@ void test_goal_resolver() {
         rule r2{x, {y}};      // x :- y (independent branch)
         rule r3{y, {z}};      // y :- z
         rule r4{z, {}};       // z
-        a01_database db = {r0, r1, r2, r3, r4};
+        database db = {r0, r1, r2, r3, r4};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Add two independent root goals
@@ -15287,9 +15287,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database
         const expr* p = ep.atom("p");
@@ -15303,10 +15303,10 @@ void test_goal_resolver() {
         rule r2{r, {t_atom}};  // r :- t
         rule r3{s, {}};       // s
         rule r4{t_atom, {}};  // t
-        a01_database db = {r0, r1, r2, r3, r4};
+        database db = {r0, r1, r2, r3, r4};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Start with root p
@@ -15406,9 +15406,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database with various rules
         const expr* a = ep.atom("a");
@@ -15426,10 +15426,10 @@ void test_goal_resolver() {
         rule r4{e, {f, g}};   // e :- f, g
         rule r5{f, {}};       // f
         rule r6{g, {}};       // g
-        a01_database db = {r0, r1, r2, r3, r4, r5, r6};
+        database db = {r0, r1, r2, r3, r4, r5, r6};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Root: a
@@ -15554,9 +15554,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: chain of 10 rules
         std::vector<const expr*> atoms;
@@ -15570,10 +15570,10 @@ void test_goal_resolver() {
         }
         rules.push_back(rule{atoms[9], {}});  // p9 (fact)
         
-        a01_database db(rules.begin(), rules.end());
+        database db(rules.begin(), rules.end());
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Start with root p0
@@ -15654,9 +15654,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database
         const expr* p1 = ep.atom("p1");
@@ -15672,10 +15672,10 @@ void test_goal_resolver() {
         rule r3{q1, {q2}};    // q1 :- q2
         rule r4{q2, {q3}};    // q2 :- q3
         rule r5{q3, {}};      // q3
-        a01_database db = {r0, r1, r2, r3, r4, r5};
+        database db = {r0, r1, r2, r3, r4, r5};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Create TWO independent root goals
@@ -15790,9 +15790,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database
         const expr* root = ep.atom("root");
@@ -15810,10 +15810,10 @@ void test_goal_resolver() {
         rule r4{a1, {}};           // a1
         rule r5{b1, {}};           // b1
         rule r6{c1, {}};           // c1
-        a01_database db = {r0, r1, r2, r3, r4, r5, r6};
+        database db = {r0, r1, r2, r3, r4, r5, r6};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Root
@@ -15923,9 +15923,9 @@ void test_goal_resolver() {
         copier cp(seq, ep);
         lineage_pool lp;
         
-        a01_resolution_store rs;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        resolution_store rs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database creating deep tree
         const expr* p = ep.atom("p");
@@ -15941,10 +15941,10 @@ void test_goal_resolver() {
         rule r3{s, {u}};      // s :- u
         rule r4{t_atom, {}};  // t
         rule r5{u, {}};       // u
-        a01_database db = {r0, r1, r2, r3, r4, r5};
+        database db = {r0, r1, r2, r3, r4, r5};
         
         goal_adder ga(gs, cs, db);
-        a01_avoidance_store as;
+        avoidance_store as;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
         
         // Root
@@ -16047,8 +16047,8 @@ void test_head_elimination_detector_constructor() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         head_elimination_detector detector(t, bm, gs, db);
         
@@ -16064,8 +16064,8 @@ void test_head_elimination_detector_constructor() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Pre-populate stores
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -16094,8 +16094,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: p(a)
         const expr* atom_a = ep.atom("a");
@@ -16140,8 +16140,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: p(a)
         const expr* atom_a = ep.atom("a");
@@ -16187,8 +16187,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: p(X) - variable in head
         const expr* var_x = ep.var(seq());
@@ -16237,8 +16237,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: three rules
         const expr* p_a = ep.cons(ep.atom("p"), ep.atom("a"));
@@ -16306,8 +16306,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: p(X, X) - same variable twice
         const expr* var_x = ep.var(seq());
@@ -16360,8 +16360,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: p(X, Y) - two independent variables
         const expr* var_x = ep.var(seq());
@@ -16406,8 +16406,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: p(X)
         const expr* var_x = ep.var(seq());
@@ -16450,8 +16450,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: p(X)
         const expr* var_x = ep.var(seq());
@@ -16500,8 +16500,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: p(f(g(X)))
         const expr* var_x = ep.var(seq());
@@ -16546,8 +16546,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: p(f(g(a)))
         const expr* g_a = ep.cons(ep.atom("g"), ep.atom("a"));
@@ -16585,8 +16585,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: p(X, X, X) - same variable 3 times
         const expr* var_x = ep.var(seq());
@@ -16647,8 +16647,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: p(X, Y)
         const expr* var_x = ep.var(seq());
@@ -16698,8 +16698,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: p(a)
         const expr* p_a = ep.cons(ep.atom("p"), ep.atom("a"));
@@ -16729,8 +16729,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: p(a, b)
         const expr* p_ab = ep.cons(ep.atom("p"), ep.cons(ep.atom("a"), ep.atom("b")));
@@ -16761,8 +16761,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: multiple rules with variables
         const expr* var_x = ep.var(seq());
@@ -16819,8 +16819,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: 10 rules with different patterns
         std::vector<const expr*> vars;
@@ -16876,8 +16876,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: p(a)
         const expr* p_a = ep.cons(ep.atom("p"), ep.atom("a"));
@@ -16926,8 +16926,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: p(X, Y, X) - X appears twice
         const expr* var_x = ep.var(seq());
@@ -16982,8 +16982,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Pre-bind some variables to create initial state
         const expr* var_pre1 = ep.var(seq());
@@ -17040,8 +17040,8 @@ void test_head_elimination_detector() {
         bind_map bm(t);
         lineage_pool lp;
         
-        a01_goal_store gs;
-        a01_database db;
+        goal_store gs;
+        database db;
         
         // Database: p(X) where X is a variable
         const expr* var_x = ep.var(seq());
@@ -17074,7 +17074,7 @@ void test_unit_propagation_detector_constructor() {
     // Test 1: Basic construction with empty candidate store
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         unit_propagation_detector detector(cs);
         
@@ -17085,7 +17085,7 @@ void test_unit_propagation_detector_constructor() {
     // Test 2: Construction with non-empty candidate store
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         // Pre-populate candidate store
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -17108,7 +17108,7 @@ void test_unit_propagation_detector() {
     // Test 1: Goal with exactly 1 candidate - should return true (unit propagation)
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         cs.insert({g1, 0});  // Exactly one candidate
@@ -17130,7 +17130,7 @@ void test_unit_propagation_detector() {
     // Test 2: Goal with 0 candidates - should return false (no unit propagation)
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         // Don't add any candidates for g1
@@ -17151,7 +17151,7 @@ void test_unit_propagation_detector() {
     // Test 3: Goal with 2 candidates - should return false (no unit propagation)
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         cs.insert({g1, 0});
@@ -17174,7 +17174,7 @@ void test_unit_propagation_detector() {
     // Test 4: Goal with many candidates - should return false
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         
@@ -17200,7 +17200,7 @@ void test_unit_propagation_detector() {
     // Test 5: Multiple goals with varying candidate counts
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         // Goal 1: 0 candidates
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -17252,7 +17252,7 @@ void test_unit_propagation_detector() {
     // Test 6: Goal not in candidate store at all - should return false
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         // Add some goals to the store
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -17273,7 +17273,7 @@ void test_unit_propagation_detector() {
     // Test 7: Same goal multiple times - verify idempotence
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         cs.insert({g1, 0});  // Single candidate
@@ -17294,7 +17294,7 @@ void test_unit_propagation_detector() {
     // Test 8: Transition from multiple to unit after elimination simulation
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         cs.insert({g1, 0});
@@ -17331,7 +17331,7 @@ void test_unit_propagation_detector() {
     // Test 9: Stress test - many goals with varying counts
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         std::vector<const goal_lineage*> goals;
         std::vector<size_t> expected_counts;
@@ -17371,7 +17371,7 @@ void test_unit_propagation_detector() {
     // Test 10: Multiple detectors on same store - verify independence
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         cs.insert({g1, 0});
@@ -17390,7 +17390,7 @@ void test_unit_propagation_detector() {
     // Test 11: Edge case - exactly 1 vs exactly 2 (boundary condition)
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         const goal_lineage* g_one = lp.goal(nullptr, 1);
         cs.insert({g_one, 0});
@@ -17413,7 +17413,7 @@ void test_unit_propagation_detector() {
     // Test 12: Same candidate index for different goals
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -17440,7 +17440,7 @@ void test_unit_propagation_detector() {
     // Test 13: Candidates with various indices - verify index doesn't matter
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         cs.insert({g1, 42});  // Single candidate at index 42
@@ -17472,7 +17472,7 @@ void test_unit_propagation_detector() {
     // Test 14: Deep lineage tree - unit propagation at different levels
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         // Create tree structure
         const goal_lineage* g_root = lp.goal(nullptr, 0);
@@ -17509,7 +17509,7 @@ void test_unit_propagation_detector() {
     // Test 15: Simulate typical solver workflow
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         // Initial state: 3 goals, each with multiple candidates
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -17572,7 +17572,7 @@ void test_unit_propagation_detector() {
     // Test 16: Empty candidate store - all queries return false
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         unit_propagation_detector detector(cs);
         
@@ -17592,7 +17592,7 @@ void test_unit_propagation_detector() {
     // Test 17: Large candidate indices - verify only count matters, not index values
     {
         lineage_pool lp;
-        a01_candidate_store cs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         cs.insert({g1, 1000000});  // Very large index, but still just 1 candidate
@@ -17612,7 +17612,7 @@ void test_unit_propagation_detector() {
 void test_solution_detector_constructor() {
     // Test 1: Basic construction with empty goal store
     {
-        a01_goal_store gs;
+        goal_store gs;
         
         solution_detector detector(gs);
         
@@ -17626,7 +17626,7 @@ void test_solution_detector_constructor() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
+        goal_store gs;
         
         // Pre-populate goal store
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -17649,7 +17649,7 @@ void test_solution_detector_constructor() {
 void test_solution_detector() {
     // Test 1: Empty goal store - solution found (returns true)
     {
-        a01_goal_store gs;
+        goal_store gs;
         
         assert(gs.empty());
         
@@ -17670,7 +17670,7 @@ void test_solution_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
+        goal_store gs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const expr* e1 = ep.atom("p");
@@ -17696,7 +17696,7 @@ void test_solution_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
+        goal_store gs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -17724,7 +17724,7 @@ void test_solution_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
+        goal_store gs;
         
         // Add 10 goals
         for (int i = 0; i < 10; i++) {
@@ -17748,7 +17748,7 @@ void test_solution_detector() {
     
     // Test 5: Multiple calls on empty store - verify idempotence
     {
-        a01_goal_store gs;
+        goal_store gs;
         
         solution_detector detector(gs);
         
@@ -17768,7 +17768,7 @@ void test_solution_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
+        goal_store gs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
@@ -17791,7 +17791,7 @@ void test_solution_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
+        goal_store gs;
         
         // Start with 3 goals
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -17827,7 +17827,7 @@ void test_solution_detector() {
     
     // Test 8: Multiple detectors on same store
     {
-        a01_goal_store gs;
+        goal_store gs;
         
         solution_detector detector1(gs);
         solution_detector detector2(gs);
@@ -17846,7 +17846,7 @@ void test_solution_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
+        goal_store gs;
         
         // Root goal
         const goal_lineage* g_root = lp.goal(nullptr, 0);
@@ -17884,7 +17884,7 @@ void test_solution_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
+        goal_store gs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const expr* e1 = ep.atom("p");
@@ -17911,8 +17911,8 @@ void test_solution_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         // Database: p :- q, q :- r, r (chain)
         const expr* p = ep.atom("p");
@@ -17921,7 +17921,7 @@ void test_solution_detector() {
         rule r0{p, {q}};
         rule r1{q, {r}};
         rule r2{r, {}};
-        a01_database db = {r0, r1, r2};
+        database db = {r0, r1, r2};
         
         goal_adder ga(gs, cs, db);
         solution_detector detector(gs);
@@ -17974,7 +17974,7 @@ void test_solution_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
+        goal_store gs;
         
         // Add 100 goals
         std::vector<const goal_lineage*> goals;
@@ -18009,8 +18009,8 @@ void test_solution_detector() {
 void test_conflict_detector_constructor() {
     // Test 1: Basic construction with empty stores
     {
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         conflict_detector detector(gs, cs);
         
@@ -18025,8 +18025,8 @@ void test_conflict_detector_constructor() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         // Pre-populate stores
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -18054,8 +18054,8 @@ void test_conflict_detector_constructor() {
 void test_conflict_detector() {
     // Test 1: No goals in store - no conflict (returns false)
     {
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         assert(gs.empty());
         
@@ -18077,8 +18077,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
@@ -18105,8 +18105,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
@@ -18133,8 +18133,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -18170,8 +18170,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -18209,8 +18209,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -18239,8 +18239,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
@@ -18290,8 +18290,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
@@ -18316,8 +18316,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
@@ -18342,8 +18342,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -18388,8 +18388,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -18420,8 +18420,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
@@ -18446,8 +18446,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         // Create lineage tree
         const goal_lineage* g_root = lp.goal(nullptr, 0);
@@ -18485,8 +18485,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         // Add 20 goals, each with at least 1 candidate
         for (int i = 0; i < 20; i++) {
@@ -18519,8 +18519,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         // Add 10 goals
         for (int i = 0; i < 10; i++) {
@@ -18551,8 +18551,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -18583,8 +18583,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g_zero = lp.goal(nullptr, 1);
         const goal_lineage* g_one = lp.goal(nullptr, 2);
@@ -18616,8 +18616,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         // Add goals but no candidates
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -18645,8 +18645,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         // Add 10 goals - first one has no candidates
         for (int i = 0; i < 10; i++) {
@@ -18675,8 +18675,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
@@ -18700,8 +18700,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         // Three goals with multiple candidates each
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -18748,8 +18748,8 @@ void test_conflict_detector() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         // Add 100 goals
         for (int i = 0; i < 100; i++) {
@@ -18787,7 +18787,7 @@ void test_cdcl_elimination_detector_constructor() {
     // Test 1: Basic construction with empty stores
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         cdcl_elimination_detector detector(as, lp);
         
@@ -18799,7 +18799,7 @@ void test_cdcl_elimination_detector_constructor() {
     // Test 2: Construction with non-empty avoidance store
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         // Pre-populate avoidance store
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -18807,12 +18807,12 @@ void test_cdcl_elimination_detector_constructor() {
         const resolution_lineage* rl1 = lp.resolution(g1, 0);
         const resolution_lineage* rl2 = lp.resolution(g2, 0);
         
-        a01_decision_store avoidance1;
+        decision_store avoidance1;
         avoidance1.insert(rl1);
         avoidance1.insert(rl2);
         as.insert(avoidance1);
         
-        a01_decision_store avoidance2;
+        decision_store avoidance2;
         avoidance2.insert(rl1);
         as.insert(avoidance2);
         
@@ -18831,7 +18831,7 @@ void test_cdcl_elimination_detector() {
     // Test 1: Empty avoidance store - no eliminations
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         assert(as.empty());
         
@@ -18852,13 +18852,13 @@ void test_cdcl_elimination_detector() {
     // Test 2: Avoidance with singleton containing exact rl - SHOULD ELIMINATE
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const resolution_lineage* rl = lp.resolution(g1, 0);
         
         // Create singleton avoidance containing rl
-        a01_decision_store avoidance;
+        decision_store avoidance;
         avoidance.insert(rl);
         as.insert(avoidance);
         
@@ -18879,14 +18879,14 @@ void test_cdcl_elimination_detector() {
     // Test 3: Avoidance with singleton, but different rl - should NOT eliminate
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
         const resolution_lineage* rl_in_avoidance = lp.resolution(g1, 0);
         
         // Avoidance contains rl for g1,0
-        a01_decision_store avoidance;
+        decision_store avoidance;
         avoidance.insert(rl_in_avoidance);
         as.insert(avoidance);
         
@@ -18905,7 +18905,7 @@ void test_cdcl_elimination_detector() {
     // Test 4: Avoidance with 2+ resolutions - should NOT eliminate
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -18913,7 +18913,7 @@ void test_cdcl_elimination_detector() {
         const resolution_lineage* rl2 = lp.resolution(g2, 0);
         
         // Avoidance with 2 resolutions (NOT singleton)
-        a01_decision_store avoidance;
+        decision_store avoidance;
         avoidance.insert(rl1);
         avoidance.insert(rl2);
         as.insert(avoidance);
@@ -18938,7 +18938,7 @@ void test_cdcl_elimination_detector() {
     // Test 5: Multiple avoidances, one is singleton - SHOULD ELIMINATE
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -18948,18 +18948,18 @@ void test_cdcl_elimination_detector() {
         const resolution_lineage* rl3 = lp.resolution(g3, 0);
         
         // Avoidance 1: {rl1, rl2} - not singleton
-        a01_decision_store avoidance1;
+        decision_store avoidance1;
         avoidance1.insert(rl1);
         avoidance1.insert(rl2);
         as.insert(avoidance1);
         
         // Avoidance 2: {rl3} - SINGLETON!
-        a01_decision_store avoidance2;
+        decision_store avoidance2;
         avoidance2.insert(rl3);
         as.insert(avoidance2);
         
         // Avoidance 3: {rl1, rl3} - not singleton
-        a01_decision_store avoidance3;
+        decision_store avoidance3;
         avoidance3.insert(rl1);
         avoidance3.insert(rl3);
         as.insert(avoidance3);
@@ -18984,7 +18984,7 @@ void test_cdcl_elimination_detector() {
     // Test 6: Same goal, different indices - independent
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const resolution_lineage* rl_idx0 = lp.resolution(g1, 0);
@@ -18992,7 +18992,7 @@ void test_cdcl_elimination_detector() {
         const resolution_lineage* rl_idx2 = lp.resolution(g1, 2);
         
         // Avoidance: only {rl_idx1} as singleton
-        a01_decision_store avoidance;
+        decision_store avoidance;
         avoidance.insert(rl_idx1);
         as.insert(avoidance);
         
@@ -19015,7 +19015,7 @@ void test_cdcl_elimination_detector() {
     // Test 7: Multiple goals in goal store with various avoidances
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -19028,12 +19028,12 @@ void test_cdcl_elimination_detector() {
         const resolution_lineage* rl3_0 = lp.resolution(g3, 0);
         
         // Avoidance 1: {rl1_0} - singleton
-        a01_decision_store avoidance1;
+        decision_store avoidance1;
         avoidance1.insert(rl1_0);
         as.insert(avoidance1);
         
         // Avoidance 2: {rl2_0, rl3_0} - not singleton
-        a01_decision_store avoidance2;
+        decision_store avoidance2;
         avoidance2.insert(rl2_0);
         avoidance2.insert(rl3_0);
         as.insert(avoidance2);
@@ -19056,12 +19056,12 @@ void test_cdcl_elimination_detector() {
     // Test 8: Multiple calls - verify idempotence
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const resolution_lineage* rl = lp.resolution(g1, 0);
         
-        a01_decision_store avoidance;
+        decision_store avoidance;
         avoidance.insert(rl);
         as.insert(avoidance);
         
@@ -19080,7 +19080,7 @@ void test_cdcl_elimination_detector() {
     // Test 9: Simulate progressive narrowing (CDCL workflow)
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -19091,7 +19091,7 @@ void test_cdcl_elimination_detector() {
         const resolution_lineage* rl3 = lp.resolution(g3, 0);
         
         // Initial learned clause: {rl1, rl2, rl3} - avoid all three together
-        a01_decision_store avoidance;
+        decision_store avoidance;
         avoidance.insert(rl1);
         avoidance.insert(rl2);
         avoidance.insert(rl3);
@@ -19131,7 +19131,7 @@ void test_cdcl_elimination_detector() {
     // Test 10: Multiple singletons for same goal with different indices
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const resolution_lineage* rl_idx0 = lp.resolution(g1, 0);
@@ -19139,11 +19139,11 @@ void test_cdcl_elimination_detector() {
         const resolution_lineage* rl_idx2 = lp.resolution(g1, 2);
         
         // Three separate singleton avoidances
-        a01_decision_store avoidance0;
+        decision_store avoidance0;
         avoidance0.insert(rl_idx0);
         as.insert(avoidance0);
         
-        a01_decision_store avoidance1;
+        decision_store avoidance1;
         avoidance1.insert(rl_idx1);
         as.insert(avoidance1);
         
@@ -19162,7 +19162,7 @@ void test_cdcl_elimination_detector() {
     // Test 11: Deep lineage structure - verify interning works correctly
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         // Create deep tree
         const goal_lineage* g_root = lp.goal(nullptr, 0);
@@ -19173,7 +19173,7 @@ void test_cdcl_elimination_detector() {
         
         // Avoidance: singleton containing grandchild's potential resolution
         const resolution_lineage* rl_grandchild = lp.resolution(g_grandchild, 3);
-        a01_decision_store avoidance;
+        decision_store avoidance;
         avoidance.insert(rl_grandchild);
         as.insert(avoidance);
         
@@ -19191,12 +19191,12 @@ void test_cdcl_elimination_detector() {
     // Test 12: Same avoidance checked multiple times - idempotence
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const resolution_lineage* rl = lp.resolution(g1, 0);
         
-        a01_decision_store avoidance;
+        decision_store avoidance;
         avoidance.insert(rl);
         as.insert(avoidance);
         
@@ -19221,10 +19221,10 @@ void test_cdcl_elimination_detector() {
     // Test 13: Empty avoidance in store - should not cause elimination
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         // Add empty avoidance (this could happen after all resolutions erased)
-        a01_decision_store empty_avoidance;
+        decision_store empty_avoidance;
         as.insert(empty_avoidance);
         
         assert(as.size() == 1);
@@ -19242,7 +19242,7 @@ void test_cdcl_elimination_detector() {
     // Test 14: Multiple singletons, testing various combinations
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         // Create 5 different resolutions
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -19258,16 +19258,16 @@ void test_cdcl_elimination_detector() {
         const resolution_lineage* rl5 = lp.resolution(g5, 0);
         
         // Add singletons for rl1 and rl3 only
-        a01_decision_store av1;
+        decision_store av1;
         av1.insert(rl1);
         as.insert(av1);
         
-        a01_decision_store av3;
+        decision_store av3;
         av3.insert(rl3);
         as.insert(av3);
         
         // Add non-singleton for rl2, rl4, rl5
-        a01_decision_store av_multi;
+        decision_store av_multi;
         av_multi.insert(rl2);
         av_multi.insert(rl4);
         av_multi.insert(rl5);
@@ -19288,7 +19288,7 @@ void test_cdcl_elimination_detector() {
     // Test 15: Verify lineage_pool interning - same goal/index returns same rl
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         
@@ -19296,7 +19296,7 @@ void test_cdcl_elimination_detector() {
         const resolution_lineage* rl_first = lp.resolution(g1, 0);
         
         // Add to avoidance
-        a01_decision_store avoidance;
+        decision_store avoidance;
         avoidance.insert(rl_first);
         as.insert(avoidance);
         
@@ -19317,7 +19317,7 @@ void test_cdcl_elimination_detector() {
     // Test 16: Complex avoidance patterns - multiple sizes
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -19330,22 +19330,22 @@ void test_cdcl_elimination_detector() {
         const resolution_lineage* rl4 = lp.resolution(g4, 0);
         
         // Avoidance size 0: empty
-        a01_decision_store av0;
+        decision_store av0;
         as.insert(av0);
         
         // Avoidance size 1: {rl1}
-        a01_decision_store av1;
+        decision_store av1;
         av1.insert(rl1);
         as.insert(av1);
         
         // Avoidance size 2: {rl2, rl3}
-        a01_decision_store av2;
+        decision_store av2;
         av2.insert(rl2);
         av2.insert(rl3);
         as.insert(av2);
         
         // Avoidance size 3: {rl1, rl2, rl4}
-        a01_decision_store av3;
+        decision_store av3;
         av3.insert(rl1);
         av3.insert(rl2);
         av3.insert(rl4);
@@ -19365,7 +19365,7 @@ void test_cdcl_elimination_detector() {
     // Test 17: Stress test - many avoidances, one singleton
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         // Create 50 resolutions
         std::vector<const resolution_lineage*> resolutions;
@@ -19377,14 +19377,14 @@ void test_cdcl_elimination_detector() {
         
         // Add 25 non-singleton avoidances
         for (int i = 0; i < 25; i++) {
-            a01_decision_store avoidance;
+            decision_store avoidance;
             avoidance.insert(resolutions[i * 2]);
             avoidance.insert(resolutions[i * 2 + 1]);
             as.insert(avoidance);
         }
         
         // Add ONE singleton for rl at index 25
-        a01_decision_store singleton;
+        decision_store singleton;
         singleton.insert(resolutions[25]);
         as.insert(singleton);
         
@@ -19408,13 +19408,13 @@ void test_cdcl_elimination_detector() {
     // Test 18: No goals in lineage pool - detector should still work
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         // Create goal and resolution without adding to any stores
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const resolution_lineage* rl = lp.resolution(g1, 0);
         
-        a01_decision_store avoidance;
+        decision_store avoidance;
         avoidance.insert(rl);
         as.insert(avoidance);
         
@@ -19428,7 +19428,7 @@ void test_cdcl_elimination_detector() {
     // Test 19: Different goal same index vs same goal different index
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -19436,7 +19436,7 @@ void test_cdcl_elimination_detector() {
         const resolution_lineage* rl_g1_idx5 = lp.resolution(g1, 5);
         
         // Singleton for g1,idx5
-        a01_decision_store avoidance;
+        decision_store avoidance;
         avoidance.insert(rl_g1_idx5);
         as.insert(avoidance);
         
@@ -19452,17 +19452,17 @@ void test_cdcl_elimination_detector() {
     // Test 20: Multiple singleton avoidances for same resolution (duplicates)
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const resolution_lineage* rl = lp.resolution(g1, 0);
         
         // Add same singleton multiple times (set will deduplicate)
-        a01_decision_store avoidance1;
+        decision_store avoidance1;
         avoidance1.insert(rl);
         as.insert(avoidance1);
         
-        a01_decision_store avoidance2;
+        decision_store avoidance2;
         avoidance2.insert(rl);
         as.insert(avoidance2);  // Duplicate - will be ignored by set
         
@@ -19479,7 +19479,7 @@ void test_cdcl_elimination_detector() {
     // Test 21: Verify count() check (as.count({rl}) > 0)
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -19487,11 +19487,11 @@ void test_cdcl_elimination_detector() {
         const resolution_lineage* rl2 = lp.resolution(g2, 0);
         
         // Multiple avoidances with different sizes containing rl1
-        a01_decision_store av_single;
+        decision_store av_single;
         av_single.insert(rl1);
         as.insert(av_single);
         
-        a01_decision_store av_double;
+        decision_store av_double;
         av_double.insert(rl1);
         av_double.insert(rl2);
         as.insert(av_double);
@@ -19509,7 +19509,7 @@ void test_cdcl_elimination_detector() {
     // Test 22: Simulate complete CDCL scenario
     {
         lineage_pool lp;
-        a01_avoidance_store as;
+        avoidance_store as;
         
         // Learned conflict clause: "Don't resolve p with rule 0, q with rule 1, and r with rule 2 together"
         const goal_lineage* g_p = lp.goal(nullptr, 1);
@@ -19521,7 +19521,7 @@ void test_cdcl_elimination_detector() {
         const resolution_lineage* rl_r = lp.resolution(g_r, 2);
         
         // Initial learned clause
-        a01_decision_store learned_clause;
+        decision_store learned_clause;
         learned_clause.insert(rl_p);
         learned_clause.insert(rl_q);
         learned_clause.insert(rl_r);
@@ -19567,8 +19567,8 @@ void test_mcts_decider_constructor() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -19588,8 +19588,8 @@ void test_mcts_decider_constructor() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         // Pre-populate stores
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -19622,8 +19622,8 @@ void test_mcts_decider_choose_goal() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
@@ -19654,8 +19654,8 @@ void test_mcts_decider_choose_goal() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -19697,8 +19697,8 @@ void test_mcts_decider_choose_goal() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -19744,8 +19744,8 @@ void test_mcts_decider_choose_goal() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -19780,8 +19780,8 @@ void test_mcts_decider_choose_goal() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -19815,8 +19815,8 @@ void test_mcts_decider_choose_goal() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         std::vector<const goal_lineage*> goals;
         for (int i = 0; i < 20; i++) {
@@ -19859,8 +19859,8 @@ void test_mcts_decider_choose_candidate() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
@@ -19892,8 +19892,8 @@ void test_mcts_decider_choose_candidate() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
@@ -19935,8 +19935,8 @@ void test_mcts_decider_choose_candidate() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
@@ -19986,8 +19986,8 @@ void test_mcts_decider_choose_candidate() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
@@ -20033,8 +20033,8 @@ void test_mcts_decider_choose_candidate() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
@@ -20075,8 +20075,8 @@ void test_mcts_decider_choose_candidate() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
@@ -20117,8 +20117,8 @@ void test_mcts_decider_choose_candidate() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
@@ -20159,8 +20159,8 @@ void test_mcts_decider() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         gs.insert({g1, ep.atom("p")});
@@ -20194,8 +20194,8 @@ void test_mcts_decider() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -20266,8 +20266,8 @@ void test_mcts_decider() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -20316,8 +20316,8 @@ void test_mcts_decider() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -20367,8 +20367,8 @@ void test_mcts_decider() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -20437,8 +20437,8 @@ void test_mcts_decider() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -20488,8 +20488,8 @@ void test_mcts_decider() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -20538,8 +20538,8 @@ void test_mcts_decider() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -20608,8 +20608,8 @@ void test_mcts_decider() {
         t.push();
         expr_pool ep(t);
         lineage_pool lp;
-        a01_goal_store gs;
-        a01_candidate_store cs;
+        goal_store gs;
+        candidate_store cs;
         
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const goal_lineage* g2 = lp.goal(nullptr, 2);
@@ -20659,17 +20659,17 @@ void test_a01_sim_constructor() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
-        a01_goals goals;  // Empty
-        a01_avoidance_store as;
+        database db;
+        goals goals;  // Empty
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         {
-            a01_resolution_store rs;
-            a01_decision_store ds;
+            resolution_store rs;
+            decision_store ds;
             a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
             
             // Verify max_resolutions stored
@@ -20708,7 +20708,7 @@ void test_a01_sim_constructor() {
             // CRITICAL: Verify goal_adder references (public in DEBUG)
             assert(&simulation.ga.goals == &simulation.gs);
             assert(&simulation.ga.candidates == &simulation.cs);
-            assert(&simulation.ga.database == &db);
+            assert(&simulation.ga.db == &db);
             
             // CRITICAL: Verify goal_resolver references (public in DEBUG)
             assert(&simulation.gr.rs == &simulation.rs);
@@ -20734,21 +20734,21 @@ void test_a01_sim_constructor() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("p"), {}});
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("p"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
 
         {
-            a01_resolution_store rs;
-            a01_decision_store ds;
+            resolution_store rs;
+            decision_store ds;
 
             a01_sim simulation(50, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
             
@@ -20787,24 +20787,24 @@ void test_a01_sim_constructor() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("p"), {}});
         db.push_back(rule{ep.atom("q"), {}});
         db.push_back(rule{ep.atom("r"), {}});
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("p"));
         goals.push_back(ep.atom("q"));
         goals.push_back(ep.atom("r"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
 
         a01_sim simulation(200, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
@@ -20891,23 +20891,23 @@ void test_a01_sim_constructor() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("p"), {}});
         // No rule for "q" or "r"
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("p"));
         goals.push_back(ep.atom("q"));
         goals.push_back(ep.atom("r"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: All goals added to goal_store
@@ -20962,22 +20962,22 @@ void test_a01_sim_constructor() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("p"), {}});
         db.push_back(rule{ep.atom("p"), {ep.atom("q")}});
         db.push_back(rule{ep.atom("p"), {ep.atom("r")}});
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("p"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Goal added
@@ -21021,15 +21021,15 @@ void test_a01_sim_constructor() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
-        a01_goals goals;
+        database db;
+        goals goals;
         
         // Pre-populate avoidance store
-        a01_avoidance_store as;
+        avoidance_store as;
         const resolution_lineage* rl1 = lp.resolution(lp.goal(nullptr, 0), 0);
         const resolution_lineage* rl2 = lp.resolution(lp.goal(nullptr, 1), 1);
         
-        a01_decision_store avoid1;
+        decision_store avoid1;
         avoid1.insert(rl1);
         avoid1.insert(rl2);
         
@@ -21041,8 +21041,8 @@ void test_a01_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: as_copy is a COPY, not a reference
@@ -21067,7 +21067,7 @@ void test_a01_sim_constructor() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("p"), {}});
         db.push_back(rule{ep.atom("p"), {ep.atom("x")}});
         db.push_back(rule{ep.atom("q"), {}});
@@ -21075,20 +21075,20 @@ void test_a01_sim_constructor() {
         db.push_back(rule{ep.atom("q"), {ep.atom("z")}});
         db.push_back(rule{ep.atom("r"), {ep.atom("w")}});
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("p"));
         goals.push_back(ep.atom("q"));
         goals.push_back(ep.atom("r"));
         goals.push_back(ep.atom("s"));  // No matching rule
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(75, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: 4 goals added
@@ -21179,21 +21179,21 @@ void test_a01_sim_constructor() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
-        a01_goals goals;
+        database db;
+        goals goals;
         
         // Pre-populate avoidance store with multiple avoidances
-        a01_avoidance_store as;
+        avoidance_store as;
         
         const resolution_lineage* rl1 = lp.resolution(lp.goal(nullptr, 0), 0);
         const resolution_lineage* rl2 = lp.resolution(lp.goal(nullptr, 1), 1);
         const resolution_lineage* rl3 = lp.resolution(lp.goal(nullptr, 2), 2);
         
-        a01_decision_store avoid1;
+        decision_store avoid1;
         avoid1.insert(rl1);
         avoid1.insert(rl2);
         
-        a01_decision_store avoid2;
+        decision_store avoid2;
         avoid2.insert(rl3);
         
         as.insert(avoid1);
@@ -21205,8 +21205,8 @@ void test_a01_sim_constructor() {
         
         size_t as_size_before = as.size();
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: as_copy has same content
@@ -21228,18 +21228,18 @@ void test_a01_sim_constructor() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
-        a01_goals goals;
+        database db;
+        goals goals;
         goals.push_back(ep.atom("p"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Verify copier references match (via members)
@@ -21257,10 +21257,10 @@ void test_a01_sim_constructor() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
-        a01_goals goals;
+        database db;
+        goals goals;
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -21268,22 +21268,22 @@ void test_a01_sim_constructor() {
         
         // Test various limits
         {
-            a01_resolution_store rs;
-            a01_decision_store ds;
+            resolution_store rs;
+            decision_store ds;
             a01_sim sim1(1, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
             assert(sim1.max_resolutions == 1);
         }
         
         {
-            a01_resolution_store rs;
-            a01_decision_store ds;
+            resolution_store rs;
+            decision_store ds;
             a01_sim sim2(1000, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
             assert(sim2.max_resolutions == 1000);
         }
         
         {
-            a01_resolution_store rs;
-            a01_decision_store ds;
+            resolution_store rs;
+            decision_store ds;
             a01_sim sim3(999999, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
             assert(sim3.max_resolutions == 999999);
         }
@@ -21299,16 +21299,16 @@ void test_a01_sim_constructor() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
-        a01_goals goals;
-        a01_avoidance_store as;
+        database db;
+        goals goals;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: decisions() returns reference to ds
@@ -21326,15 +21326,15 @@ void test_a01_sim_constructor() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
-        a01_goals goals;
+        database db;
+        goals goals;
         
         // Pre-populate avoidance store
-        a01_avoidance_store as;
+        avoidance_store as;
         const resolution_lineage* rl1 = lp.resolution(lp.goal(nullptr, 0), 0);
         const resolution_lineage* rl2 = lp.resolution(lp.goal(nullptr, 1), 1);
         
-        a01_decision_store avoid;
+        decision_store avoid;
         avoid.insert(rl1);
         avoid.insert(rl2);
         as.insert(avoid);
@@ -21343,8 +21343,8 @@ void test_a01_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: Verify as_copy has content, original unchanged
@@ -21369,24 +21369,24 @@ void test_a01_sim_constructor() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("x"), {}});
         db.push_back(rule{ep.atom("y"), {}});
         
         // Add 5 goals
-        a01_goals goals;
+        goals goals;
         for (int i = 0; i < 5; i++) {
             goals.push_back(ep.atom("goal" + std::to_string(i)));
         }
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(500, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: 5 goals added
@@ -21420,9 +21420,9 @@ void test_a01_sim_constructor() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         
-        a01_goals goals;
+        goals goals;
         const expr* goal_a = ep.atom("alpha");
         const expr* goal_b = ep.atom("beta");
         const expr* goal_c = ep.atom("gamma");
@@ -21433,14 +21433,14 @@ void test_a01_sim_constructor() {
         goals.push_back(goal_c);
         goals.push_back(goal_d);
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: Verify ordering - idx matches position in list
@@ -21489,20 +21489,20 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {}});  // Fact: a.
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));  // Goal: :- a.
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Execute simulation
@@ -21547,19 +21547,19 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;  // Empty database
+        database db;  // Empty database
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -21592,21 +21592,21 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {}});  // idx 0
         db.push_back(rule{ep.atom("b"), {}});  // idx 1
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -21645,31 +21645,31 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
         db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
         db.push_back(rule{ep.atom("b"), {}});  // idx 2
         db.push_back(rule{ep.atom("c"), {}});  // idx 3
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
         
         // Pre-populate avoidance: avoid (gl0, idx 0)
         const goal_lineage* gl0_avoid = lp.goal(nullptr, 0);
         const resolution_lineage* rl0_avoid = lp.resolution(gl0_avoid, 0);
         
-        a01_decision_store avoid;
+        decision_store avoid;
         avoid.insert(rl0_avoid);
         
-        a01_avoidance_store as;
+        avoidance_store as;
         as.insert(avoid);
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -21714,22 +21714,22 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
         db.push_back(rule{ep.atom("b"), {ep.atom("c")}});  // idx 1
         db.push_back(rule{ep.atom("c"), {}});  // idx 2
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -21778,23 +21778,23 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
         db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
         db.push_back(rule{ep.atom("b"), {}});  // idx 2
         db.push_back(rule{ep.atom("c"), {}});  // idx 3
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // CRITICAL: Pre-populate MCTS tree to force decision on (gl0, idx 1)
@@ -21857,21 +21857,21 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
         db.push_back(rule{ep.atom("b"), {}});  // idx 1
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Note: With only 1 candidate per goal, both will be unit props
@@ -21914,24 +21914,24 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
         db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
         db.push_back(rule{ep.atom("b"), {ep.atom("d")}});  // idx 2
         db.push_back(rule{ep.atom("c"), {ep.atom("e")}});  // idx 3
         // No rules for d or e
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Pre-populate MCTS to force decision on idx 0
@@ -21990,7 +21990,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});
         db.push_back(rule{ep.atom("b"), {ep.atom("c")}});
         db.push_back(rule{ep.atom("c"), {ep.atom("d")}});
@@ -21999,17 +21999,17 @@ void test_a01_sim() {
         db.push_back(rule{ep.atom("f"), {ep.atom("g")}});
         db.push_back(rule{ep.atom("g"), {}});
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(3, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);  // Max 3 resolutions!
         
         bool result = simulation();
@@ -22064,24 +22064,24 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {}});  // idx 0
         db.push_back(rule{ep.atom("b"), {}});  // idx 1
         db.push_back(rule{ep.atom("c"), {}});  // idx 2
         db.push_back(rule{ep.atom("d"), {}});  // idx 3
         db.push_back(rule{ep.atom("e"), {ep.atom("f")}});  // idx 4
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("e"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Before execution, verify 5 candidates added
@@ -22128,11 +22128,11 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
         db.push_back(rule{ep.atom("b"), {}});  // idx 1
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
         
         // Pre-populate avoidance with the future resolution plus a dummy
@@ -22143,19 +22143,19 @@ void test_a01_sim() {
         const goal_lineage* gl_dummy = lp.goal(nullptr, 99);
         const resolution_lineage* rl_dummy = lp.resolution(gl_dummy, 99);
         
-        a01_decision_store avoid;
+        decision_store avoid;
         avoid.insert(rl_a0_pre);
         avoid.insert(rl_dummy);
         
-        a01_avoidance_store as;
+        avoidance_store as;
         as.insert(avoid);
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Verify avoidance copied
@@ -22174,7 +22174,7 @@ void test_a01_sim() {
         
         // CRITICAL: Avoidance store modified (rl(gl0,0) erased after resolution)
         assert(simulation.as_copy.size() == 1);
-        const a01_decision_store& remaining = *simulation.as_copy.begin();
+        const decision_store& remaining = *simulation.as_copy.begin();
         assert(remaining.size() == 1);  // Only dummy remains
         assert(remaining.count(rl_dummy) == 1);
         assert(remaining.count(rl_a0_pre) == 0);  // This was erased
@@ -22197,7 +22197,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
         db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
         db.push_back(rule{ep.atom("b"), {ep.atom("d")}});  // idx 2
@@ -22205,17 +22205,17 @@ void test_a01_sim() {
         db.push_back(rule{ep.atom("d"), {}});  // idx 4
         db.push_back(rule{ep.atom("e"), {}});  // idx 5
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Pre-populate MCTS to force decision on (gl0, idx 0)
@@ -22274,17 +22274,17 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
-        a01_goals goals;  // Empty - already solved!
+        database db;
+        goals goals;  // Empty - already solved!
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -22317,22 +22317,22 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b"), ep.atom("c")}});  // idx 0
         db.push_back(rule{ep.atom("b"), {}});  // idx 1
         db.push_back(rule{ep.atom("c"), {}});  // idx 2
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -22378,7 +22378,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         // p(X) :- q(X).
         const expr* X = ep.var(seq());
         db.push_back(rule{
@@ -22388,17 +22388,17 @@ void test_a01_sim() {
         // q(a).
         db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));  // :- p(a).
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -22439,7 +22439,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         
@@ -22447,17 +22447,17 @@ void test_a01_sim() {
         db.push_back(rule{ep.cons(ep.atom("q"), Y), {ep.cons(ep.atom("r"), Y)}});
         db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("a")), {}});
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -22502,7 +22502,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         
@@ -22513,17 +22513,17 @@ void test_a01_sim() {
         db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});
         db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("b")), {}});
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("p"), ep.cons(ep.atom("a"), ep.atom("b"))));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -22568,7 +22568,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X1 = ep.var(seq());
         const expr* X2 = ep.var(seq());
         
@@ -22577,17 +22577,17 @@ void test_a01_sim() {
         db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 2
         db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("b")), {}});  // idx 3
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Force decision on idx 0
@@ -22637,7 +22637,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         
         // Add 19 non-matching rules
         for (int i = 0; i < 19; i++) {
@@ -22646,17 +22646,17 @@ void test_a01_sim() {
         // Add 1 matching rule
         db.push_back(rule{ep.atom("target"), {}});  // idx 19
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("target"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Initial state: 20 candidates
@@ -22694,8 +22694,8 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
-        a01_goals goals;
+        database db;
+        goals goals;
         
         // Create 10 independent facts and goals
         for (int i = 0; i < 10; i++) {
@@ -22703,14 +22703,14 @@ void test_a01_sim() {
             goals.push_back(ep.atom("g" + std::to_string(i)));
         }
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -22750,14 +22750,14 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
         db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
         db.push_back(rule{ep.atom("b"), {ep.atom("d")}});  // idx 2
         db.push_back(rule{ep.atom("c"), {}});  // idx 3
         db.push_back(rule{ep.atom("d"), {}});  // idx 4
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
         
         // Pre-populate avoidance
@@ -22766,19 +22766,19 @@ void test_a01_sim() {
         const goal_lineage* gl_b_pre = lp.goal(rl_a0_pre, 0);
         const resolution_lineage* rl_b_pre = lp.resolution(gl_b_pre, 2);
         
-        a01_decision_store avoid;
+        decision_store avoid;
         avoid.insert(rl_a0_pre);
         avoid.insert(rl_b_pre);
         
-        a01_avoidance_store as;
+        avoidance_store as;
         as.insert(avoid);
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Force decision on idx 1
@@ -22814,7 +22814,7 @@ void test_a01_sim() {
         
         // CRITICAL: Avoidance modified (rl_a erased after resolution)
         assert(simulation.as_copy.size() == 1);
-        const a01_decision_store& remaining = *simulation.as_copy.begin();
+        const decision_store& remaining = *simulation.as_copy.begin();
         // After making rl(gl0,1), it should be erased from avoidance
         // But our avoidance had rl(gl0,0) and rl(gl_b,2), not rl(gl0,1)
         // So avoidance should be unchanged
@@ -22838,20 +22838,20 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {ep.cons(ep.atom("q"), ep.atom("b"))}});
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -22890,7 +22890,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
         db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
         db.push_back(rule{ep.atom("b"), {ep.atom("d")}});  // idx 2
@@ -22899,17 +22899,17 @@ void test_a01_sim() {
         db.push_back(rule{ep.atom("d"), {}});  // idx 5
         db.push_back(rule{ep.atom("e"), {}});  // idx 6
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Force first decision on (gl0, idx 0)
@@ -22965,7 +22965,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         
         // append(nil, X, X).
         const expr* X1 = ep.var(seq());
@@ -22988,21 +22988,21 @@ void test_a01_sim() {
             {ep.cons(ep.atom("append"), ep.cons(T, ep.cons(X2, R)))}
         });
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("append"), ep.cons(
             ep.cons(ep.atom("cons"), ep.cons(ep.atom("a"), ep.atom("nil"))),
             ep.cons(ep.cons(ep.atom("cons"), ep.cons(ep.atom("b"), ep.atom("nil"))),
                     ep.cons(ep.atom("cons"), ep.cons(ep.atom("a"), ep.cons(ep.atom("cons"), ep.cons(ep.atom("b"), ep.atom("nil"))))))
         )));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -23040,7 +23040,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         
         // Create a complex dependency graph
         // 30 rules total
@@ -23058,17 +23058,17 @@ void test_a01_sim() {
             db.push_back(rule{ep.atom("noise" + std::to_string(i)), {}});
         }
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("p"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Verify 30 candidates initially
@@ -23119,22 +23119,22 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("b")), {}});  // idx 1
         
-        a01_goals goals;
+        goals goals;
         const expr* X = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("p"), X));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Pre-populate MCTS to force decision on idx 0
@@ -23181,22 +23181,22 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* cons_a_nil = ep.cons(ep.atom("cons"), ep.cons(ep.atom("a"), ep.atom("nil")));
         db.push_back(rule{ep.cons(ep.atom("q"), cons_a_nil), {}});  // idx 0
         
-        a01_goals goals;
+        goals goals;
         const expr* X = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("q"), X));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -23223,24 +23223,24 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* pair_a_b = ep.cons(ep.atom("pair"), ep.cons(ep.atom("a"), ep.atom("b")));
         db.push_back(rule{pair_a_b, {}});  // idx 0
         
-        a01_goals goals;
+        goals goals;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         const expr* pair_X_Y = ep.cons(ep.atom("pair"), ep.cons(X, Y));
         goals.push_back(pair_X_Y);
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -23269,23 +23269,23 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X_rule = ep.var(seq());
         db.push_back(rule{ep.cons(ep.atom("p"), X_rule), {ep.cons(ep.atom("q"), X_rule)}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("hello")), {}});  // idx 1
         
-        a01_goals goals;
+        goals goals;
         const expr* Y_goal = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("p"), Y_goal));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -23312,24 +23312,24 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("b")), {}});  // idx 1
         
-        a01_goals goals;
+        goals goals;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("p"), X));
         goals.push_back(ep.cons(ep.atom("q"), Y));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -23373,25 +23373,25 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 1
         db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("a")), {}});  // idx 2
         
-        a01_goals goals;
+        goals goals;
         const expr* X = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("p"), X));
         goals.push_back(ep.cons(ep.atom("q"), X));
         goals.push_back(ep.cons(ep.atom("r"), X));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -23440,27 +23440,27 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* f_a_b = ep.cons(ep.atom("f"), ep.cons(ep.atom("a"), ep.atom("b")));
         const expr* g_b_c = ep.cons(ep.atom("g"), ep.cons(ep.atom("b"), ep.atom("c")));
         db.push_back(rule{f_a_b, {}});  // idx 0
         db.push_back(rule{g_b_c, {}});  // idx 1
         
-        a01_goals goals;
+        goals goals;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         const expr* Z = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("f"), ep.cons(X, Y)));
         goals.push_back(ep.cons(ep.atom("g"), ep.cons(Y, Z)));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -23509,25 +23509,25 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* leaf1 = ep.cons(ep.atom("leaf"), ep.atom("1"));
         const expr* leaf2 = ep.cons(ep.atom("leaf"), ep.atom("2"));
         const expr* node = ep.cons(ep.atom("node"), ep.cons(leaf1, leaf2));
         const expr* tree = ep.cons(ep.atom("tree"), node);
         db.push_back(rule{tree, {}});  // idx 0
         
-        a01_goals goals;
+        goals goals;
         const expr* X = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("tree"), X));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -23554,27 +23554,27 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         db.push_back(rule{ep.cons(ep.atom("p"), X), {ep.cons(ep.atom("q"), X)}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("q"), Y), {ep.cons(ep.atom("r"), Y)}});  // idx 1
         db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("hello")), {}});  // idx 2
         
-        a01_goals goals;
+        goals goals;
         const expr* A = ep.var(seq());
         const expr* B = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("p"), A));
         goals.push_back(ep.cons(ep.atom("p"), B));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -23638,14 +23638,14 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("a"), ep.atom("1")), {}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("b"), ep.atom("2")), {}});  // idx 1
         db.push_back(rule{ep.cons(ep.atom("c"), ep.atom("3")), {}});  // idx 2
         db.push_back(rule{ep.cons(ep.atom("d"), ep.atom("4")), {}});  // idx 3
         db.push_back(rule{ep.cons(ep.atom("e"), ep.atom("5")), {}});  // idx 4
         
-        a01_goals goals;
+        goals goals;
         const expr* V1 = ep.var(seq());
         const expr* V2 = ep.var(seq());
         const expr* V3 = ep.var(seq());
@@ -23657,14 +23657,14 @@ void test_a01_sim() {
         goals.push_back(ep.cons(ep.atom("d"), V4));
         goals.push_back(ep.cons(ep.atom("e"), V5));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -23724,7 +23724,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X1 = ep.var(seq());
         const expr* X2 = ep.var(seq());
         db.push_back(rule{ep.cons(ep.atom("p"), X1), {ep.cons(ep.atom("q"), X1)}});  // idx 0
@@ -23732,18 +23732,18 @@ void test_a01_sim() {
         db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("apple")), {}});  // idx 2
         db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("banana")), {}});  // idx 3
         
-        a01_goals goals;
+        goals goals;
         const expr* Fruit = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("p"), Fruit));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Force decision on idx 0 (q path -> apple)
@@ -23781,7 +23781,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* link_a_b = ep.cons(ep.atom("link"), ep.cons(ep.atom("a"), ep.atom("b")));
         const expr* link_b_c = ep.cons(ep.atom("link"), ep.cons(ep.atom("b"), ep.atom("c")));
         db.push_back(rule{link_a_b, {}});  // idx 0
@@ -23801,18 +23801,18 @@ void test_a01_sim() {
         const expr* path_Y2_Z2 = ep.cons(ep.atom("path"), ep.cons(Y2, Z2));
         db.push_back(rule{path_rec, {link_X2_Y2, path_Y2_Z2}});  // idx 3
         
-        a01_goals goals;
+        goals goals;
         const expr* Dest = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("path"), ep.cons(ep.atom("a"), Dest)));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Pre-populate MCTS to force base case (idx 2)
@@ -23867,7 +23867,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         const expr* Z = ep.var(seq());
@@ -23888,20 +23888,20 @@ void test_a01_sim() {
         const expr* times_fact = ep.cons(ep.atom("times"), ep.cons(ep.atom("2"), ep.cons(ep.atom("3"), ep.atom("6"))));
         db.push_back(rule{times_fact, {}});  // idx 3
         
-        a01_goals goals;
+        goals goals;
         const expr* Sum = ep.var(seq());
         const expr* Prod = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("add"), ep.cons(ep.atom("1"), ep.cons(ep.atom("2"), Sum))));
         goals.push_back(ep.cons(ep.atom("mul"), ep.cons(ep.atom("2"), ep.cons(ep.atom("3"), Prod))));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -23959,23 +23959,23 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("b")), {}});  // idx 1
         
-        a01_goals goals;
+        goals goals;
         const expr* X = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("p"), X));
         goals.push_back(ep.cons(ep.atom("q"), X));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -24010,23 +24010,23 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("pair"), ep.cons(ep.atom("a"), ep.atom("a"))), {}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("pair"), ep.cons(ep.atom("a"), ep.atom("b"))), {}});  // idx 1
         db.push_back(rule{ep.cons(ep.atom("pair"), ep.cons(ep.atom("b"), ep.atom("b"))), {}});  // idx 2
         
-        a01_goals goals;
+        goals goals;
         const expr* X = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("pair"), ep.cons(X, X)));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Pre-populate MCTS to force idx 2 (NOT idx 0, to prove MCTS works!)
@@ -24077,21 +24077,21 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 0
         
-        a01_goals goals;
+        goals goals;
         const expr* X = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("p"), X));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -24127,25 +24127,25 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X_rule = ep.var(seq());
         const expr* Y_rule = ep.var(seq());
         db.push_back(rule{ep.cons(ep.atom("p"), X_rule), {ep.cons(ep.atom("q"), X_rule)}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("q"), Y_rule), {ep.cons(ep.atom("r"), Y_rule)}});  // idx 1
         // No r facts
         
-        a01_goals goals;
+        goals goals;
         const expr* Z_goal = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("p"), Z_goal));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -24190,23 +24190,23 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("b")), {}});  // idx 1
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));  // Instantiated
         const expr* X = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("q"), X));  // Variable
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -24252,7 +24252,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         const expr* Z = ep.var(seq());
@@ -24266,18 +24266,18 @@ void test_a01_sim() {
         db.push_back(rule{ep.cons(ep.atom("e"), V), {ep.cons(ep.atom("f"), V)}});  // idx 4
         db.push_back(rule{ep.cons(ep.atom("f"), ep.atom("hello")), {}});  // idx 5
         
-        a01_goals goals;
+        goals goals;
         const expr* Result = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("a"), Result));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -24338,7 +24338,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         const expr* Z = ep.var(seq());
@@ -24354,20 +24354,20 @@ void test_a01_sim() {
         const expr* baz_fact = ep.cons(ep.atom("baz"), ep.cons(ep.atom("2"), ep.atom("3")));
         db.push_back(rule{baz_fact, {}});  // idx 2
         
-        a01_goals goals;
+        goals goals;
         const expr* A = ep.var(seq());
         const expr* B = ep.var(seq());
         const expr* C = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("foo"), ep.cons(A, ep.cons(B, C))));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -24420,7 +24420,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         
@@ -24433,18 +24433,18 @@ void test_a01_sim() {
         const expr* atom_z = ep.cons(ep.atom("atom"), ep.atom("z"));
         db.push_back(rule{ep.cons(ep.atom("p"), atom_z), {}});  // idx 2
         
-        a01_goals goals;
+        goals goals;
         const expr* cons_a_nil = ep.cons(ep.atom("cons"), ep.cons(ep.atom("a"), ep.atom("nil")));
         goals.push_back(ep.cons(ep.atom("p"), cons_a_nil));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -24480,23 +24480,23 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("person"), ep.atom("alice")), {}});    // idx 0
         db.push_back(rule{ep.cons(ep.atom("person"), ep.atom("bob")), {}});      // idx 1
         db.push_back(rule{ep.cons(ep.atom("person"), ep.atom("charlie")), {}});  // idx 2
         
-        a01_goals goals;
+        goals goals;
         const expr* Who = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("person"), Who));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Pre-populate MCTS to force idx 1 (bob)
@@ -24546,7 +24546,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         
@@ -24555,24 +24555,24 @@ void test_a01_sim() {
         db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 2
         db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("b")), {}});  // idx 3
         
-        a01_goals goals;
+        goals goals;
         const expr* Z = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("p"), Z));
         
         // Pre-populate avoidance store to avoid idx 0
         const goal_lineage* gl_p = lp.goal(nullptr, 0);
         const resolution_lineage* rl_avoid = lp.resolution(gl_p, 0);
-        a01_decision_store avoidance;
+        decision_store avoidance;
         avoidance.insert(rl_avoid);
-        a01_avoidance_store as;
+        avoidance_store as;
         as.insert(avoidance);
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -24616,23 +24616,23 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         db.push_back(rule{ep.cons(ep.atom("p"), X), {ep.cons(ep.atom("q"), Y)}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 1
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("p"), ep.atom("hello")));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -24673,21 +24673,21 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X = ep.var(seq());
         db.push_back(rule{ep.cons(ep.atom("p"), X), {ep.cons(ep.atom("p"), X)}});  // idx 0: p(X) :- p(X)
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(5, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);  // Low max_resolutions
         
         bool result = simulation();
@@ -24718,20 +24718,20 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;  // Empty!
+        database db;  // Empty!
         
-        a01_goals goals;
+        goals goals;
         const expr* X = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("p"), X));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -24761,21 +24761,21 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X = ep.var(seq());
         db.push_back(rule{ep.cons(ep.atom("p"), X), {}});  // idx 0: p(X). (fact with variable)
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("p"), ep.atom("hello")));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -24812,7 +24812,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* W = ep.var(seq());
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
@@ -24830,21 +24830,21 @@ void test_a01_sim() {
         db.push_back(rule{ep.cons(ep.atom("c"), ep.atom("3")), {}});  // idx 3
         db.push_back(rule{ep.cons(ep.atom("d"), ep.atom("4")), {}});  // idx 4
         
-        a01_goals goals;
+        goals goals;
         const expr* A = ep.var(seq());
         const expr* B = ep.var(seq());
         const expr* C = ep.var(seq());
         const expr* D = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("big"), ep.cons(A, ep.cons(B, ep.cons(C, D)))));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -24901,7 +24901,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         
@@ -24910,7 +24910,7 @@ void test_a01_sim() {
         db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 2
         db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("b")), {}});  // idx 3
         
-        a01_goals goals;
+        goals goals;
         const expr* Z = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("p"), Z));
         
@@ -24919,13 +24919,13 @@ void test_a01_sim() {
         const resolution_lineage* rl0 = lp.resolution(gl_p, 0);
         const resolution_lineage* rl1 = lp.resolution(gl_p, 1);
         
-        a01_decision_store avoidance1;
+        decision_store avoidance1;
         avoidance1.insert(rl0);
         
-        a01_decision_store avoidance2;
+        decision_store avoidance2;
         avoidance2.insert(rl1);
         
-        a01_avoidance_store as;
+        avoidance_store as;
         as.insert(avoidance1);
         as.insert(avoidance2);
         
@@ -24933,8 +24933,8 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -24963,7 +24963,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         
@@ -24973,18 +24973,18 @@ void test_a01_sim() {
         const expr* cons_b_Y = ep.cons(ep.atom("cons"), ep.cons(ep.atom("b"), Y));
         db.push_back(rule{ep.cons(ep.atom("p"), cons_b_Y), {}});  // idx 1
         
-        a01_goals goals;
+        goals goals;
         const expr* atom_z = ep.cons(ep.atom("atom"), ep.atom("z"));
         goals.push_back(ep.cons(ep.atom("p"), atom_z));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -25014,7 +25014,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* level1 = ep.cons(ep.atom("cons"), ep.cons(ep.atom("a"), ep.atom("b")));
         const expr* level2 = ep.cons(ep.atom("cons"), ep.cons(level1, ep.atom("c")));
         const expr* level3 = ep.cons(ep.atom("cons"), ep.cons(level2, ep.atom("d")));
@@ -25022,18 +25022,18 @@ void test_a01_sim() {
         const expr* level5 = ep.cons(ep.atom("cons"), ep.cons(level4, ep.atom("f")));
         db.push_back(rule{ep.cons(ep.atom("deep"), level5), {}});  // idx 0
         
-        a01_goals goals;
+        goals goals;
         const expr* X = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("deep"), X));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -25060,7 +25060,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* vars[10];
         for (int i = 0; i < 10; i++) {
             vars[i] = ep.var(seq());
@@ -25078,18 +25078,18 @@ void test_a01_sim() {
         db.push_back(rule{ep.cons(ep.atom("i"), vars[8]), {ep.cons(ep.atom("j"), vars[8])}});
         db.push_back(rule{ep.cons(ep.atom("j"), ep.atom("end")), {}});
         
-        a01_goals goals;
+        goals goals;
         const expr* X = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("a"), X));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(5, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);  // Max 5
         
         bool result = simulation();
@@ -25117,21 +25117,21 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {ep.cons(ep.atom("q"), ep.atom("b"))}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("c")), {}});  // idx 1: q(c) not q(b)!
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -25166,23 +25166,23 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("edge"), ep.cons(ep.atom("a"), ep.atom("b"))), {}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("edge"), ep.cons(ep.atom("a"), ep.atom("c"))), {}});  // idx 1
         db.push_back(rule{ep.cons(ep.atom("edge"), ep.cons(ep.atom("a"), ep.atom("d"))), {}});  // idx 2
         
-        a01_goals goals;
+        goals goals;
         const expr* X = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("edge"), ep.cons(ep.atom("a"), X)));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         // Pre-populate MCTS to force idx 2
@@ -25226,28 +25226,28 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* nested_db = ep.cons(ep.atom("cons"), 
                                    ep.cons(ep.atom("a"), 
                                       ep.cons(ep.atom("cons"), 
                                          ep.cons(ep.atom("b"), ep.atom("nil")))));
         db.push_back(rule{ep.cons(ep.atom("p"), nested_db), {}});  // idx 0
         
-        a01_goals goals;
+        goals goals;
         const expr* nested_goal = ep.cons(ep.atom("cons"), 
                                      ep.cons(ep.atom("a"), 
                                         ep.cons(ep.atom("cons"), 
                                            ep.cons(ep.atom("c"), ep.atom("nil")))));
         goals.push_back(ep.cons(ep.atom("p"), nested_goal));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -25276,24 +25276,24 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X = ep.var(seq());
         const expr* weird = ep.cons(ep.atom("weird"), ep.cons(X, ep.cons(X, X)));
         db.push_back(rule{weird, {}});  // idx 0: weird(X,X,X)
         
-        a01_goals goals;
+        goals goals;
         const expr* Y = ep.var(seq());
         const expr* goal = ep.cons(ep.atom("weird"), ep.cons(ep.atom("a"), ep.cons(Y, ep.atom("a"))));
         goals.push_back(goal);
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -25320,7 +25320,7 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X1 = ep.var(seq());
         const expr* X2 = ep.var(seq());
         const expr* X3 = ep.var(seq());
@@ -25332,7 +25332,7 @@ void test_a01_sim() {
         db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("b")), {}});  // idx 4
         db.push_back(rule{ep.cons(ep.atom("s"), ep.atom("c")), {}});  // idx 5
         
-        a01_goals goals;
+        goals goals;
         const expr* Z = ep.var(seq());
         goals.push_back(ep.cons(ep.atom("p"), Z));
         
@@ -25341,12 +25341,12 @@ void test_a01_sim() {
         const resolution_lineage* rl0 = lp.resolution(gl_p, 0);
         const resolution_lineage* rl1 = lp.resolution(gl_p, 1);
         
-        a01_decision_store av1;
+        decision_store av1;
         av1.insert(rl0);
-        a01_decision_store av2;
+        decision_store av2;
         av2.insert(rl1);
         
-        a01_avoidance_store as;
+        avoidance_store as;
         as.insert(av1);
         as.insert(av2);
         
@@ -25354,8 +25354,8 @@ void test_a01_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -25382,20 +25382,20 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("p"), {}});  // idx 0: p. (no variables)
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("p"));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -25424,22 +25424,22 @@ void test_a01_sim() {
         sequencer seq(t);
         lineage_pool lp;
         
-        a01_database db;
+        database db;
         const expr* X = ep.var(seq());
         db.push_back(rule{X, {ep.cons(ep.atom("q"), ep.atom("a"))}});  // idx 0: X :- q(a).
         db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 1: q(a).
         
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("p"), ep.atom("hello")));
         
-        a01_avoidance_store as;
+        avoidance_store as;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        a01_resolution_store rs;
-        a01_decision_store ds;
+        resolution_store rs;
+        decision_store ds;
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, as, sim);
         
         bool result = simulation();
@@ -25475,8 +25475,8 @@ void test_a01_constructor_and_destructor() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
-        a01_goals goals;
+        database db;
+        goals goals;
         std::mt19937 rng(42);
 
         size_t depth_before = t.depth();
@@ -25490,7 +25490,7 @@ void test_a01_constructor_and_destructor() {
 
             // CRITICAL: References stored correctly
             assert(&solver.db == &db);
-            assert(&solver.goals == &goals);
+            assert(&solver.gl == &goals);
             assert(&solver.t == &t);
             assert(&solver.vars == &seq);
             assert(&solver.bm == &bm);
@@ -25517,8 +25517,8 @@ void test_a01_constructor_and_destructor() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
-        a01_goals goals;
+        database db;
+        goals goals;
         std::mt19937 rng(0);
 
         assert(t.depth() == 0);
@@ -25546,8 +25546,8 @@ void test_a01_constructor_and_destructor() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
-        a01_goals goals;
+        database db;
+        goals goals;
         std::mt19937 rng(42);
 
         size_t undo_size_before = t.undo_stack.size();
@@ -25575,8 +25575,8 @@ void test_a01_constructor_and_destructor() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
-        a01_goals goals;
+        database db;
+        goals goals;
         std::mt19937 rng(42);
 
         bool undone = false;
@@ -25603,8 +25603,8 @@ void test_a01_constructor_and_destructor() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
-        a01_goals goals;
+        database db;
+        goals goals;
         std::mt19937 rng(42);
 
         bool caller_undone = false;
@@ -25631,11 +25631,11 @@ void test_a01_constructor_and_destructor() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("p"), {}});
         db.push_back(rule{ep.cons(ep.atom("q"), ep.var(seq())), {ep.atom("p")}});
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("q"), ep.atom("a")));
 
         std::mt19937 rng(999);
@@ -25653,8 +25653,8 @@ void test_a01_constructor_and_destructor() {
             assert(solver.db.size() == 2);
 
             // CRITICAL: goals reference correct; content accessible through it
-            assert(&solver.goals == &goals);
-            assert(solver.goals.size() == 1);
+            assert(&solver.gl == &goals);
+            assert(solver.gl.size() == 1);
 
             // CRITICAL: Avoidance store empty on construction regardless of db/goals content
             assert(solver.as.empty());
@@ -25678,18 +25678,18 @@ void test_a01_sim_one() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {}});  // idx 0: a.
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
 
         monte_carlo::tree_node<mcts_decider::choice> root;
-        a01_decision_store ds;
-        a01_resolution_store rs;
+        decision_store ds;
+        resolution_store rs;
 
         size_t depth_before = t.depth();
 
@@ -25728,17 +25728,17 @@ void test_a01_sim_one() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
 
         monte_carlo::tree_node<mcts_decider::choice> root;
-        a01_decision_store ds;
-        a01_resolution_store rs;
+        decision_store ds;
+        resolution_store rs;
 
         size_t depth_before = t.depth();
 
@@ -25771,10 +25771,10 @@ void test_a01_sim_one() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {}});
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
@@ -25790,8 +25790,8 @@ void test_a01_sim_one() {
         assert(seq2.index == 1);
 
         monte_carlo::tree_node<mcts_decider::choice> root;
-        a01_decision_store ds;
-        a01_resolution_store rs;
+        decision_store ds;
+        resolution_store rs;
 
         size_t depth_before = t.depth();
 
@@ -25819,21 +25819,21 @@ void test_a01_sim_one() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
         db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
         db.push_back(rule{ep.atom("b"), {}});               // idx 2
         db.push_back(rule{ep.atom("c"), {}});               // idx 3
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
 
         monte_carlo::tree_node<mcts_decider::choice> root;
-        a01_decision_store ds;
-        a01_resolution_store rs;
+        decision_store ds;
+        resolution_store rs;
 
         solver.sim_one(root, ds, rs);
 
@@ -25859,13 +25859,13 @@ void test_a01_sim_one() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
         db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
         db.push_back(rule{ep.atom("b"), {}});               // idx 2
         db.push_back(rule{ep.atom("c"), {}});               // idx 3
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
@@ -25874,13 +25874,13 @@ void test_a01_sim_one() {
         // Inject avoidance: singleton {rl(gl0, 0)} causes CDCL elimination of idx 0
         const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
         const resolution_lineage* rl0 = solver.lp.resolution(gl0, 0);
-        a01_decision_store avoid;
+        decision_store avoid;
         avoid.insert(rl0);
         solver.as.insert(avoid);
 
         monte_carlo::tree_node<mcts_decider::choice> root;
-        a01_decision_store ds;
-        a01_resolution_store rs;
+        decision_store ds;
+        resolution_store rs;
 
         bool result = solver.sim_one(root, ds, rs);
 
@@ -25909,13 +25909,13 @@ void test_a01_sim_one() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
         db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
         db.push_back(rule{ep.atom("b"), {}});               // idx 2
         db.push_back(rule{ep.atom("c"), {}});               // idx 3
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
@@ -25935,8 +25935,8 @@ void test_a01_sim_one() {
         root.m_children[gl0].m_children[size_t(0)].m_value = 20.0;
         root.m_children[gl0].m_children[size_t(1)].m_visits = 0;  // Unvisited → chosen!
 
-        a01_decision_store ds;
-        a01_resolution_store rs;
+        decision_store ds;
+        resolution_store rs;
 
         bool result = solver.sim_one(root, ds, rs);
 
@@ -25973,21 +25973,21 @@ void test_a01_sim_one() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
         db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
         db.push_back(rule{ep.atom("b"), {}});               // idx 2
         db.push_back(rule{ep.atom("c"), {}});               // idx 3
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
 
         monte_carlo::tree_node<mcts_decider::choice> root;
-        a01_decision_store ds;
-        a01_resolution_store rs;
+        decision_store ds;
+        resolution_store rs;
 
         assert(root.m_visits == 0);
 
@@ -26014,15 +26014,15 @@ void test_a01_next_avoidance() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
-        a01_goals goals;
+        database db;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        a01_decision_store avoidance;
-        std::optional<a01_resolution_store> soln;
+        decision_store avoidance;
+        std::optional<resolution_store> soln;
 
         bool result = solver.next_avoidance(avoidance, soln);
 
@@ -26044,17 +26044,17 @@ void test_a01_next_avoidance() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {}});  // idx 0: a.
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        a01_decision_store avoidance;
-        std::optional<a01_resolution_store> soln;
+        decision_store avoidance;
+        std::optional<resolution_store> soln;
 
         bool result = solver.next_avoidance(avoidance, soln);
 
@@ -26089,19 +26089,19 @@ void test_a01_next_avoidance() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("q"), {ep.atom("r")}});  // idx 0: q :- r.
         db.push_back(rule{ep.atom("q"), {ep.atom("p")}});  // idx 1: q :- p.
         db.push_back(rule{ep.atom("p"), {}});               // idx 2: p.
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("q"));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        a01_decision_store avoidance;
-        std::optional<a01_resolution_store> soln;
+        decision_store avoidance;
+        std::optional<resolution_store> soln;
 
         bool result = solver.next_avoidance(avoidance, soln);
 
@@ -26143,19 +26143,19 @@ void test_a01_next_avoidance() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("f")}});  // idx 0: a :- f.
         db.push_back(rule{ep.atom("a"), {ep.atom("g")}});  // idx 1: a :- g.
         // No rules for f or g
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        a01_decision_store avoidance;
-        std::optional<a01_resolution_store> soln;
+        decision_store avoidance;
+        std::optional<resolution_store> soln;
 
         bool result = solver.next_avoidance(avoidance, soln);
 
@@ -26193,7 +26193,7 @@ void test_a01_next_avoidance() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("p")}});   // idx 0: a :- p.
         db.push_back(rule{ep.atom("a"), {ep.atom("q")}});   // idx 1: a :- q.
         db.push_back(rule{ep.atom("p"), {ep.atom("f1")}});  // idx 2: p :- f1.
@@ -26202,14 +26202,14 @@ void test_a01_next_avoidance() {
         db.push_back(rule{ep.atom("q"), {ep.atom("f4")}});  // idx 5: q :- f4.
         // No rules for f1, f2, f3, f4
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        a01_decision_store avoidance;
-        std::optional<a01_resolution_store> soln;
+        decision_store avoidance;
+        std::optional<resolution_store> soln;
 
         bool result = solver.next_avoidance(avoidance, soln);
 
@@ -26237,7 +26237,7 @@ void test_a01_next_avoidance() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("p")}});   // idx 0
         db.push_back(rule{ep.atom("a"), {ep.atom("q")}});   // idx 1
         db.push_back(rule{ep.atom("p"), {ep.atom("r")}});   // idx 2
@@ -26254,14 +26254,14 @@ void test_a01_next_avoidance() {
         db.push_back(rule{ep.atom("u"), {ep.atom("f8")}});  // idx 13
         // No rules for f1-f8
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        a01_decision_store avoidance;
-        std::optional<a01_resolution_store> soln;
+        decision_store avoidance;
+        std::optional<resolution_store> soln;
 
         bool result = solver.next_avoidance(avoidance, soln);
 
@@ -26286,10 +26286,10 @@ void test_a01_next_avoidance() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {}});  // idx 0: a.
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
@@ -26298,12 +26298,12 @@ void test_a01_next_avoidance() {
         // Inject singleton avoidance: CDCL will eliminate rule 0 for gl0
         const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
         const resolution_lineage* rl0 = solver.lp.resolution(gl0, 0);
-        a01_decision_store avoid;
+        decision_store avoid;
         avoid.insert(rl0);
         solver.as.insert(avoid);
 
-        a01_decision_store avoidance;
-        std::optional<a01_resolution_store> soln;
+        decision_store avoidance;
+        std::optional<resolution_store> soln;
 
         bool result = solver.next_avoidance(avoidance, soln);
 
@@ -26338,7 +26338,7 @@ void test_a01_next_avoidance() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         // Root
         db.push_back(rule{ep.atom("a"), {ep.atom("p")}});   // idx 0  (depth-4)
         db.push_back(rule{ep.atom("a"), {ep.atom("q")}});   // idx 1  (depth-3)
@@ -26369,14 +26369,14 @@ void test_a01_next_avoidance() {
         db.push_back(rule{ep.atom("y"), {ep.atom("fail12")}});  // idx 21
         // No rules for fail1-fail12
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        a01_decision_store avoidance;
-        std::optional<a01_resolution_store> soln;
+        decision_store avoidance;
+        std::optional<resolution_store> soln;
 
         bool result = solver.next_avoidance(avoidance, soln);
 
@@ -26414,7 +26414,7 @@ void test_a01_next_avoidance() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         // Three choices for a
         db.push_back(rule{ep.atom("a"), {ep.atom("p_alpha")}});  // idx 0  (depth-4)
         db.push_back(rule{ep.atom("a"), {ep.atom("p_beta")}});   // idx 1  (depth-4)
@@ -26461,14 +26461,14 @@ void test_a01_next_avoidance() {
         db.push_back(rule{ep.atom("y"), {ep.atom("fail20")}});        // idx 36
         // No rules for fail1-fail20
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        a01_decision_store avoidance;
-        std::optional<a01_resolution_store> soln;
+        decision_store avoidance;
+        std::optional<resolution_store> soln;
 
         bool result = solver.next_avoidance(avoidance, soln);
 
@@ -26516,21 +26516,21 @@ void test_a01_next_avoidance() {
 
         const expr* X = ep.var(seq());
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("a"), ep.atom("123")), {}});  // idx 0: a(123).
         db.push_back(rule{ep.cons(ep.atom("a"), ep.atom("234")), {}});  // idx 1: a(234).
         db.push_back(rule{ep.cons(ep.atom("b"), ep.atom("234")), {}});  // idx 2: b(234).
         db.push_back(rule{ep.cons(ep.atom("b"), ep.atom("345")), {}});  // idx 3: b(345).
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("a"), X));  // a(X)
         goals.push_back(ep.cons(ep.atom("b"), X));  // b(X) — shares X with a
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        a01_decision_store avoidance;
-        std::optional<a01_resolution_store> soln;
+        decision_store avoidance;
+        std::optional<resolution_store> soln;
 
         bool result = solver.next_avoidance(avoidance, soln);
 
@@ -26581,7 +26581,7 @@ void test_a01_next_avoidance() {
 
         const expr* X = ep.var(seq());
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("a"), ep.atom("1")), {}});  // idx 0: a(1).
         db.push_back(rule{ep.cons(ep.atom("a"), ep.atom("2")), {}});  // idx 1: a(2).
         db.push_back(rule{ep.cons(ep.atom("b"), ep.atom("2")), {}});  // idx 2: b(2).
@@ -26589,7 +26589,7 @@ void test_a01_next_avoidance() {
         db.push_back(rule{ep.cons(ep.atom("c"), ep.atom("1")), {}});  // idx 4: c(1).
         db.push_back(rule{ep.cons(ep.atom("c"), ep.atom("3")), {}});  // idx 5: c(3).
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("a"), X));  // a(X)
         goals.push_back(ep.cons(ep.atom("b"), X));  // b(X) — shares X with a
         goals.push_back(ep.cons(ep.atom("c"), X));  // c(X) — shares X with a and b
@@ -26597,8 +26597,8 @@ void test_a01_next_avoidance() {
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        a01_decision_store avoidance;
-        std::optional<a01_resolution_store> soln;
+        decision_store avoidance;
+        std::optional<resolution_store> soln;
 
         bool result = solver.next_avoidance(avoidance, soln);
 
@@ -26655,7 +26655,7 @@ void test_a01_next_avoidance() {
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("a"), ep.atom("1")), {}});  // idx 0: a(1).
         db.push_back(rule{ep.cons(ep.atom("a"), ep.atom("2")), {}});  // idx 1: a(2).
         db.push_back(rule{ep.cons(ep.atom("b"), ep.atom("1")), {}});  // idx 2: b(1).
@@ -26666,7 +26666,7 @@ void test_a01_next_avoidance() {
         db.push_back(rule{ep.cons(ep.cons(ep.atom("c"), ep.atom("2")), ep.atom("5")), {}});  // idx 6: c(2,5).
         db.push_back(rule{ep.cons(ep.cons(ep.atom("c"), ep.atom("2")), ep.atom("6")), {}});  // idx 7: c(2,6).
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("a"), X));                // a(X)
         goals.push_back(ep.cons(ep.atom("b"), Y));                // b(Y)
         goals.push_back(ep.cons(ep.cons(ep.atom("c"), X), Y));   // c(X, Y)
@@ -26674,8 +26674,8 @@ void test_a01_next_avoidance() {
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        a01_decision_store avoidance;
-        std::optional<a01_resolution_store> soln;
+        decision_store avoidance;
+        std::optional<resolution_store> soln;
 
         bool result = solver.next_avoidance(avoidance, soln);
 
@@ -26711,7 +26711,7 @@ void test_a01_next_avoidance() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
 
         // say which root to start from
         db.push_back(rule{ep.atom("root"), {ep.atom("stunt0")}});
@@ -26738,7 +26738,7 @@ void test_a01_next_avoidance() {
             db.push_back(rule{ep.atom("stunt8"), {ep.atom("stunt9")}});
         }
         
-        a01_goals goals;
+        goals goals;
 
         goals.push_back(ep.atom("root"));
 
@@ -26746,8 +26746,8 @@ void test_a01_next_avoidance() {
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        a01_decision_store avoidance;
-        std::optional<a01_resolution_store> soln;
+        decision_store avoidance;
+        std::optional<resolution_store> soln;
 
         bool result = solver.next_avoidance(avoidance, soln);
 
@@ -26780,7 +26780,7 @@ void test_a01_next_avoidance() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
 
         // say which root to start from
         db.push_back(rule{ep.atom("root"), {ep.atom("stunt0")}});
@@ -26809,7 +26809,7 @@ void test_a01_next_avoidance() {
             db.push_back(rule{ep.atom("stunt8"), {ep.atom("stunt9")}});
         }
         
-        a01_goals goals;
+        goals goals;
 
         goals.push_back(ep.atom("root"));
 
@@ -26817,8 +26817,8 @@ void test_a01_next_avoidance() {
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        a01_decision_store avoidance;
-        std::optional<a01_resolution_store> soln;
+        decision_store avoidance;
+        std::optional<resolution_store> soln;
 
         bool result = solver.next_avoidance(avoidance, soln);
 
@@ -26859,16 +26859,16 @@ void test_a01() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {}});
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        std::optional<a01_resolution_store> soln;
+        std::optional<resolution_store> soln;
         bool result = solver(0, soln);
 
         // CRITICAL: returns true (no refutation proved) and soln defaults to nullopt
@@ -26888,16 +26888,16 @@ void test_a01() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {}});  // idx 0: a.
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        std::optional<a01_resolution_store> soln;
+        std::optional<resolution_store> soln;
         bool result = solver(1, soln);
 
         assert(result == true);
@@ -26926,18 +26926,18 @@ void test_a01() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         // idx 0: answer(42).
         db.push_back(rule{ep.cons(ep.atom("answer"), ep.atom("42")), {}});
 
         const expr* X = ep.var(seq());
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("answer"), X));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        std::optional<a01_resolution_store> soln;
+        std::optional<resolution_store> soln;
         bool result = solver(1, soln);
 
         assert(result == true);
@@ -26964,15 +26964,15 @@ void test_a01() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;  // intentionally empty
+        database db;  // intentionally empty
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        std::optional<a01_resolution_store> soln;
+        std::optional<resolution_store> soln;
         bool result = solver(1000, soln);
 
         assert(result == false);
@@ -26996,17 +26996,17 @@ void test_a01() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0: a :- b.
         db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1: a :- c.
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
-        std::optional<a01_resolution_store> soln;
+        std::optional<resolution_store> soln;
 
         // Call 1: one depth-1 avoidance recorded
         bool result1 = solver(1, soln);
@@ -27044,14 +27044,14 @@ void test_a01() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("is_a"), ep.atom("1")), {}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("is_a"), ep.atom("2")), {}});  // idx 1
         db.push_back(rule{ep.cons(ep.atom("is_b"), ep.atom("2")), {}});  // idx 2
         db.push_back(rule{ep.cons(ep.atom("is_b"), ep.atom("3")), {}});  // idx 3
 
         const expr* X = ep.var(seq());
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("is_a"), X));  // goal 0: is_a(X)
         goals.push_back(ep.cons(ep.atom("is_b"), X));  // goal 1: is_b(X)
 
@@ -27059,7 +27059,7 @@ void test_a01() {
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
-        std::optional<a01_resolution_store> soln;
+        std::optional<resolution_store> soln;
 
         // Call 1: unique solution X=2
         bool result1 = solver(1000, soln);
@@ -27107,21 +27107,21 @@ void test_a01() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         // parent(A, B) encoded as cons(cons(atom("parent"), A), B)
         db.push_back(rule{ep.cons(ep.cons(ep.atom("parent"), ep.atom("bob")),   ep.atom("alice")), {}});  // idx 0
         db.push_back(rule{ep.cons(ep.cons(ep.atom("parent"), ep.atom("carol")), ep.atom("alice")), {}});  // idx 1
         db.push_back(rule{ep.cons(ep.cons(ep.atom("parent"), ep.atom("dave")),  ep.atom("bob")),  {}});   // idx 2
 
         const expr* X = ep.var(seq());
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.cons(ep.atom("parent"), X), ep.atom("alice")));
 
         std::mt19937 rng(42);
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
-        std::optional<a01_resolution_store> soln;
+        std::optional<resolution_store> soln;
 
         // First parent of alice
         bool result1 = solver(1000, soln);
@@ -27184,7 +27184,7 @@ void test_a01() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("true")),  {}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("false")), {}});  // idx 1
         db.push_back(rule{ep.cons(ep.cons(ep.atom("not"), ep.atom("true")),  ep.atom("false")), {}});  // idx 2
@@ -27198,7 +27198,7 @@ void test_a01() {
         const expr* Q  = ep.var(seq());
         const expr* NP = ep.var(seq());
 
-        a01_goals goals;
+        goals goals;
         // goal 0: bool(P)
         goals.push_back(ep.cons(ep.atom("bool"), P));
         // goal 1: bool(Q)
@@ -27214,7 +27214,7 @@ void test_a01() {
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
-        std::optional<a01_resolution_store> soln;
+        std::optional<resolution_store> soln;
 
         // First solution: P=true or P=false, but Q must be true
         bool result1 = solver(1000, soln);
@@ -27280,7 +27280,7 @@ void test_a01() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("red")),  {}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("blue")), {}});  // idx 1
         // diff(X, Y) encoded as cons(cons(atom("diff"), X), Y)
@@ -27291,7 +27291,7 @@ void test_a01() {
         const expr* B = ep.var(seq());
         const expr* C = ep.var(seq());
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("color"), A));                 // goal 0: color(A)
         goals.push_back(ep.cons(ep.atom("color"), B));                 // goal 1: color(B)
         goals.push_back(ep.cons(ep.atom("color"), C));                 // goal 2: color(C)
@@ -27302,7 +27302,7 @@ void test_a01() {
         a01 solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
-        std::optional<a01_resolution_store> soln;
+        std::optional<resolution_store> soln;
 
         auto is_valid_color = [](const std::string& s) {
             return s == "red" || s == "blue";
@@ -27369,7 +27369,7 @@ void test_a01() {
         size_t iterations = 1000
     ) {
         std::set<solution> visited;
-        std::optional<a01_resolution_store> soln;
+        std::optional<resolution_store> soln;
         while (!expected.empty()) {
             solution s;
             do {
@@ -27417,7 +27417,7 @@ void test_a01() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("red")),   {}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("green")), {}});  // idx 1
         db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("blue")),  {}});  // idx 2
@@ -27433,7 +27433,7 @@ void test_a01() {
         const expr* B = ep.var(seq());
         const expr* C = ep.var(seq());
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("color"), A));                 // goal 0: color(A)
         goals.push_back(ep.cons(ep.atom("color"), B));                 // goal 1: color(B)
         goals.push_back(ep.cons(ep.atom("color"), C));                 // goal 2: color(C)
@@ -27497,7 +27497,7 @@ void test_a01() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("true")),  {}});  // idx 0: bool(true).
         db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("false")), {}});  // idx 1: bool(false).
 
@@ -27539,7 +27539,7 @@ void test_a01() {
         const expr* R  = ep.var(seq());
         const expr* QR = ep.var(seq());
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("bool"), P));                                           // goal 0: bool(P)
         goals.push_back(ep.cons(ep.atom("bool"), Q));                                           // goal 1: bool(Q)
         goals.push_back(ep.cons(ep.atom("bool"), R));                                           // goal 2: bool(R)
@@ -27585,7 +27585,7 @@ void test_a01() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("red")),   {}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("green")), {}});  // idx 1
         db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("blue")),  {}});  // idx 2
@@ -27602,7 +27602,7 @@ void test_a01() {
         const expr* C = ep.var(seq());
         const expr* D = ep.var(seq());
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("color"), A));                 // goal 0: color(A)
         goals.push_back(ep.cons(ep.atom("color"), B));                 // goal 1: color(B)
         goals.push_back(ep.cons(ep.atom("color"), C));                 // goal 2: color(C)
@@ -27664,7 +27664,7 @@ void test_a01() {
         bind_map bm(t);
         sequencer seq(t);
 
-        a01_database db;
+        database db;
         db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("true")),  {}});  // idx 0
         db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("false")), {}});  // idx 1
         db.push_back(rule{ep.cons(ep.cons(ep.atom("not"), ep.atom("true")),  ep.atom("false")), {}});  // idx 2
@@ -27715,7 +27715,7 @@ void test_a01() {
         const expr* NPR   = ep.var(seq());   // ¬P ∨ ¬R
         const expr* PQ_RS = ep.var(seq());   // (P∨Q) ∧ (R∨S)
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.atom("bool"), P));                                               // goal  0: bool(P)
         goals.push_back(ep.cons(ep.atom("bool"), Q));                                               // goal  1: bool(Q)
         goals.push_back(ep.cons(ep.atom("bool"), R));                                               // goal  2: bool(R)
@@ -27786,7 +27786,7 @@ void test_a01() {
             return result;
         };
 
-        a01_database db;
+        database db;
 
         // idx 0: nat(zero).
         db.push_back(rule{ep.cons(ep.atom("nat"), ep.atom("zero")), {}});
@@ -27822,7 +27822,7 @@ void test_a01() {
         const expr* N     = ep.var(seq());
         const expr* seven = peano(7);
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.cons(ep.atom("lt"), N), seven));  // goal 0: lt(N, seven)
 
         std::mt19937 rng(42);
@@ -27874,7 +27874,7 @@ void test_a01() {
             return r;
         };
 
-        a01_database db;
+        database db;
 
         // idx 0: nat(zero).
         db.push_back(rule{ep.cons(ep.atom("nat"), ep.atom("zero")), {}});
@@ -27932,7 +27932,7 @@ void test_a01() {
         const expr* S   = ep.var(seq());
         const expr* ten = peano(10);
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("add"), X), Y), S));  // goal 0: add(X, Y, S)
         goals.push_back(ep.cons(ep.cons(ep.atom("lt"), S), ten));              // goal 1: lt(S, ten)
 
@@ -27978,7 +27978,7 @@ void test_a01() {
             return r;
         };
 
-        a01_database db;
+        database db;
 
         // idx 0: nat(zero).
         db.push_back(rule{ep.cons(ep.atom("nat"), ep.atom("zero")), {}});
@@ -28016,7 +28016,7 @@ void test_a01() {
         const expr* Y   = ep.var(seq());
         const expr* ten = peano(10);
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("add"), X), Y), ten));  // goal 0: add(X, Y, ten)
 
         std::mt19937 rng(42);
@@ -28063,7 +28063,7 @@ void test_a01() {
             return r;
         };
 
-        a01_database db;
+        database db;
 
         // idx 0: nat(zero).
         db.push_back(rule{ep.cons(ep.atom("nat"), ep.atom("zero")), {}});
@@ -28125,7 +28125,7 @@ void test_a01() {
         const expr* Y     = ep.var(seq());
         const expr* eight = peano(8);
 
-        a01_goals goals;
+        goals goals;
         goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("mul"), X), Y), eight));  // goal 0: mul(X, Y, eight)
 
         std::mt19937 rng(42);

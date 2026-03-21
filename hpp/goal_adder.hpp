@@ -3,20 +3,20 @@
 
 #include "lineage.hpp"
 #include "expr.hpp"
-#include "a01_defs.hpp"
+#include "defs.hpp"
 
 struct goal_adder {
     goal_adder(
-        a01_goal_store&,
-        a01_candidate_store&,
-        const a01_database&);
+        goal_store&,
+        candidate_store&,
+        const database&);
     void operator()(const goal_lineage*, const expr*);
 #ifndef DEBUG
 private:
 #endif
-    a01_goal_store& goals;
-    a01_candidate_store& candidates;
-    const a01_database& database;
+    goal_store& goals;
+    candidate_store& candidates;
+    const database& db;
 };
 
 #endif

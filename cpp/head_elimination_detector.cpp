@@ -3,8 +3,8 @@
 head_elimination_detector::head_elimination_detector(
     trail& t,
     bind_map& bm,
-    const a01_goal_store& gs,
-    const a01_database& db
+    const goal_store& gs,
+    const database& db
 )
     : t(t), bm(bm), gs(gs), db(db)
 {}

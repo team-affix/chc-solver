@@ -3,14 +3,14 @@
 
 #include "bind_map.hpp"
 #include "lineage.hpp"
-#include "a01_defs.hpp"
+#include "defs.hpp"
 
 struct head_elimination_detector {
     head_elimination_detector(
         trail&,
         bind_map&,
-        const a01_goal_store&,
-        const a01_database&
+        const goal_store&,
+        const database&
     );
     bool operator()(const goal_lineage*, size_t);
 #ifdef DEBUG
@@ -18,8 +18,8 @@ private:
 #endif
     trail& t;
     bind_map& bm;
-    const a01_goal_store& gs;
-    const a01_database& db;
+    const goal_store& gs;
+    const database& db;
 };
 
 #endif

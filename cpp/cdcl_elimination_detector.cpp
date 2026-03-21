@@ -1,7 +1,7 @@
 #include "../hpp/cdcl_elimination_detector.hpp"
 
 cdcl_elimination_detector::cdcl_elimination_detector(
-    const a01_avoidance_store& as,
+    const avoidance_store& as,
     lineage_pool& lp
 )
     : as(as), lp(lp)
