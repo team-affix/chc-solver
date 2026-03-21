@@ -7,6 +7,7 @@
 using avoidance = std::set<const resolution_lineage*>;
 
 struct cdcl {
+    cdcl();
     size_t insert(const avoidance&);
     void constrain(const resolution_lineage*);
     bool refuted() const;

@@ -1,5 +1,13 @@
 #include "../hpp/cdcl.hpp"
 
+cdcl::cdcl() :
+    avoidances(),
+    watched_goals(),
+    is_refuted(false),
+    eliminated_resolutions() {
+
+}
+
 size_t cdcl::insert(const avoidance& av) {
     // 1. get a new id for the avoidance
     size_t id = avoidances.size();
