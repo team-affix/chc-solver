@@ -19,7 +19,7 @@ struct goal_resolver {
         lineage_pool&,
         goal_adder&
     );
-    void operator()(const goal_lineage*, size_t);
+    const resolution_lineage* operator()(const goal_lineage*, size_t);
 #ifndef DEBUG
 private:
 #endif

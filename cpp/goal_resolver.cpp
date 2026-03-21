@@ -14,7 +14,7 @@ goal_resolver::goal_resolver(
 {
 }
 
-void goal_resolver::operator()(const goal_lineage* gl, size_t i)
+const resolution_lineage* goal_resolver::operator()(const goal_lineage* gl, size_t i)
 {
     // get the goal expression
     const expr* goal_expr = gs.at(gl);
@@ -55,4 +55,7 @@ void goal_resolver::operator()(const goal_lineage* gl, size_t i)
         const goal_lineage* child_gl = lp.goal(rl, j);
         ga(child_gl, e);
     }
+
+    // return the resolution lineage
+    return rl;
 }
