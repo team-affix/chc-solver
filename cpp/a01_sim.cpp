@@ -11,8 +11,8 @@ a01_sim::a01_sim(
     lineage_pool& lp,
     resolution_store& rs,
     decision_store& ds,
+    const avoidance_map& am,
     avoidance_store as,
-    avoidance_map am,
     monte_carlo::simulation<mcts_decider::choice, std::mt19937>& sim
 ) :
     max_resolutions(max_resolutions),
@@ -22,7 +22,7 @@ a01_sim::a01_sim(
     rs(rs),
     ds(ds),
     as_copy(as),
-    am_copy(am),
+    am(am),
     gs({}),
     cs({}),
     cp(vars, ep),
@@ -34,7 +34,7 @@ a01_sim::a01_sim(
     dec(gs, cs, sim),
     ga(gs, cs, db),
     gr(rs, gs, cs, db, cp, bm, lp, ga),
-    at(as_copy, am_copy)
+    at(as_copy, am)
 {
     // clear the resolution and decision stores
     // for the start of the simulation

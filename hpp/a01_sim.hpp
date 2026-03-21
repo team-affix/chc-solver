@@ -25,8 +25,8 @@ struct a01_sim {
         lineage_pool&,
         resolution_store&,
         decision_store&,
+        const avoidance_map&,
         avoidance_store,
-        avoidance_map,
         monte_carlo::simulation<mcts_decider::choice, std::mt19937>&
     );
     bool operator()();
@@ -40,9 +40,9 @@ private:
     lineage_pool& lp;
     resolution_store& rs;
     decision_store& ds;
+    const avoidance_map& am;
     
     avoidance_store as_copy;
-    avoidance_map am_copy;
     
     goal_store gs;
     candidate_store cs;
