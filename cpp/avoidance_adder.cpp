@@ -7,12 +7,9 @@ avoidance_adder::avoidance_adder(
 
 void avoidance_adder::operator()(const avoidance& avoidance) {
 
-    auto [it, inserted] = as.insert(avoidance);
+    auto& av = as.emplace_back(avoidance);
 
-    if (!inserted)
-        return;
-    
     for (const auto& rl : avoidance)
-        am.insert({rl->parent, avoidance});
+        am.insert({rl->parent, &av});
 
 }
