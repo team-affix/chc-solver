@@ -9,7 +9,7 @@ using avoidance = std::set<const resolution_lineage*>;
 
 struct cdcl {
     cdcl();
-    size_t learn(const decision_store&);
+    void learn(const decision_store&);
     void constrain(const resolution_lineage*);
     bool refuted() const;
     bool eliminated(const resolution_lineage*) const;

@@ -8,7 +8,7 @@ cdcl::cdcl() :
 
 }
 
-size_t cdcl::learn(const decision_store& ds) {
+void cdcl::learn(const decision_store& ds) {
     // 1. reduce the decision store to a set of leaf resolutions
     avoidance av = reduce(ds);
 
@@ -28,9 +28,6 @@ size_t cdcl::learn(const decision_store& ds) {
     //    and link the avoidance to the goals
     for (const resolution_lineage* rl : av)
         watched_goals[rl->parent].insert(id);
-
-    // 6. return the id
-    return id;
 
 }
 
