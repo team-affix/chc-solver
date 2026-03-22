@@ -12448,7 +12448,6 @@ void test_goal_resolver_constructor() {
         resolution_store rs;
         goal_store gs;
         candidate_store cs;
-        cdcl c;
         
         // Add some initial data to resolution store
         const goal_lineage* g0 = lp.goal(nullptr, 0);
@@ -12470,14 +12469,12 @@ void test_goal_resolver_constructor() {
         // Pre-populate avoidance store with some avoidances
         decision_store avoidance1;
         avoidance1.insert(rl0);
-        c.insert(avoidance1);
         
         const goal_lineage* g2 = lp.goal(nullptr, 2);
         const resolution_lineage* rl2 = lp.resolution(g2, 0);
         decision_store avoidance2;
         avoidance2.insert(rl0);
         avoidance2.insert(rl2);
-        c.insert(avoidance2);
         
         goal_adder ga(gs, cs, db);
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
@@ -12486,7 +12483,6 @@ void test_goal_resolver_constructor() {
         assert(resolver.gs.size() == 1);
         assert(resolver.cs.size() == 2);
         assert(resolver.db.size() == 1);
-        assert(c.avoidances.size() == 2);
     }
 }
 
@@ -12511,19 +12507,10 @@ void test_goal_resolver() {
         database db = {r_fact};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         
-        // Pre-populate avoidance store: single avoidance containing the rl we're about to create
+        // Pre-compute expected lineage for return value assertion
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const resolution_lineage* rl_expected = lp.resolution(g1, 0);
-        
-        decision_store avoidance1;
-        avoidance1.insert(rl_expected);
-        c.insert(avoidance1);
-        
-        assert(c.avoidances.size() == 1);
-        assert(c.avoidances.begin()->second.size() == 1);
-        assert(c.avoidances.begin()->second.count(rl_expected) == 1);
         
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
@@ -12602,36 +12589,10 @@ void test_goal_resolver() {
         database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         
-        // Pre-populate avoidance store with mixed avoidances
+        // Pre-compute expected lineage for return value assertion
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const resolution_lineage* rl_expected = lp.resolution(g1, 0);
-        
-        // Create some unrelated resolutions for avoidances
-        const goal_lineage* g_other1 = lp.goal(nullptr, 100);
-        const goal_lineage* g_other2 = lp.goal(nullptr, 200);
-        const resolution_lineage* rl_other1 = lp.resolution(g_other1, 0);
-        const resolution_lineage* rl_other2 = lp.resolution(g_other2, 1);
-        
-        // Avoidance 1: contains rl_expected + another resolution
-        decision_store avoidance1;
-        avoidance1.insert(rl_expected);
-        avoidance1.insert(rl_other1);
-        c.insert(avoidance1);
-        
-        // Avoidance 2: contains only rl_expected
-        decision_store avoidance2;
-        avoidance2.insert(rl_expected);
-        c.insert(avoidance2);
-        
-        // Avoidance 3: doesn't contain rl_expected at all
-        decision_store avoidance3;
-        avoidance3.insert(rl_other1);
-        avoidance3.insert(rl_other2);
-        c.insert(avoidance3);
-        
-        assert(c.avoidances.size() == 3);
         
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
@@ -12717,9 +12678,6 @@ void test_goal_resolver() {
         database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
-        
-        // Empty avoidance store for this test (baseline)
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
@@ -12817,14 +12775,10 @@ void test_goal_resolver() {
         database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         
-        // Pre-populate: avoidance containing the rl about to be created
+        // Pre-compute expected lineage for return value assertion
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         const resolution_lineage* rl_expected = lp.resolution(g1, 0);
-        decision_store avoidance1;
-        avoidance1.insert(rl_expected);
-        c.insert(avoidance1);
         
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
@@ -12944,7 +12898,6 @@ void test_goal_resolver() {
         database db = {r1, r2};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add two goals using goal_adder
@@ -13015,7 +12968,6 @@ void test_goal_resolver() {
         database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal with specific parent lineage using goal_adder
@@ -13104,7 +13056,6 @@ void test_goal_resolver() {
         database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Record sequencer state
@@ -13256,7 +13207,6 @@ void test_goal_resolver() {
         database db = {r1, r2, r3};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal "q" using goal_adder (adds all rules as candidates)
@@ -13329,7 +13279,6 @@ void test_goal_resolver() {
         database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Create a goal that's deep in the tree (Level 0 -> Level 1 -> Level 2)
@@ -13424,7 +13373,6 @@ void test_goal_resolver() {
         database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Record sequencer state
@@ -13593,7 +13541,6 @@ void test_goal_resolver() {
         database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Record sequencer state
@@ -13720,7 +13667,6 @@ void test_goal_resolver() {
         database db = {r0, r1, r2, r3, r4};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal "r" which matches rule 2
@@ -13810,7 +13756,6 @@ void test_goal_resolver() {
         database db = {r0, r1, r2, r3, r4};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add 5 different goals with different lineage structures
@@ -13955,7 +13900,6 @@ void test_goal_resolver() {
         database db = {r0, r1, r2, r3};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal "r(a)"
@@ -14025,7 +13969,6 @@ void test_goal_resolver() {
         database db = {r0, r1, r2};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add three goals
@@ -14144,7 +14087,6 @@ void test_goal_resolver() {
         database db = {r0, r1};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Pre-populate resolution store with some existing resolutions
@@ -14219,7 +14161,6 @@ void test_goal_resolver() {
         database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal with concrete value: p(f(g(h(a))))
@@ -14329,7 +14270,6 @@ void test_goal_resolver() {
         database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal
@@ -14402,7 +14342,6 @@ void test_goal_resolver() {
         database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // CRITICAL: Create goal with VARIABLES: p(X, Y) where X and Y are goal variables
@@ -14514,7 +14453,6 @@ void test_goal_resolver() {
         database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Goal: p(a, b) - instantiated
@@ -14616,7 +14554,6 @@ void test_goal_resolver() {
         database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Store original expression pointers
@@ -14695,7 +14632,6 @@ void test_goal_resolver() {
         database db = {r0, r1, r2, r3, r4};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal p
@@ -14780,7 +14716,6 @@ void test_goal_resolver() {
         database db = {r0, r1, r2};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Start with goal p(Z) where Z is a variable
@@ -14875,7 +14810,6 @@ void test_goal_resolver() {
         database db = {r1};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Goal: p(a) - concrete atom
@@ -14969,7 +14903,6 @@ void test_goal_resolver() {
         database db = {r0, r1, r2};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Goal: p(a)
@@ -15029,7 +14962,6 @@ void test_goal_resolver() {
         database db = {r0, r1, r2};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add root goal p
@@ -15113,7 +15045,6 @@ void test_goal_resolver() {
         database db = {r0, r1, r2, r3, r4};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add two independent root goals
@@ -15233,7 +15164,6 @@ void test_goal_resolver() {
         database db = {r0, r1, r2, r3, r4};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Start with root p
@@ -15497,7 +15427,6 @@ void test_goal_resolver() {
         database db(rules.begin(), rules.end());
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Start with root p0
@@ -15598,7 +15527,6 @@ void test_goal_resolver() {
         database db = {r0, r1, r2, r3, r4, r5};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Create TWO independent root goals
@@ -15864,7 +15792,6 @@ void test_goal_resolver() {
         database db = {r0, r1, r2, r3, r4, r5};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
         goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Root
