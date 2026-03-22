@@ -47,16 +47,16 @@ bool a01::operator()(size_t iterations, std::optional<resolution_store>& soln) {
         lp.trim();
         
         // construct avoidance
-        decision_store avoidance;
+        decision_store ds;
     
-        if (!next_avoidance(avoidance, soln))
+        if (!next_avoidance(ds, soln))
             return false;
 
         // record the avoidance
-        c.insert(avoidance);
+        c.learn(ds);
 
         // pin the decisions
-        for (const auto& rl : avoidance)
+        for (const auto& rl : ds)
             lp.pin(rl);
 
         // check for solution
