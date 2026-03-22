@@ -12422,10 +12422,9 @@ void test_goal_resolver_constructor() {
         goal_store gs;
         candidate_store cs;
         database db;
-        cdcl c;
         goal_adder ga(gs, cs, db);
         
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         assert(&resolver.rs == &rs);
         assert(&resolver.gs == &gs);
@@ -12435,7 +12434,6 @@ void test_goal_resolver_constructor() {
         assert(&resolver.bm == &bm);
         assert(&resolver.lp == &lp);
         assert(&resolver.ga == &ga);
-        assert(&resolver.as == &as);
     }
     
     // Test 2: Construction with non-empty stores including avoidances
@@ -12482,13 +12480,13 @@ void test_goal_resolver_constructor() {
         c.insert(avoidance2);
         
         goal_adder ga(gs, cs, db);
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         assert(resolver.rs.size() == 1);
         assert(resolver.gs.size() == 1);
         assert(resolver.cs.size() == 2);
         assert(resolver.db.size() == 1);
-        assert(resolver.as.size() == 2);
+        assert(c.avoidances.size() == 2);
     }
 }
 
@@ -12523,11 +12521,11 @@ void test_goal_resolver() {
         avoidance1.insert(rl_expected);
         c.insert(avoidance1);
         
-        assert(as.size() == 1);
-        assert(as.begin()->size() == 1);
-        assert(as.begin()->count(rl_expected) == 1);
+        assert(c.avoidances.size() == 1);
+        assert(c.avoidances.begin()->second.size() == 1);
+        assert(c.avoidances.begin()->second.count(rl_expected) == 1);
         
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal "p" using goal_adder
         const expr* goal_p = ep.atom("p");
@@ -12548,11 +12546,9 @@ void test_goal_resolver() {
         // Store initial bind_map size to check unification
         size_t bindings_before = bm.bindings.size();
         
-        // Resolve g1 with rule 0
-        resolver(g1, 0);
-        
-        // Get the resolution lineage that was created
-        const resolution_lineage* rl = lp.resolution(g1, 0);
+        // Resolve g1 with rule 0 - capture return value directly
+        const resolution_lineage* rl = resolver(g1, 0);
+        assert(rl == lp.resolution(g1, 0)); // return value matches interned lineage
         assert(rl == rl_expected); // Should be same interned instance
         
         // Check resolution lineage structure
@@ -12563,11 +12559,6 @@ void test_goal_resolver() {
         // Check resolution was added to resolution store
         assert(rs.size() == 1);
         assert(rs.count(rl) == 1);
-        
-        // CRITICAL: Verify rl was erased from all avoidances
-        assert(as.size() == 1);
-        assert(as.begin()->count(rl) == 0); // rl should be removed
-        assert(as.begin()->size() == 0);    // Avoidance now empty
         
         // Check goal was removed from goal store
         assert(gs.size() == 0);
@@ -12640,9 +12631,9 @@ void test_goal_resolver() {
         avoidance3.insert(rl_other2);
         c.insert(avoidance3);
         
-        assert(as.size() == 3);
+        assert(c.avoidances.size() == 3);
         
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal "p" using goal_adder
         const expr* goal_p = ep.atom("p");
@@ -12656,11 +12647,9 @@ void test_goal_resolver() {
         assert(g1->parent == nullptr);
         assert(g1->idx == 1);
         
-        // Resolve g1 with rule 0
-        resolver(g1, 0);
-        
-        // Get the resolution lineage that was created
-        const resolution_lineage* rl = lp.resolution(g1, 0);
+        // Resolve g1 with rule 0 - capture return value directly
+        const resolution_lineage* rl = resolver(g1, 0);
+        assert(rl == lp.resolution(g1, 0)); // return value matches interned lineage
         assert(rl == rl_expected);
         
         // Check resolution lineage structure
@@ -12703,40 +12692,6 @@ void test_goal_resolver() {
         // Verify child goal is in lineage pool
         assert(lp.goal_lineages.count(*child_g) == 1);
         
-        // CRITICAL: Verify avoidance store state after resolution
-        assert(as.size() == 3);
-        
-        // Count avoidances by size and content (order not guaranteed by std::set)
-        int empty_count = 0;
-        int size_one_count = 0;
-        int size_two_count = 0;
-        bool found_rl_other1_only = false;
-        bool found_rl_other1_and_rl_other2 = false;
-        
-        for (const auto& avoidance : as) {
-            assert(avoidance.count(rl) == 0); // rl should be gone from all
-            
-            if (avoidance.size() == 0) {
-                empty_count++;
-            } else if (avoidance.size() == 1) {
-                size_one_count++;
-                if (avoidance.count(rl_other1) == 1) {
-                    found_rl_other1_only = true;
-                }
-            } else if (avoidance.size() == 2) {
-                size_two_count++;
-                if (avoidance.count(rl_other1) == 1 && avoidance.count(rl_other2) == 1) {
-                    found_rl_other1_and_rl_other2 = true;
-                }
-            }
-        }
-        
-        // Verify we have the expected avoidances
-        assert(empty_count == 1);      // One became empty (was {rl})
-        assert(size_one_count == 1);   // One has {rl_other1} (was {rl, rl_other1})
-        assert(size_two_count == 1);   // One unchanged {rl_other1, rl_other2}
-        assert(found_rl_other1_only);
-        assert(found_rl_other1_and_rl_other2);
     }
     
     // Test 3: Resolve with rule with multiple body clauses
@@ -12767,7 +12722,7 @@ void test_goal_resolver() {
         // Empty avoidance store for this test (baseline)
         const goal_lineage* g1 = lp.goal(nullptr, 1);
         
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal "p" using goal_adder
         const expr* goal_p = ep.atom("p");
@@ -12777,11 +12732,10 @@ void test_goal_resolver() {
         assert(gs.size() == 1);
         assert(cs.size() == 1);
         assert(gs.at(g1) == goal_p);
-        assert(as.size() == 0); // Empty avoidance store
         
         // Resolve g1 with rule 0
-        resolver(g1, 0);
-        const resolution_lineage* rl = lp.resolution(g1, 0);
+        const resolution_lineage* rl = resolver(g1, 0);
+        assert(rl == lp.resolution(g1, 0));
         
         // Check return value
         assert(rl != nullptr);
@@ -12838,7 +12792,6 @@ void test_goal_resolver() {
         assert(lp.goal_lineages.count(*child_g2) == 1);
         
         // Avoidance store should still be empty
-        assert(as.size() == 0);
     }
     
     // Test 4: Resolve with variable unification - VERIFY COPYING AND RENAMING
@@ -12873,7 +12826,7 @@ void test_goal_resolver() {
         avoidance1.insert(rl_expected);
         c.insert(avoidance1);
         
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Record sequencer state before resolution
         uint32_t seq_before = seq.index;
@@ -12893,8 +12846,8 @@ void test_goal_resolver() {
         assert(bm.bindings.count(original_var_idx) == 0);
         
         // Resolve g1 with rule 0
-        resolver(g1, 0);
-        const resolution_lineage* rl = lp.resolution(g1, 0);
+        const resolution_lineage* rl = resolver(g1, 0);
+        assert(rl == lp.resolution(g1, 0));
         
         // Check sequencer advanced (new variable was allocated for copying)
         uint32_t seq_after = seq.index;
@@ -12967,10 +12920,6 @@ void test_goal_resolver() {
         // Verify candidate was added
         assert(cs.count(child_g) == 1);
         
-        // CRITICAL: Verify rl was erased from avoidance
-        assert(as.size() == 1);
-        assert(as.begin()->count(rl) == 0);
-        assert(as.begin()->size() == 0);
     }
     
     // Test 5: Multiple goals with multiple candidates - resolve only one
@@ -12996,7 +12945,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add two goals using goal_adder
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -13016,8 +12965,8 @@ void test_goal_resolver() {
         assert(cs.count(g2) == 2);
         
         // Resolve g1 with rule 0 (first rule "p")
-        resolver(g1, 0);
-        const resolution_lineage* rl = lp.resolution(g1, 0);
+        const resolution_lineage* rl = resolver(g1, 0);
+        assert(rl == lp.resolution(g1, 0));
         
         // Check return value
         assert(rl != nullptr);
@@ -13042,7 +12991,6 @@ void test_goal_resolver() {
         assert(gs.size() == 1);
         
         // Empty avoidance store (no avoidances for this test)
-        assert(as.size() == 0);
     }
     
     // Test 6: Verify lineage structure after resolution (deep tree)
@@ -13068,7 +13016,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal with specific parent lineage using goal_adder
         const resolution_lineage* parent_rl = lp.resolution(nullptr, 5);
@@ -13084,8 +13032,8 @@ void test_goal_resolver() {
         assert(gs.size() == 1);
         
         // Resolve g1 with rule 0
-        resolver(g1, 0);
-        const resolution_lineage* rl = lp.resolution(g1, 0);
+        const resolution_lineage* rl = resolver(g1, 0);
+        assert(rl == lp.resolution(g1, 0));
         
         // Check returned resolution lineage structure
         assert(rl != nullptr);
@@ -13128,7 +13076,6 @@ void test_goal_resolver() {
         assert(cs.count(child_g1) == 1);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 7: CRITICAL - Verify copier uses consistent translation_map
@@ -13158,7 +13105,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Record sequencer state
         uint32_t seq_before = seq.index;
@@ -13178,8 +13125,8 @@ void test_goal_resolver() {
         assert(bm.bindings.count(original_var_idx) == 0);
         
         // Resolve g1 with rule 0
-        resolver(g1, 0);
-        const resolution_lineage* rl = lp.resolution(g1, 0);
+        const resolution_lineage* rl = resolver(g1, 0);
+        assert(rl == lp.resolution(g1, 0));
         
         // Check sequencer advanced (new variable allocated)
         uint32_t seq_after = seq.index;
@@ -13283,7 +13230,6 @@ void test_goal_resolver() {
         assert(lp.resolution_lineages.count(*rl) == 1);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 8: Database with multiple rules, resolve with non-zero index
@@ -13311,7 +13257,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal "q" using goal_adder (adds all rules as candidates)
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -13325,8 +13271,8 @@ void test_goal_resolver() {
         assert(cs.count(g1) == 3);
         
         // Resolve g1 with rule 1 (index 1) - "q :- r"
-        resolver(g1, 1);
-        const resolution_lineage* rl = lp.resolution(g1, 1);
+        const resolution_lineage* rl = resolver(g1, 1);
+        assert(rl == lp.resolution(g1, 1));
         
         // Check return value
         assert(rl != nullptr);
@@ -13360,7 +13306,6 @@ void test_goal_resolver() {
         assert(lp.goal_lineages.count(*child_g) == 1);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 9: Resolve goal that's part of an existing AND-OR tree (deep goal)
@@ -13385,7 +13330,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Create a goal that's deep in the tree (Level 0 -> Level 1 -> Level 2)
         const goal_lineage* root = lp.goal(nullptr, 0);
@@ -13409,8 +13354,8 @@ void test_goal_resolver() {
         assert(cs.size() == 1);
         
         // Resolve the deep goal
-        resolver(g_level2, 0);
-        const resolution_lineage* rl = lp.resolution(g_level2, 0);
+        const resolution_lineage* rl = resolver(g_level2, 0);
+        assert(rl == lp.resolution(g_level2, 0));
         
         // Check return value
         assert(rl != nullptr);
@@ -13449,7 +13394,6 @@ void test_goal_resolver() {
         assert(cs.count(new_goal) == 1);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 10: Resolve with multiple distinct variables - verify independent renaming
@@ -13481,7 +13425,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Record sequencer state
         uint32_t seq_before = seq.index;
@@ -13504,8 +13448,8 @@ void test_goal_resolver() {
         assert(bm.bindings.count(original_y_idx) == 0);
         
         // Resolve g1 with rule 0
-        resolver(g1, 0);
-        const resolution_lineage* rl = lp.resolution(g1, 0);
+        const resolution_lineage* rl = resolver(g1, 0);
+        assert(rl == lp.resolution(g1, 0));
         
         // Check sequencer advanced (two new variables allocated: X' and Y')
         uint32_t seq_after = seq.index;
@@ -13624,7 +13568,6 @@ void test_goal_resolver() {
         assert(lp.goal_lineages.count(*child_g1) == 1);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 11: Variable-on-variable unification during resolution
@@ -13651,7 +13594,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Record sequencer state
         uint32_t seq_before = seq.index;
@@ -13676,8 +13619,8 @@ void test_goal_resolver() {
         
         // Resolve g1 with rule 0
         // This will unify p(X) with p(Y') where Y' is the renamed version of Y
-        resolver(g1, 0);
-        const resolution_lineage* rl = lp.resolution(g1, 0);
+        const resolution_lineage* rl = resolver(g1, 0);
+        assert(rl == lp.resolution(g1, 0));
         
         // Check sequencer advanced (Y was renamed to Y')
         uint32_t seq_after = seq.index;
@@ -13744,7 +13687,6 @@ void test_goal_resolver() {
         assert(cs.count(child_g) == 1);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 12: Multiple database rules - resolve with middle rule to verify indexing
@@ -13779,7 +13721,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal "r" which matches rule 2
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -13792,8 +13734,8 @@ void test_goal_resolver() {
         assert(cs.count(g1) == 5);
         
         // Resolve with rule 2 (middle of database)
-        resolver(g1, 2);
-        const resolution_lineage* rl = lp.resolution(g1, 2);
+        const resolution_lineage* rl = resolver(g1, 2);
+        assert(rl == lp.resolution(g1, 2));
         
         // Verify return value has correct index
         assert(rl != nullptr);
@@ -13837,7 +13779,6 @@ void test_goal_resolver() {
         assert(lp.goal_lineages.count(*child_g1) == 1);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 13: Multiple goals in store - resolve specific one, others untouched
@@ -13870,7 +13811,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add 5 different goals with different lineage structures
         const goal_lineage* g0 = lp.goal(nullptr, 0);
@@ -13905,8 +13846,8 @@ void test_goal_resolver() {
         const expr* g4_expr = gs.at(g4);
         
         // Resolve ONLY g1 (the middle one) with rule 1
-        resolver(g1, 1);
-        const resolution_lineage* rl = lp.resolution(g1, 1);
+        const resolution_lineage* rl = resolver(g1, 1);
+        assert(rl == lp.resolution(g1, 1));
         
         // Verify resolution lineage
         assert(rl != nullptr);
@@ -13976,7 +13917,6 @@ void test_goal_resolver() {
         assert(lp.resolution_lineages.count(*rl) == 1);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 14: Database indexing with variables - resolve with last rule
@@ -14016,7 +13956,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal "r(a)"
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -14034,8 +13974,8 @@ void test_goal_resolver() {
         size_t bindings_before = bm.bindings.size();
         
         // Resolve with rule 3 (LAST rule, index 3)
-        resolver(g1, 3);
-        const resolution_lineage* rl = lp.resolution(g1, 3);
+        const resolution_lineage* rl = resolver(g1, 3);
+        assert(rl == lp.resolution(g1, 3));
         
         // Verify correct rule was used
         assert(rl != nullptr);
@@ -14058,7 +13998,6 @@ void test_goal_resolver() {
         assert(lp.resolution_lineages.count(*rl) == 1);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 15: Multiple goals, resolve multiple times in sequence
@@ -14087,7 +14026,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add three goals
         const goal_lineage* g_p = lp.goal(nullptr, 10);
@@ -14104,8 +14043,8 @@ void test_goal_resolver() {
         assert(cs.size() == 9); // 3 goals * 3 rules
         
         // First resolution: resolve g_q with rule 1 (q :- r)
-        resolver(g_q, 1);
-        const resolution_lineage* rl_q = lp.resolution(g_q, 1);
+        const resolution_lineage* rl_q = resolver(g_q, 1);
+        assert(rl_q == lp.resolution(g_q, 1));
         
         assert(rl_q->parent == g_q);
         assert(rl_q->idx == 1);
@@ -14126,8 +14065,8 @@ void test_goal_resolver() {
         assert(std::get<expr::atom>(child_of_q_expr->content).value == std::string("r"));
         
         // Second resolution: resolve g_p with rule 0 (p :- q)
-        resolver(g_p, 0);
-        const resolution_lineage* rl_p = lp.resolution(g_p, 0);
+        const resolution_lineage* rl_p = resolver(g_p, 0);
+        assert(rl_p == lp.resolution(g_p, 0));
         
         assert(rl_p->parent == g_p);
         assert(rl_p->idx == 0);
@@ -14149,8 +14088,8 @@ void test_goal_resolver() {
         assert(std::get<expr::atom>(child_of_p_expr->content).value == std::string("q"));
         
         // Third resolution: resolve g_r with rule 2 (r - fact)
-        resolver(g_r, 2);
-        const resolution_lineage* rl_r = lp.resolution(g_r, 2);
+        const resolution_lineage* rl_r = resolver(g_r, 2);
+        assert(rl_r == lp.resolution(g_r, 2));
         
         assert(rl_r->parent == g_r);
         assert(rl_r->idx == 2);
@@ -14181,7 +14120,6 @@ void test_goal_resolver() {
         assert(rl_q->parent == g_q);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 16: Resolution store with pre-existing resolutions
@@ -14207,7 +14145,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Pre-populate resolution store with some existing resolutions
         const goal_lineage* g_old1 = lp.goal(nullptr, 100);
@@ -14229,8 +14167,8 @@ void test_goal_resolver() {
         assert(gs.size() == 1);
         
         // Resolve the new goal
-        resolver(g_new, 0);
-        const resolution_lineage* rl_new = lp.resolution(g_new, 0);
+        const resolution_lineage* rl_new = resolver(g_new, 0);
+        assert(rl_new == lp.resolution(g_new, 0));
         
         // Verify resolution store now has 3 resolutions (2 old + 1 new)
         assert(rs.size() == 3);
@@ -14251,7 +14189,6 @@ void test_goal_resolver() {
         assert(lp.resolution_lineages.count(*rl_new) == 1);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 17: Complex nested expressions with deep structures AND variables
@@ -14283,7 +14220,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal with concrete value: p(f(g(h(a))))
         const expr* atom_a = ep.atom("a");
@@ -14305,8 +14242,8 @@ void test_goal_resolver() {
         uint32_t seq_before = seq.index;
         
         // Resolve
-        resolver(g1, 0);
-        const resolution_lineage* rl = lp.resolution(g1, 0);
+        const resolution_lineage* rl = resolver(g1, 0);
+        assert(rl == lp.resolution(g1, 0));
         
         // Sequencer advanced (variable copied)
         assert(seq.index > seq_before);
@@ -14365,7 +14302,6 @@ void test_goal_resolver() {
         assert(bm.bindings.size() == 1);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 18: Large body clauses (10+ literals)
@@ -14394,7 +14330,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -14404,8 +14340,8 @@ void test_goal_resolver() {
         assert(cs.size() == 1);
         
         // Resolve
-        resolver(g1, 0);
-        const resolution_lineage* rl = lp.resolution(g1, 0);
+        const resolution_lineage* rl = resolver(g1, 0);
+        assert(rl == lp.resolution(g1, 0));
         
         // Verify resolution
         assert(rs.size() == 1);
@@ -14437,7 +14373,6 @@ void test_goal_resolver() {
         assert(cs.size() == 15);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 19: CRITICAL - Goal with multiple variables
@@ -14468,7 +14403,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // CRITICAL: Create goal with VARIABLES: p(X, Y) where X and Y are goal variables
         const expr* goal_var_x = ep.var(seq());
@@ -14489,8 +14424,8 @@ void test_goal_resolver() {
         uint32_t seq_before = seq.index;
         
         // Resolve - this will do variable-on-variable unification
-        resolver(g1, 0);
-        const resolution_lineage* rl = lp.resolution(g1, 0);
+        const resolution_lineage* rl = resolver(g1, 0);
+        assert(rl == lp.resolution(g1, 0));
         
         // Sequencer advanced (rule variables renamed)
         assert(seq.index > seq_before);
@@ -14550,7 +14485,6 @@ void test_goal_resolver() {
         assert(std::holds_alternative<expr::var>(norm1->content));
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 20: EXTREMELY IMPORTANT - Check exact binding contents
@@ -14581,7 +14515,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Goal: p(a, b) - instantiated
         const expr* atom_a = ep.atom("a");
@@ -14598,8 +14532,8 @@ void test_goal_resolver() {
         uint32_t seq_before = seq.index;
         
         // Resolve
-        resolver(g1, 0);
-        const resolution_lineage* rl = lp.resolution(g1, 0);
+        const resolution_lineage* rl = resolver(g1, 0);
+        assert(rl == lp.resolution(g1, 0));
         
         // Two new variables were created (renamed X and Y)
         uint32_t seq_after = seq.index;
@@ -14657,7 +14591,6 @@ void test_goal_resolver() {
         assert(y_normalized == atom_b);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 21: EXTREMELY IMPORTANT - Verify copied expressions are new instances
@@ -14684,7 +14617,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Store original expression pointers
         const expr* original_head = r1.head;
@@ -14699,8 +14632,8 @@ void test_goal_resolver() {
         size_t ep_size_before = ep.size();
         
         // Resolve
-        resolver(g1, 0);
-        const resolution_lineage* rl = lp.resolution(g1, 0);
+        const resolution_lineage* rl = resolver(g1, 0);
+        assert(rl == lp.resolution(g1, 0));
         
         // CRITICAL: Expression pool should have grown
         size_t ep_size_after = ep.size();
@@ -14735,7 +14668,6 @@ void test_goal_resolver() {
         assert(copied_cons1.rhs != original_cons1.rhs);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 22: Exact candidate indices verification
@@ -14764,7 +14696,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add goal p
         const goal_lineage* g1 = lp.goal(nullptr, 1);
@@ -14786,8 +14718,8 @@ void test_goal_resolver() {
         assert(candidates[4] == 4);
         
         // Resolve with rule 1
-        resolver(g1, 1);
-        const resolution_lineage* rl = lp.resolution(g1, 1);
+        const resolution_lineage* rl = resolver(g1, 1);
+        assert(rl == lp.resolution(g1, 1));
         
         // CRITICAL: All candidates for g1 should be removed
         assert(cs.count(g1) == 0);
@@ -14812,7 +14744,6 @@ void test_goal_resolver() {
         assert(child_candidates[4] == 4);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 23: Variable indirection chains through multiple resolutions
@@ -14850,7 +14781,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Start with goal p(Z) where Z is a variable
         const expr* var_z = ep.var(seq());
@@ -14860,8 +14791,8 @@ void test_goal_resolver() {
         ga(g_p, goal_p_z);
         
         // Resolution 1: p(Z) with rule 0 creates q(Z') where Z binds to Z'
-        resolver(g_p, 0);
-        const resolution_lineage* rl_p = lp.resolution(g_p, 0);
+        const resolution_lineage* rl_p = resolver(g_p, 0);
+        assert(rl_p == lp.resolution(g_p, 0));
         const goal_lineage* g_q = lp.goal(rl_p, 0);
         
         // Extract variable from q(Z')
@@ -14876,8 +14807,8 @@ void test_goal_resolver() {
         assert(first_binding_exists);
         
         // Resolution 2: q(Z') with rule 1 creates r(Z'') where Z' binds to Z''
-        resolver(g_q, 1);
-        const resolution_lineage* rl_q = lp.resolution(g_q, 1);
+        const resolution_lineage* rl_q = resolver(g_q, 1);
+        assert(rl_q == lp.resolution(g_q, 1));
         const goal_lineage* g_r = lp.goal(rl_q, 0);
         
         // Extract variable from r(Z'')
@@ -14888,7 +14819,8 @@ void test_goal_resolver() {
         uint32_t z_double_prime_idx = std::get<expr::var>(arg_r->content).index;
         
         // Resolution 3: r(Z'') with rule 2 (r(a)) unifies Z'' with 'a'
-        resolver(g_r, 2);
+        const resolution_lineage* rl_r = resolver(g_r, 2);
+        assert(rl_r == lp.resolution(g_r, 2));
         
         // CRITICAL: Now test the chain: Z → Z' → Z'' → 'a'
         // whnf should resolve the entire chain by following bindings
@@ -14919,7 +14851,6 @@ void test_goal_resolver() {
         assert(bm.bindings.size() >= 3);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 24: Empty body with variables in head (fact with variable)
@@ -14945,7 +14876,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Goal: p(a) - concrete atom
         const expr* atom_a = ep.atom("a");
@@ -14960,8 +14891,8 @@ void test_goal_resolver() {
         uint32_t seq_before = seq.index;
         
         // Resolve with the fact
-        resolver(g1, 0);
-        const resolution_lineage* rl = lp.resolution(g1, 0);
+        const resolution_lineage* rl = resolver(g1, 0);
+        assert(rl == lp.resolution(g1, 0));
         
         // Sequencer advanced (variable was copied)
         assert(seq.index > seq_before);
@@ -15003,7 +14934,6 @@ void test_goal_resolver() {
         assert(normalized == atom_a);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 25: Multiple rules with same head
@@ -15040,7 +14970,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Goal: p(a)
         const expr* goal_p_a = ep.cons(ep.atom("p"), ep.atom("a"));
@@ -15051,8 +14981,8 @@ void test_goal_resolver() {
         assert(cs.count(g1) == 3);
         
         // Resolve with rule 1 (middle one: p(X) :- r(X))
-        resolver(g1, 1);
-        const resolution_lineage* rl = lp.resolution(g1, 1);
+        const resolution_lineage* rl = resolver(g1, 1);
+        assert(rl == lp.resolution(g1, 1));
         
         // Resolution has correct index
         assert(rl->idx == 1);
@@ -15072,7 +15002,6 @@ void test_goal_resolver() {
         assert(std::get<expr::atom>(arg->content).value == "a");
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 26: Resolution sequence - parent then child (depth-first order)
@@ -15101,15 +15030,15 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add root goal p
         const goal_lineage* g_p = lp.goal(nullptr, 0);
         ga(g_p, p);
         
         // Resolution 1: p with rule 0 → creates q
-        resolver(g_p, 0);
-        const resolution_lineage* rl_p = lp.resolution(g_p, 0);
+        const resolution_lineage* rl_p = resolver(g_p, 0);
+        assert(rl_p == lp.resolution(g_p, 0));
         const goal_lineage* g_q = lp.goal(rl_p, 0);
         
         // Verify lineage: g_q → rl_p → g_p → nullptr
@@ -15118,8 +15047,8 @@ void test_goal_resolver() {
         assert(g_p->parent == nullptr);
         
         // Resolution 2: q with rule 1 → creates r (child immediately after parent)
-        resolver(g_q, 1);
-        const resolution_lineage* rl_q = lp.resolution(g_q, 1);
+        const resolution_lineage* rl_q = resolver(g_q, 1);
+        assert(rl_q == lp.resolution(g_q, 1));
         const goal_lineage* g_r = lp.goal(rl_q, 0);
         
         // CRITICAL: Verify full lineage chain: g_r → rl_q → g_q → rl_p → g_p → nullptr
@@ -15135,8 +15064,8 @@ void test_goal_resolver() {
         assert(g_p->idx == 0);
         
         // Resolution 3: r with rule 2
-        resolver(g_r, 2);
-        const resolution_lineage* rl_r = lp.resolution(g_r, 2);
+        const resolution_lineage* rl_r = resolver(g_r, 2);
+        assert(rl_r == lp.resolution(g_r, 2));
         
         // Verify lineage still correct after third resolution
         assert(rl_r->parent == g_r);
@@ -15153,7 +15082,6 @@ void test_goal_resolver() {
         assert(rs.count(rl_r) == 1);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 27: Resolution sequence - parent, independent goal, then child
@@ -15186,7 +15114,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Add two independent root goals
         const goal_lineage* g_p = lp.goal(nullptr, 0);
@@ -15197,8 +15125,8 @@ void test_goal_resolver() {
         assert(gs.size() == 2);
         
         // Resolution 1: p with rule 0 → creates child q
-        resolver(g_p, 0);
-        const resolution_lineage* rl_p = lp.resolution(g_p, 0);
+        const resolution_lineage* rl_p = resolver(g_p, 0);
+        assert(rl_p == lp.resolution(g_p, 0));
         const goal_lineage* g_q = lp.goal(rl_p, 0);
         
         // Verify lineage for first branch: g_q → rl_p → g_p → nullptr
@@ -15207,8 +15135,8 @@ void test_goal_resolver() {
         assert(g_p->parent == nullptr);
         
         // Resolution 2: x (independent goal) with rule 2 → creates y
-        resolver(g_x, 2);
-        const resolution_lineage* rl_x = lp.resolution(g_x, 2);
+        const resolution_lineage* rl_x = resolver(g_x, 2);
+        assert(rl_x == lp.resolution(g_x, 2));
         const goal_lineage* g_y = lp.goal(rl_x, 0);
         
         // CRITICAL: Verify lineage for second branch: g_y → rl_x → g_x → nullptr
@@ -15222,8 +15150,8 @@ void test_goal_resolver() {
         assert(g_p->parent == nullptr);
         
         // Resolution 3: q (child of first branch) with rule 1
-        resolver(g_q, 1);
-        const resolution_lineage* rl_q = lp.resolution(g_q, 1);
+        const resolution_lineage* rl_q = resolver(g_q, 1);
+        assert(rl_q == lp.resolution(g_q, 1));
         
         // CRITICAL: Verify first branch lineage still correct after resolving child
         assert(rl_q->parent == g_q);
@@ -15237,8 +15165,8 @@ void test_goal_resolver() {
         assert(g_x->parent == nullptr);
         
         // Resolution 4: y (child of second branch)
-        resolver(g_y, 3);
-        const resolution_lineage* rl_y = lp.resolution(g_y, 3);
+        const resolution_lineage* rl_y = resolver(g_y, 3);
+        assert(rl_y == lp.resolution(g_y, 3));
         const goal_lineage* g_z = lp.goal(rl_y, 0);
         
         // Verify second branch lineage: g_z → rl_y → g_y → rl_x → g_x → nullptr
@@ -15254,8 +15182,8 @@ void test_goal_resolver() {
         assert(rl_p->parent == g_p);
         
         // Resolution 5: z (leaf of second branch)
-        resolver(g_z, 4);
-        const resolution_lineage* rl_z = lp.resolution(g_z, 4);
+        const resolution_lineage* rl_z = resolver(g_z, 4);
+        assert(rl_z == lp.resolution(g_z, 4));
         
         // Full second branch: rl_z → g_z → rl_y → g_y → rl_x → g_x → nullptr
         assert(rl_z->parent == g_z);
@@ -15274,7 +15202,6 @@ void test_goal_resolver() {
         assert(rs.count(rl_z) == 1);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 28: Complex resolution order - branching tree
@@ -15307,15 +15234,15 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Start with root p
         const goal_lineage* g_p = lp.goal(nullptr, 0);
         ga(g_p, p);
         
         // Resolution 1: p → creates q and r (two children)
-        resolver(g_p, 0);
-        const resolution_lineage* rl_p = lp.resolution(g_p, 0);
+        const resolution_lineage* rl_p = resolver(g_p, 0);
+        assert(rl_p == lp.resolution(g_p, 0));
         const goal_lineage* g_q = lp.goal(rl_p, 0);
         const goal_lineage* g_r = lp.goal(rl_p, 1);
         
@@ -15327,8 +15254,8 @@ void test_goal_resolver() {
         assert(rl_p->parent == g_p);
         
         // Resolution 2: r (right child) BEFORE q (left child)
-        resolver(g_r, 2);
-        const resolution_lineage* rl_r = lp.resolution(g_r, 2);
+        const resolution_lineage* rl_r = resolver(g_r, 2);
+        assert(rl_r == lp.resolution(g_r, 2));
         const goal_lineage* g_t = lp.goal(rl_r, 0);
         
         // Verify right branch: g_t → rl_r → g_r → rl_p → g_p → nullptr
@@ -15343,8 +15270,8 @@ void test_goal_resolver() {
         assert(rl_p->parent == g_p);
         
         // Resolution 3: q (left child) AFTER resolving right child
-        resolver(g_q, 1);
-        const resolution_lineage* rl_q = lp.resolution(g_q, 1);
+        const resolution_lineage* rl_q = resolver(g_q, 1);
+        assert(rl_q == lp.resolution(g_q, 1));
         const goal_lineage* g_s = lp.goal(rl_q, 0);
         
         // CRITICAL: Verify left branch lineage: g_s → rl_q → g_q → rl_p → g_p → nullptr
@@ -15365,12 +15292,12 @@ void test_goal_resolver() {
         assert(g_r->parent == rl_p);
         
         // Resolution 4: t (leaf of right branch)
-        resolver(g_t, 4);
-        const resolution_lineage* rl_t = lp.resolution(g_t, 4);
+        const resolution_lineage* rl_t = resolver(g_t, 4);
+        assert(rl_t == lp.resolution(g_t, 4));
         
         // Resolution 5: s (leaf of left branch)
-        resolver(g_s, 3);
-        const resolution_lineage* rl_s = lp.resolution(g_s, 3);
+        const resolution_lineage* rl_s = resolver(g_s, 3);
+        assert(rl_s == lp.resolution(g_s, 3));
         
         // Verify final lineages for both branches
         // Right: rl_t → g_t → rl_r → g_r → rl_p → g_p → nullptr
@@ -15393,7 +15320,6 @@ void test_goal_resolver() {
         assert(rs.size() == 5);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 29: Complex interleaved resolution order - 7 resolutions
@@ -15429,16 +15355,15 @@ void test_goal_resolver() {
         database db = {r0, r1, r2, r3, r4, r5, r6};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Root: a
         const goal_lineage* g_a = lp.goal(nullptr, 0);
         ga(g_a, a);
         
         // Res 1: a → {b, c}
-        resolver(g_a, 0);
-        const resolution_lineage* rl_a = lp.resolution(g_a, 0);
+        const resolution_lineage* rl_a = resolver(g_a, 0);
+        assert(rl_a == lp.resolution(g_a, 0));
         const goal_lineage* g_b = lp.goal(rl_a, 0);
         const goal_lineage* g_c = lp.goal(rl_a, 1);
         
@@ -15449,8 +15374,8 @@ void test_goal_resolver() {
         assert(g_a->parent == nullptr);
         
         // Res 2: c → {e} (resolve RIGHT child first)
-        resolver(g_c, 2);
-        const resolution_lineage* rl_c = lp.resolution(g_c, 2);
+        const resolution_lineage* rl_c = resolver(g_c, 2);
+        assert(rl_c == lp.resolution(g_c, 2));
         const goal_lineage* g_e = lp.goal(rl_c, 0);
         
         // Right branch: g_e → rl_c → g_c → rl_a → g_a → nullptr
@@ -15463,8 +15388,8 @@ void test_goal_resolver() {
         assert(g_b->parent == rl_a);
         
         // Res 3: e → {f, g} (continue on right branch)
-        resolver(g_e, 4);
-        const resolution_lineage* rl_e = lp.resolution(g_e, 4);
+        const resolution_lineage* rl_e = resolver(g_e, 4);
+        assert(rl_e == lp.resolution(g_e, 4));
         const goal_lineage* g_f = lp.goal(rl_e, 0);
         const goal_lineage* g_g = lp.goal(rl_e, 1);
         
@@ -15481,8 +15406,8 @@ void test_goal_resolver() {
         assert(rl_a->parent == g_a);
         
         // Res 4: b → {d} (NOW resolve left child - was waiting)
-        resolver(g_b, 1);
-        const resolution_lineage* rl_b = lp.resolution(g_b, 1);
+        const resolution_lineage* rl_b = resolver(g_b, 1);
+        assert(rl_b == lp.resolution(g_b, 1));
         const goal_lineage* g_d = lp.goal(rl_b, 0);
         
         // CRITICAL: Left branch lineage: g_d → rl_b → g_b → rl_a → g_a → nullptr
@@ -15501,16 +15426,16 @@ void test_goal_resolver() {
         assert(g_c->parent == rl_a);
         
         // Res 5: f (leaf of right-left branch)
-        resolver(g_f, 5);
-        const resolution_lineage* rl_f = lp.resolution(g_f, 5);
+        const resolution_lineage* rl_f = resolver(g_f, 5);
+        assert(rl_f == lp.resolution(g_f, 5));
         
         // Res 6: g (leaf of right-right branch)
-        resolver(g_g, 6);
-        const resolution_lineage* rl_g = lp.resolution(g_g, 6);
+        const resolution_lineage* rl_g = resolver(g_g, 6);
+        assert(rl_g == lp.resolution(g_g, 6));
         
         // Res 7: d (leaf of left branch)
-        resolver(g_d, 3);
-        const resolution_lineage* rl_d = lp.resolution(g_d, 3);
+        const resolution_lineage* rl_d = resolver(g_d, 3);
+        assert(rl_d == lp.resolution(g_d, 3));
         
         // FINAL VERIFICATION: All lineages correct after 7 resolutions
         
@@ -15541,7 +15466,6 @@ void test_goal_resolver() {
         assert(rs.size() == 7);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 30: Large sequence - 10 resolutions with random order
@@ -15574,7 +15498,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Start with root p0
         const goal_lineage* g_p0 = lp.goal(nullptr, 0);
@@ -15641,7 +15565,6 @@ void test_goal_resolver() {
         }
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 31: Out-of-order resolution with multiple independent trees
@@ -15676,7 +15599,7 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Create TWO independent root goals
         const goal_lineage* g_p1 = lp.goal(nullptr, 10);
@@ -15688,8 +15611,8 @@ void test_goal_resolver() {
         // (alternating between two trees)
         
         // Res 1: p1 → p2 (tree 1, level 1)
-        resolver(g_p1, 0);
-        const resolution_lineage* rl_p1 = lp.resolution(g_p1, 0);
+        const resolution_lineage* rl_p1 = resolver(g_p1, 0);
+        assert(rl_p1 == lp.resolution(g_p1, 0));
         const goal_lineage* g_p2 = lp.goal(rl_p1, 0);
         
         assert(g_p2->parent == rl_p1);
@@ -15698,8 +15621,8 @@ void test_goal_resolver() {
         assert(g_p1->idx == 10);
         
         // Res 2: q1 → q2 (tree 2, level 1)
-        resolver(g_q1, 3);
-        const resolution_lineage* rl_q1 = lp.resolution(g_q1, 3);
+        const resolution_lineage* rl_q1 = resolver(g_q1, 3);
+        assert(rl_q1 == lp.resolution(g_q1, 3));
         const goal_lineage* g_q2 = lp.goal(rl_q1, 0);
         
         assert(g_q2->parent == rl_q1);
@@ -15712,8 +15635,8 @@ void test_goal_resolver() {
         assert(rl_p1->parent == g_p1);
         
         // Res 3: q2 → q3 (tree 2, level 2)
-        resolver(g_q2, 4);
-        const resolution_lineage* rl_q2 = lp.resolution(g_q2, 4);
+        const resolution_lineage* rl_q2 = resolver(g_q2, 4);
+        assert(rl_q2 == lp.resolution(g_q2, 4));
         const goal_lineage* g_q3 = lp.goal(rl_q2, 0);
         
         assert(g_q3->parent == rl_q2);
@@ -15728,8 +15651,8 @@ void test_goal_resolver() {
         assert(g_p1->parent == nullptr);
         
         // Res 4: p2 → p3 (back to tree 1, level 2)
-        resolver(g_p2, 1);
-        const resolution_lineage* rl_p2 = lp.resolution(g_p2, 1);
+        const resolution_lineage* rl_p2 = resolver(g_p2, 1);
+        assert(rl_p2 == lp.resolution(g_p2, 1));
         const goal_lineage* g_p3 = lp.goal(rl_p2, 0);
         
         // CRITICAL: Tree 1 full chain: g_p3 → rl_p2 → g_p2 → rl_p1 → g_p1 → nullptr
@@ -15746,8 +15669,8 @@ void test_goal_resolver() {
         assert(rl_q1->parent == g_q1);
         
         // Res 5: q3 (tree 2 leaf)
-        resolver(g_q3, 5);
-        const resolution_lineage* rl_q3 = lp.resolution(g_q3, 5);
+        const resolution_lineage* rl_q3 = resolver(g_q3, 5);
+        assert(rl_q3 == lp.resolution(g_q3, 5));
         
         // Tree 2 complete: rl_q3 → g_q3 → rl_q2 → g_q2 → rl_q1 → g_q1 → nullptr
         assert(rl_q3->parent == g_q3);
@@ -15759,8 +15682,8 @@ void test_goal_resolver() {
         assert(g_q1->idx == 20);
         
         // Res 6: p3 (tree 1 leaf)
-        resolver(g_p3, 2);
-        const resolution_lineage* rl_p3 = lp.resolution(g_p3, 2);
+        const resolution_lineage* rl_p3 = resolver(g_p3, 2);
+        assert(rl_p3 == lp.resolution(g_p3, 2));
         
         // CRITICAL: Tree 1 complete: rl_p3 → g_p3 → rl_p2 → g_p2 → rl_p1 → g_p1 → nullptr
         assert(rl_p3->parent == g_p3);
@@ -15777,7 +15700,6 @@ void test_goal_resolver() {
         assert(rs.size() == 6);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 32: Resolution order - breadth-first style (all siblings before children)
@@ -15813,16 +15735,15 @@ void test_goal_resolver() {
         database db = {r0, r1, r2, r3, r4, r5, r6};
         
         goal_adder ga(gs, cs, db);
-        cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Root
         const goal_lineage* g_root = lp.goal(nullptr, 0);
         ga(g_root, root);
         
         // Res 1: root → {a, b, c}
-        resolver(g_root, 0);
-        const resolution_lineage* rl_root = lp.resolution(g_root, 0);
+        const resolution_lineage* rl_root = resolver(g_root, 0);
+        assert(rl_root == lp.resolution(g_root, 0));
         const goal_lineage* g_a = lp.goal(rl_root, 0);
         const goal_lineage* g_b = lp.goal(rl_root, 1);
         const goal_lineage* g_c = lp.goal(rl_root, 2);
@@ -15836,18 +15757,18 @@ void test_goal_resolver() {
         assert(g_c->idx == 2);
         
         // Res 2: a → a1 (first sibling)
-        resolver(g_a, 1);
-        const resolution_lineage* rl_a = lp.resolution(g_a, 1);
+        const resolution_lineage* rl_a = resolver(g_a, 1);
+        assert(rl_a == lp.resolution(g_a, 1));
         const goal_lineage* g_a1 = lp.goal(rl_a, 0);
         
         // Res 3: b → b1 (second sibling)
-        resolver(g_b, 2);
-        const resolution_lineage* rl_b = lp.resolution(g_b, 2);
+        const resolution_lineage* rl_b = resolver(g_b, 2);
+        assert(rl_b == lp.resolution(g_b, 2));
         const goal_lineage* g_b1 = lp.goal(rl_b, 0);
         
         // Res 4: c → c1 (third sibling)
-        resolver(g_c, 3);
-        const resolution_lineage* rl_c = lp.resolution(g_c, 3);
+        const resolution_lineage* rl_c = resolver(g_c, 3);
+        assert(rl_c == lp.resolution(g_c, 3));
         const goal_lineage* g_c1 = lp.goal(rl_c, 0);
         
         // CRITICAL: After resolving all siblings, verify each branch maintains lineage
@@ -15877,14 +15798,14 @@ void test_goal_resolver() {
         assert(g_c->parent == rl_root);
         
         // Res 5-7: Resolve all three leaf goals
-        resolver(g_a1, 4);
-        const resolution_lineage* rl_a1 = lp.resolution(g_a1, 4);
+        const resolution_lineage* rl_a1 = resolver(g_a1, 4);
+        assert(rl_a1 == lp.resolution(g_a1, 4));
         
-        resolver(g_b1, 5);
-        const resolution_lineage* rl_b1 = lp.resolution(g_b1, 5);
+        const resolution_lineage* rl_b1 = resolver(g_b1, 5);
+        assert(rl_b1 == lp.resolution(g_b1, 5));
         
-        resolver(g_c1, 6);
-        const resolution_lineage* rl_c1 = lp.resolution(g_c1, 6);
+        const resolution_lineage* rl_c1 = resolver(g_c1, 6);
+        assert(rl_c1 == lp.resolution(g_c1, 6));
         
         // Final verification - all three branches still have correct lineages
         assert(rl_a1->parent == g_a1);
@@ -15910,7 +15831,6 @@ void test_goal_resolver() {
         assert(rs.size() == 7);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
     
     // Test 33: Random interleaving - resolve grandchild before parent's sibling
@@ -15945,26 +15865,26 @@ void test_goal_resolver() {
         
         goal_adder ga(gs, cs, db);
         cdcl c;
-        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga, as);
+        goal_resolver resolver(rs, gs, cs, db, cp, bm, lp, ga);
         
         // Root
         const goal_lineage* g_p = lp.goal(nullptr, 0);
         ga(g_p, p);
         
         // Res 1: p → {q, r}
-        resolver(g_p, 0);
-        const resolution_lineage* rl_p = lp.resolution(g_p, 0);
+        const resolution_lineage* rl_p = resolver(g_p, 0);
+        assert(rl_p == lp.resolution(g_p, 0));
         const goal_lineage* g_q = lp.goal(rl_p, 0);
         const goal_lineage* g_r = lp.goal(rl_p, 1);
         
         // Res 2: q → {s} (left branch level 2)
-        resolver(g_q, 1);
-        const resolution_lineage* rl_q = lp.resolution(g_q, 1);
+        const resolution_lineage* rl_q = resolver(g_q, 1);
+        assert(rl_q == lp.resolution(g_q, 1));
         const goal_lineage* g_s = lp.goal(rl_q, 0);
         
         // Res 3: s → {u} (left branch level 3, going deep before touching right)
-        resolver(g_s, 3);
-        const resolution_lineage* rl_s = lp.resolution(g_s, 3);
+        const resolution_lineage* rl_s = resolver(g_s, 3);
+        assert(rl_s == lp.resolution(g_s, 3));
         const goal_lineage* g_u = lp.goal(rl_s, 0);
         
         // Verify left branch (went 3 levels deep): g_u → rl_s → g_s → rl_q → g_q → rl_p → g_p
@@ -15981,8 +15901,8 @@ void test_goal_resolver() {
         assert(rl_p->parent == g_p);
         
         // Res 4: r → {t} (NOW resolve right branch)
-        resolver(g_r, 2);
-        const resolution_lineage* rl_r = lp.resolution(g_r, 2);
+        const resolution_lineage* rl_r = resolver(g_r, 2);
+        assert(rl_r == lp.resolution(g_r, 2));
         const goal_lineage* g_t = lp.goal(rl_r, 0);
         
         // CRITICAL: Right branch: g_t → rl_r → g_r → rl_p → g_p → nullptr
@@ -16005,12 +15925,12 @@ void test_goal_resolver() {
         assert(g_r->parent == rl_p);
         
         // Res 5: u (left leaf)
-        resolver(g_u, 5);
-        const resolution_lineage* rl_u = lp.resolution(g_u, 5);
+        const resolution_lineage* rl_u = resolver(g_u, 5);
+        assert(rl_u == lp.resolution(g_u, 5));
         
         // Res 6: t (right leaf)
-        resolver(g_t, 4);
-        const resolution_lineage* rl_t = lp.resolution(g_t, 4);
+        const resolution_lineage* rl_t = resolver(g_t, 4);
+        assert(rl_t == lp.resolution(g_t, 4));
         
         // Final verification: both branches have complete lineages to root
         // Left: rl_u → g_u → rl_s → g_s → rl_q → g_q → rl_p → g_p → nullptr
@@ -16034,7 +15954,6 @@ void test_goal_resolver() {
         assert(rs.size() == 6);
         
         // Empty avoidance store
-        assert(as.size() == 0);
     }
 }
 
