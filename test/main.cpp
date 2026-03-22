@@ -20406,7 +20406,8 @@ void test_a01_sim_constructor() {
             assert(simulation.rs.size() == 0);
             assert(simulation.ds.size() == 0);
             
-            // Verify cdcl copy is empty
+            // Verify cdcl is a distinct copy, not the same object
+            assert(&simulation.c != &c);
             assert(simulation.c.avoidances.size() == 0);
             
             // CRITICAL: Verify public a01_sim member references
@@ -20758,9 +20759,12 @@ void test_a01_sim_constructor() {
         
         resolution_store rs;
         decision_store ds;
+        size_t c_size_before = c.avoidances.size();
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
         
         // CRITICAL: cdcl is passed by value — simulation.c is a separate copy
+        assert(&simulation.c != &c);
+        assert(c.avoidances.size() == c_size_before); // original unchanged
         assert(simulation.c.avoidances.size() == 1);
         
         // Content matches
@@ -20916,9 +20920,12 @@ void test_a01_sim_constructor() {
         
         resolution_store rs;
         decision_store ds;
+        size_t c_size_before = c.avoidances.size();
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
         
-        // CRITICAL: cdcl copy has same content
+        // CRITICAL: cdcl copy has same content but is a distinct object
+        assert(&simulation.c != &c);
+        assert(c.avoidances.size() == c_size_before); // original unchanged
         assert(simulation.c.avoidances.size() == 2);
         assert(std::any_of(simulation.c.avoidances.begin(), simulation.c.avoidances.end(),
             [&](const auto& p){ return p.second == avoid1; }));
@@ -21053,9 +21060,12 @@ void test_a01_sim_constructor() {
         
         resolution_store rs;
         decision_store ds;
+        size_t c_size_before = c.avoidances.size();
         a01_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
         
-        // CRITICAL: Verify cdcl copy has expected content
+        // CRITICAL: Verify cdcl copy is distinct and has expected content
+        assert(&simulation.c != &c);
+        assert(c.avoidances.size() == c_size_before); // original unchanged
         assert(simulation.c.avoidances.size() == 1);
         assert(std::any_of(simulation.c.avoidances.begin(), simulation.c.avoidances.end(),
             [&](const auto& p){ return p.second == avoid; }));
@@ -21100,7 +21110,8 @@ void test_a01_sim_constructor() {
         // CRITICAL: 5 goals * 2 db rules = 10 candidates
         assert(simulation.cs.size() == 10);
         
-        // CRITICAL: All other stores empty
+        // CRITICAL: All other stores empty; cdcl is a distinct copy
+        assert(&simulation.c != &c);
         assert(simulation.rs.size() == 0);
         assert(simulation.ds.size() == 0);
         assert(simulation.c.avoidances.size() == 0);
