@@ -1,11 +1,11 @@
 #include "../hpp/mcts_decider.hpp"
 
 mcts_decider::mcts_decider(
-    const goal_store& gs,
+    const frontier& f,
     const candidate_store& cs,
     monte_carlo::simulation<choice, std::mt19937>& sim
 )
-    : gs(gs), cs(cs), sim(sim)
+    : f(f), cs(cs), sim(sim)
 {}
 
 std::pair<const goal_lineage*, size_t> mcts_decider::operator()() {
@@ -17,9 +17,10 @@ std::pair<const goal_lineage*, size_t> mcts_decider::operator()() {
 const goal_lineage* mcts_decider::choose_goal() {
     // Get the goals to choose from
     std::vector<choice> goals;
-    goals.reserve(gs.size());
+    goals.reserve(f.members().size());
 
-    for (const auto& [gl, _] : gs)
+    // Convert the goals to choices
+    for (const auto& gl : f.members())
         goals.push_back(gl);
 
     // Choose a goal to resolve
@@ -30,11 +31,11 @@ const goal_lineage* mcts_decider::choose_goal() {
 size_t mcts_decider::choose_candidate(const goal_lineage* chosen_gl) {
     // Get the candidates to choose from
     std::vector<choice> candidates;
-    candidates.reserve(cs.count(chosen_gl));
+    candidates.reserve(cs.at(chosen_gl).size());
 
-    const auto candidate_range = cs.equal_range(chosen_gl);
-    for (auto it = candidate_range.first; it != candidate_range.second; ++it)
-        candidates.push_back(it->second);
+    // Convert the candidates to choices
+    for (size_t rule_id : cs.at(chosen_gl))
+        candidates.push_back(rule_id);
 
     // Choose a candidate for the goal
     const choice choice_b = sim.choose(candidates);

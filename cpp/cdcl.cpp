@@ -9,7 +9,7 @@ cdcl::cdcl() :
 
 }
 
-void cdcl::learn(const decision_store& ds) {
+void cdcl::learn(const decisions& ds) {
     // 1. reduce the decision store to a set of leaf resolutions
     avoidance av = reduce(ds);
 
@@ -84,7 +84,7 @@ void cdcl::erase(size_t id) {
     avoidances.erase(id);
 }
 
-avoidance cdcl::reduce(const decision_store& ds) {
+avoidance cdcl::reduce(const decisions& ds) {
     // 1. create sets of visited lineages
     std::set<const resolution_lineage*> visited;
 

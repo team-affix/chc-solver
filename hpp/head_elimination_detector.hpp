@@ -4,6 +4,7 @@
 #include "bind_map.hpp"
 #include "lineage.hpp"
 #include "defs.hpp"
+#include "goal_store.hpp"
 
 struct head_elimination_detector {
     head_elimination_detector(

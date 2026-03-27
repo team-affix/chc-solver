@@ -9,8 +9,8 @@ a01_sim::a01_sim(
     expr_pool& ep,
     bind_map& bm,
     lineage_pool& lp,
-    resolution_store& rs,
-    decision_store& ds,
+    resolutions& rs,
+    decisions& ds,
     cdcl c,
     monte_carlo::simulation<mcts_decider::choice, std::mt19937>& sim
 ) :
@@ -20,16 +20,12 @@ a01_sim::a01_sim(
     lp(lp),
     rs(rs),
     ds(ds),
-    gs({}),
-    cs({}),
+    f(db, lp),
+    gs(db, cp, bm, lp),
+    cs(db, lp),
     cp(vars, ep),
-    sd(gs),
-    cd(gs, cs),
     he(t, bm, gs, db),
-    up(cs),
-    dec(gs, cs, sim),
-    ga(gs, cs, db),
-    gr(rs, gs, cs, db, cp, bm, lp, ga),
+    dec(f, cs, sim),
     c(c)
 {
     // clear the resolution and decision stores
@@ -39,40 +35,40 @@ a01_sim::a01_sim(
 
     size_t i = 0;
     for (const auto& goal : goals)
-        ga(lp.goal(nullptr, i++), goal);
+        add(lp.goal(nullptr, i++), goal);
 }
 
 bool a01_sim::operator()() {
 
-    while ((rs.size() < max_resolutions) && !cd() && !sd()) {
+    while ((rs.size() < max_resolutions) && !cs.conflicted() && !f.members().empty()) {
 
         // head elimination
-        size_t elim0 = std::erase_if(cs, [this](const auto& e) { return he(e.first, e.second); });
+        size_t elim0 = cs.eliminate([this](const goal_lineage* gl, size_t i) { return he(gl, i); });
 
         // cdcl elimination
-        size_t elim1 = std::erase_if(cs, [this](const auto& e) { return c.eliminated(lp.resolution(e.first, e.second)); });
+        size_t elim1 = cs.eliminate([this](const goal_lineage* gl, size_t i) { return c.eliminated(lp.resolution(gl, i)); });
         
         // unit propagation
-        const auto it = std::find_if(gs.begin(), gs.end(), [this](const auto& e) { return up(e.first); });
+        const goal_lineage* propagated_gl;
+        size_t propagated_rule_id;
+        bool unit = cs.unit(propagated_gl, propagated_rule_id);
 
-        // enact the propagation
-        if (it != gs.end()) {
-            auto rl = gr(it->first, cs.find(it->first)->second);
-            c.constrain(rl);
-        }
+        // if a unit propagation is found, enact it
+        if (unit)
+            resolve(lp.resolution(propagated_gl, propagated_rule_id));
 
         // continue until fixpoint
-        if (elim0 > 0 || elim1 > 0 || it != gs.end())
+        if (elim0 > 0 || elim1 > 0 || unit)
             continue;
 
         // decide on a goal and candidate
         auto [chosen_goal, chosen_candidate] = dec();
 
-        // resolve the chosen goal and candidate
-        auto rl = gr(chosen_goal, chosen_candidate);
+        // construct the resolution lineage
+        const resolution_lineage* rl = lp.resolution(chosen_goal, chosen_candidate);
 
-        // trim the avoidances concerning the resolution
-        c.constrain(rl);
+        // resolve the chosen goal and candidate
+        resolve(rl);
         
         // mark this resolution as a decision
         ds.insert(rl);
@@ -80,5 +76,20 @@ bool a01_sim::operator()() {
     }
 
     // return whether a solution was found
-    return sd();
+    return f.members().empty();
+}
+
+
+void a01_sim::add(const goal_lineage* gl, const expr* e) {
+    f.add(gl);
+    gs.add(gl, e);
+    cs.add(gl);
+}
+
+void a01_sim::resolve(const resolution_lineage* rl) {
+    f.resolve(rl);
+    gs.resolve(rl);
+    cs.resolve(rl);
+    c.constrain(rl);
+    rs.insert(rl);
 }

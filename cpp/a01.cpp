@@ -33,7 +33,7 @@ a01::a01(
     t.push();
 }
 
-bool a01::operator()(size_t iterations, std::optional<resolution_store>& soln) {
+bool a01::operator()(size_t iterations, std::optional<resolutions>& soln) {
     // default to no solution
     soln = std::nullopt;
 
@@ -47,7 +47,7 @@ bool a01::operator()(size_t iterations, std::optional<resolution_store>& soln) {
         lp.trim();
         
         // construct avoidance
-        decision_store ds;
+        decisions ds;
     
         if (!next_avoidance(ds, soln))
             return false;
@@ -67,7 +67,7 @@ bool a01::operator()(size_t iterations, std::optional<resolution_store>& soln) {
     return true;
 }
 
-bool a01::sim_one(monte_carlo::tree_node<mcts_decider::choice>& root, decision_store& ds, resolution_store& rs) {
+bool a01::sim_one(monte_carlo::tree_node<mcts_decider::choice>& root, decisions& ds, resolutions& rs) {
     // reset the trail
     t.pop();
     t.push();
@@ -89,7 +89,7 @@ bool a01::sim_one(monte_carlo::tree_node<mcts_decider::choice>& root, decision_s
 
 }
 
-bool a01::next_avoidance(decision_store& avoidance, std::optional<resolution_store>& soln) {
+bool a01::next_avoidance(decisions& avoidance, std::optional<resolutions>& soln) {
     // default to no solution
     soln = std::nullopt;
     
@@ -97,8 +97,8 @@ bool a01::next_avoidance(decision_store& avoidance, std::optional<resolution_sto
     monte_carlo::tree_node<mcts_decider::choice> root;
 
     // construct the decision and resolution stores
-    decision_store ds;
-    resolution_store rs;
+    decisions ds;
+    resolutions rs;
 
     // perform refutation check
     if (!sim_one(root, ds, rs) && ds.empty())

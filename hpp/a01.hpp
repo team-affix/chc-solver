@@ -26,12 +26,12 @@ struct a01 {
         double,
         std::mt19937&
     );
-    bool operator()(size_t, std::optional<resolution_store>&);
+    bool operator()(size_t, std::optional<resolutions>&);
 #ifndef DEBUG
 private:
 #endif
-    bool sim_one(monte_carlo::tree_node<mcts_decider::choice>&, decision_store&, resolution_store&);
-    bool next_avoidance(decision_store&, std::optional<resolution_store>&);
+    bool sim_one(monte_carlo::tree_node<mcts_decider::choice>&, decisions&, resolutions&);
+    bool next_avoidance(decisions&, std::optional<resolutions>&);
     
     const database& db;
     const goals& gl;
