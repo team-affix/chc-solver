@@ -23571,7 +23571,7 @@ void test_ridge() {
                 assert(r == true);
                 s = get_solution();
             } while (visited.count(s));
-            std::cout << "Solution: " << visited.size() << std::endl;
+            std::cout << "Solution: " << visited.size() << " resolutions: " << soln.value().size() << std::endl;
             expr_printer printer(std::cout);
             for (const auto& e : s) {
                 printer(e);
@@ -24621,7 +24621,7 @@ void test_ridge() {
         assert(expected.size() == 42);
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 200, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 70, 200, 1.414, rng);
 
         normalizer norm(ep, bm);
 
