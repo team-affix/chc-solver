@@ -23541,13 +23541,17 @@ void test_ridge() {
     }
 
     // =========================================================================
-    // Structured multi-solution enumeration helpers (Tests 10 and 11)
+    // Structured multi-solution enumeration helpers (Tests 10–19)
     // =========================================================================
 
     // solution = ordered vector of normalised const expr* values for the variables
     // of interest. Comparison uses pointer identity, which is correct because
     // expr_pool interns: same content → same pointer within the same pool.
     using solution = std::vector<const expr*>;
+
+    // ridge() pushes a trail frame; sim_one() starts with t.pop() for that frame, undoing
+    // expr_pool inserts logged after the push. Build every std::set<solution> expected (and
+    // any ep.atom / peano / ep.import used only for it) *before* constructing ridge.
 
     // Enumerate all expected solutions in any order, skipping calls that return
     // the same variable bindings via a different resolution path (valid behaviour),
@@ -23630,11 +23634,6 @@ void test_ridge() {
         goals.push_back(ep.cons(ep.cons(ep.atom("diff"), A), C));      // goal 4: diff(A,C)
         goals.push_back(ep.cons(ep.cons(ep.atom("diff"), B), C));      // goal 5: diff(B,C)
 
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        normalizer norm(ep, bm);
-
         // Interned atoms from ep — same pointer as those embedded in the rules
         const expr* red   = ep.atom("red");
         const expr* green = ep.atom("green");
@@ -23649,6 +23648,11 @@ void test_ridge() {
             {blue,  red,   green},
             {blue,  green, red  },
         };
+
+        std::mt19937 rng(42);
+        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+
+        normalizer norm(ep, bm);
 
         next_until_refuted(solver, expected, [&]() -> solution {
             return {ep.import(norm(A)), ep.import(norm(B)), ep.import(norm(C))};
@@ -23735,11 +23739,6 @@ void test_ridge() {
         goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("or"),  Q), R),  QR));                 // goal 3: or(Q,R,QR)
         goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("and"), P), QR), ep.atom("true")));    // goal 4: and(P,QR,true)
 
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        normalizer norm(ep, bm);
-
         const expr* T_ = ep.atom("true");
         const expr* F_ = ep.atom("false");
 
@@ -23748,6 +23747,11 @@ void test_ridge() {
             {T_, T_, F_},   // P=T, Q=T, R=F
             {T_, F_, T_},   // P=T, Q=F, R=T
         };
+
+        std::mt19937 rng(42);
+        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+
+        normalizer norm(ep, bm);
 
         next_until_refuted(solver, expected, [&]() -> solution {
             return {ep.import(norm(P)), ep.import(norm(Q)), ep.import(norm(R))};
@@ -23801,11 +23805,6 @@ void test_ridge() {
         goals.push_back(ep.cons(ep.cons(ep.atom("diff"), B), C));      // goal 6: diff(B,C)
         goals.push_back(ep.cons(ep.cons(ep.atom("diff"), A), D));      // goal 7: diff(A,D)
 
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        normalizer norm(ep, bm);
-
         const expr* R_ = ep.atom("red");
         const expr* G_ = ep.atom("green");
         const expr* B_ = ep.atom("blue");
@@ -23819,6 +23818,11 @@ void test_ridge() {
             {B_, R_, G_, R_}, {B_, R_, G_, G_},
             {B_, G_, R_, R_}, {B_, G_, R_, G_},
         };
+
+        std::mt19937 rng(42);
+        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+
+        normalizer norm(ep, bm);
 
         next_until_refuted(solver, expected, [&]() -> solution {
             return {ep.import(norm(A)), ep.import(norm(B)), ep.import(norm(C)), ep.import(norm(D))};
@@ -23917,11 +23921,6 @@ void test_ridge() {
         goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("and"), PQ), RS),  PQ_RS));                // goal  9: and(PQ,RS,PQ_RS)
         goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("and"), PQ_RS), NPR), ep.atom("true")));   // goal 10: and(PQ_RS,NPR,true)
 
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        normalizer norm(ep, bm);
-
         const expr* T_ = ep.atom("true");
         const expr* F_ = ep.atom("false");
 
@@ -23933,6 +23932,11 @@ void test_ridge() {
             {F_, T_, T_, F_},   // P=F, Q=T, R=T, S=F
             {F_, T_, F_, T_},   // P=F, Q=T, R=F, S=T
         };
+
+        std::mt19937 rng(42);
+        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+
+        normalizer norm(ep, bm);
 
         next_until_refuted(solver, expected, [&]() -> solution {
             return {ep.import(norm(P)), ep.import(norm(Q)), ep.import(norm(R)), ep.import(norm(S))};
@@ -24014,11 +24018,6 @@ void test_ridge() {
         goals goals;
         goals.push_back(ep.cons(ep.cons(ep.atom("lt"), N), seven));  // goal 0: lt(N, seven)
 
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        normalizer norm(ep, bm);
-
         // All 7 Peano naturals strictly less than 7
         std::set<solution> expected = {
             {peano(0)},
@@ -24029,6 +24028,11 @@ void test_ridge() {
             {peano(5)},
             {peano(6)},
         };
+
+        std::mt19937 rng(42);
+        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+
+        normalizer norm(ep, bm);
 
         next_until_refuted(solver, expected, [&]() -> solution {
             return {ep.import(norm(N))};
@@ -24125,17 +24129,17 @@ void test_ridge() {
         goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("add"), X), Y), S));  // goal 0: add(X, Y, S)
         goals.push_back(ep.cons(ep.cons(ep.atom("lt"), S), ten));              // goal 1: lt(S, ten)
 
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 100, 1.414, rng);
-
-        normalizer norm(ep, bm);
-
         // All 55 pairs (x, y) with x + y < 10
         std::set<solution> expected;
         for (int x = 0; x < 10; ++x)
             for (int y = 0; y < 10 - x; ++y)
                 expected.insert({peano(x), peano(y)});
         assert(expected.size() == 55);
+
+        std::mt19937 rng(42);
+        ridge solver(db, goals, t, seq, bm, 1000, 100, 1.414, rng);
+
+        normalizer norm(ep, bm);
 
         next_until_refuted(solver, expected, [&]() -> solution {
             return {ep.import(norm(X)), ep.import(norm(Y))};
@@ -24208,16 +24212,16 @@ void test_ridge() {
         goals goals;
         goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("add"), X), Y), ten));  // goal 0: add(X, Y, ten)
 
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        normalizer norm(ep, bm);
-
         // All 11 pairs (x, y) with x + y = 10
         std::set<solution> expected;
         for (int x = 0; x <= 10; ++x)
             expected.insert({peano(x), peano(10 - x)});
         assert(expected.size() == 11);
+
+        std::mt19937 rng(42);
+        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+
+        normalizer norm(ep, bm);
 
         next_until_refuted(solver, expected, [&]() -> solution {
             return {ep.import(norm(X)), ep.import(norm(Y))};
@@ -24317,11 +24321,6 @@ void test_ridge() {
         goals goals;
         goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("mul"), X), Y), eight));  // goal 0: mul(X, Y, eight)
 
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 10, 1.414, rng);
-
-        normalizer norm(ep, bm);
-
         // All 4 factor pairs of 8
         std::set<solution> expected = {
             {peano(1), peano(8)},
@@ -24329,6 +24328,11 @@ void test_ridge() {
             {peano(4), peano(2)},
             {peano(8), peano(1)},
         };
+
+        std::mt19937 rng(42);
+        ridge solver(db, goals, t, seq, bm, 1000, 10, 1.414, rng);
+
+        normalizer norm(ep, bm);
 
         next_until_refuted(solver, expected, [&]() -> solution {
             return {ep.import(norm(X)), ep.import(norm(Y))};
@@ -24415,17 +24419,17 @@ void test_ridge() {
         goals.push_back(ep.cons(ep.cons(ep.atom("lt"), S), B));
         goals.push_back(ep.cons(ep.cons(ep.atom("lt"), T), B));
 
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 100, 1.414, rng);
-
-        normalizer norm(ep, bm);
-
         std::set<solution> expected;
         for (int x = 0; x < 4; ++x)
             for (int y = 0; y < 4 - x; ++y)
                 for (int z = 0; z < 4 - x; ++z)
                     expected.insert({peano(x), peano(y), peano(z)});
         assert(expected.size() == 30);
+
+        std::mt19937 rng(42);
+        ridge solver(db, goals, t, seq, bm, 1000, 100, 1.414, rng);
+
+        normalizer norm(ep, bm);
 
         next_until_refuted(solver, expected, [&]() -> solution {
             return {ep.import(norm(X)), ep.import(norm(Y)), ep.import(norm(Z))};
