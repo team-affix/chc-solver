@@ -16906,7 +16906,7 @@ void test_cdcl_eliminated() {
     }
 }
 
-void test_a01_sim_constructor() {
+void test_ridge_sim_constructor() {
     // Test 1: Empty goals - verify initialization
     {
         trail t;
@@ -17665,7 +17665,7 @@ void test_a01_sim_constructor() {
     }
 }
 
-void test_a01_sim() {
+void test_ridge_sim() {
     // Test 1: Immediate solution - single goal with matching fact
     // Database: a.
     // Goals: :- a.
@@ -21655,7 +21655,7 @@ void test_a01_sim() {
     }
 }
 
-void test_a01_constructor_and_destructor() {
+void test_ridge_constructor_and_destructor() {
     // Test 1: Basic construction - verify trail frame pushed and all fields stored correctly
     {
         trail t;
@@ -21855,7 +21855,7 @@ void test_a01_constructor_and_destructor() {
     }
 }
 
-void test_a01_sim_one() {
+void test_ridge_sim_one() {
     // Test 1: Immediate solution via unit propagation
     // db: {a.}, goals: {a.}
     // Expected: returns true, rs has 1 resolution, ds empty,
@@ -22192,7 +22192,7 @@ void test_a01_sim_one() {
     }
 }
 
-void test_a01_next_avoidance() {
+void test_ridge_next_avoidance() {
 
     // Test 1: Immediate refutation — goal has no candidates from the start.
     // DB: empty, goals: {a}
@@ -23037,7 +23037,7 @@ void test_a01_next_avoidance() {
     }
 }
 
-void test_a01() {
+void test_ridge() {
 
     // Test 1: Budget = 0 — no iterations execute; operator() returns true with nullopt.
     // The solver makes no progress at all, so it cannot prove refutation or find a
@@ -24587,12 +24587,12 @@ void unit_test_main() {
     TEST(test_cdcl_constrain);
     TEST(test_cdcl_refuted);
     TEST(test_cdcl_eliminated);
-    TEST(test_a01_sim_constructor);
-    TEST(test_a01_sim);
-    TEST(test_a01_constructor_and_destructor);
-    TEST(test_a01_sim_one);
-    TEST(test_a01_next_avoidance);
-    TEST(test_a01);
+    TEST(test_ridge_sim_constructor);
+    TEST(test_ridge_sim);
+    TEST(test_ridge_constructor_and_destructor);
+    TEST(test_ridge_sim_one);
+    TEST(test_ridge_next_avoidance);
+    TEST(test_ridge);
     TEST(test_expr_printer_constructor);
     TEST(test_expr_printer);
 }
