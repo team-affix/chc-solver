@@ -23,7 +23,6 @@ a01_sim::a01_sim(
     gs(db, goals, t, cp, bm, lp),
     cs(db, goals, lp),
     cp(vars, ep),
-    he(t, bm, gs, db),
     dec(cs, sim),
     c(c)
 {
@@ -38,7 +37,7 @@ bool a01_sim::operator()() {
     while ((rs.size() < max_resolutions) && !cs.conflicted() && !gs.empty()) {
 
         // head elimination
-        size_t elim0 = cs.eliminate([this](const goal_lineage* gl, size_t i) { return he(gl, i); });
+        size_t elim0 = cs.eliminate([this](const goal_lineage* gl, size_t i) { return !gs.applicable(gs.at(gl), db.at(i)); });
 
         // cdcl elimination
         size_t elim1 = cs.eliminate([this](const goal_lineage* gl, size_t i) { return c.eliminated(lp.resolution(gl, i)); });

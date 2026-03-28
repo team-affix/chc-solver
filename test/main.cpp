@@ -6,7 +6,6 @@
 #include "../hpp/normalizer.hpp"
 #include "../hpp/rule.hpp"
 #include "../hpp/defs.hpp"
-#include "../hpp/head_elimination_detector.hpp"
 #include "../hpp/mcts_decider.hpp"
 #include "../hpp/a01_sim.hpp"
 #include "../hpp/a01.hpp"

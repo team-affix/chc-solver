@@ -3,8 +3,11 @@
 
 #include "../mcts/include/mcts.hpp"
 #include "defs.hpp"
+#include "sequencer.hpp"
+#include "bind_map.hpp"
+#include "goal_store.hpp"
+#include "candidate_store.hpp"
 #include "mcts_decider.hpp"
-#include "head_elimination_detector.hpp"
 #include "cdcl.hpp"
 
 struct a01_sim {
@@ -41,8 +44,6 @@ private:
     candidate_store cs;
     
     copier cp;
-    
-    head_elimination_detector he;
     
     mcts_decider dec;
     
