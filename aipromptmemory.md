@@ -9,12 +9,14 @@
 ## Testing Guidelines
 
 - Go one function at a time when testing
+- **Every test case must be fully resource-independent:** each `{}` block creates its own local variables (trail, expr_pool, database, lineage_pool, etc.). Never share resources between test cases within a test function.
 - After writing each test, RUN make, then RUN the program (./main)
 - Use the TEST() macro from test_utils.hpp - do NOT add "all tests passed" print statements
 - Tests should use assert() extensively to verify behavior
 - Think of corner cases that could cause functions to fail
 - Do NOT create separate test cases for edge cases that should be covered in the main tests
 - Test functions in the SAME ORDER as they are declared in the header file
+- **Strong foundation rule: the FIRST TIME any method is used in the test suite must be inside its OWN test function.** Never use a method as a setup primitive in an earlier test function before it has been formally tested. If a later test needs a method as a prerequisite, reorder the tests so the prerequisite is tested first. Verify state using internal member access (e.g. `f.members`) in DEBUG mode rather than calling untested frontier API methods.
 
 ## Code Style
 
