@@ -23567,7 +23567,7 @@ void test_ridge() {
                 assert(r == true);
                 s = get_solution();
             } while (visited.count(s));
-            std::cout << "Solution: " << std::endl;
+            std::cout << "Solution: " << visited.size() << std::endl;
             expr_printer printer(std::cout);
             for (const auto& e : s) {
                 printer(e);
@@ -24430,8 +24430,6 @@ void test_ridge() {
         next_until_refuted(solver, expected, [&]() -> solution {
             return {ep.import(norm(X)), ep.import(norm(Y)), ep.import(norm(Z))};
         });
-
-        std::cout << "";
     }
 
     // Test 19: Catalan binary trees with exactly 5 nodes (C_5 = 42).
@@ -24562,11 +24560,10 @@ void test_ridge() {
         goals.push_back(ep.cons(ep.atom("wf"), T));
         goals.push_back(ep.cons(ep.cons(ep.atom("nodes"), T), five));
 
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 200, 1.414, rng);
-
-        normalizer norm(ep, bm);
-
+        // Expected trees must be interned *before* ridge's ctor runs: ridge() calls t.push(),
+        // and the first sim_one() does t.pop() for that frame, undoing all expr_pool inserts
+        // logged after that push — so building expected after ridge leaves dangling pointers in
+        // std::set<solution> (import is fine; the stored expr* were rolled back off the trail).
         // 5 nodes — 42 trees: split (0,4): B(N,s4_i); (1,3): B(s1,s3_j); (2,2): all B(si,sj) for
         // si,sj in {s2_left_chain,s2_right_chain}; (3,1): B(s3_j,s1); (4,0): B(s4_i,N).
         std::set<solution> expected;
@@ -24618,6 +24615,11 @@ void test_ridge() {
         expected.insert({ep.import(B(s4_13, N))});
 
         assert(expected.size() == 42);
+
+        std::mt19937 rng(42);
+        ridge solver(db, goals, t, seq, bm, 1000, 200, 1.414, rng);
+
+        normalizer norm(ep, bm);
 
         next_until_refuted(solver, expected, [&]() -> solution {
             return {ep.import(norm(T))};
