@@ -9,6 +9,7 @@
 #include "../hpp/sim.hpp"
 #include "../hpp/mcts_decider.hpp"
 #include "../hpp/ridge_sim.hpp"
+#include "../hpp/horizon_sim.hpp"
 #include "../hpp/ridge.hpp"
 #include "../hpp/expr_printer.hpp"
 #include "../hpp/cdcl.hpp"
@@ -19201,6 +19202,305 @@ void test_ridge_sim_on_resolve() {
     }
 }
 
+void test_horizon_sim_reward() {
+    auto near = [](double a, double b, double eps = 1e-9) {
+        return std::abs(a - b) < eps;
+    };
+
+    // Test 1: Empty goals → ws.cgw starts at 0 → reward() == 0
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        goals goals;
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(near(sim.reward(), 0.0));
+        assert(near(sim.ws.cgw, 0.0));
+    }
+
+    // Test 2: Single goal, no resolutions yet → reward() == 0
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        goals goals;
+        goals.push_back(ep.atom("p"));
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(near(sim.reward(), 0.0));
+    }
+
+    // Test 3: Multiple goals, no resolutions → reward() == 0
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.atom("q"), {}});
+        goals goals;
+        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.atom("q"));
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(near(sim.reward(), 0.0));
+    }
+
+    // Test 4: reward() reads directly from ws.cgw - set it directly and verify
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        goals goals;
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        sim.ws.cgw = 0.5;
+        assert(near(sim.reward(), 0.5));
+
+        sim.ws.cgw = 1.0;
+        assert(near(sim.reward(), 1.0));
+
+        sim.ws.cgw = 0.0;
+        assert(near(sim.reward(), 0.0));
+    }
+}
+
+void test_horizon_sim_on_resolve() {
+    auto near = [](double a, double b, double eps = 1e-9) {
+        return std::abs(a - b) < eps;
+    };
+
+    // Test 1: Resolve single goal with fact → ws.cgw gets the full weight → reward() == 1.0
+    // Also confirms base class effects (gs, cs emptied)
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}}); // p :-
+        goals goals;
+        goals.push_back(ep.atom("p")); // weight = 1/1 = 1.0
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(near(sim.reward(), 0.0));
+
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl = lp.resolution(gl0, 0);
+        sim.on_resolve(rl);
+
+        // ws: fact rule → full weight accumulated
+        assert(near(sim.ws.cgw, 1.0));
+        assert(near(sim.reward(), 1.0));
+        // base class: gs and cs emptied
+        assert(sim.gs.empty());
+        assert(sim.cs.empty());
+    }
+
+    // Test 2: Resolve goal with non-fact rule → no weight accumulates, sub-goals weighted
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {ep.atom("q")}}); // p :- q.
+        goals goals;
+        goals.push_back(ep.atom("p")); // weight = 1.0
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl = lp.resolution(gl0, 0);
+        sim.on_resolve(rl);
+
+        // Non-fact: cgw unchanged
+        assert(near(sim.ws.cgw, 0.0));
+        assert(near(sim.reward(), 0.0));
+        // Sub-goal carries the full weight (1 body element)
+        const goal_lineage* sub_gl = lp.goal(rl, 0);
+        assert(near(sim.ws.members.at(sub_gl), 1.0));
+        // base class: gs gained sub-goal q
+        assert(sim.gs.size() == 1);
+        assert(sim.gs.at(sub_gl) == ep.atom("q"));
+    }
+
+    // Test 3: Two goals, resolve one with fact → reward() == 0.5 (half of total weight)
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.atom("q"), {}});
+        goals goals;
+        goals.push_back(ep.atom("p")); // weight = 0.5
+        goals.push_back(ep.atom("q")); // weight = 0.5
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(near(sim.reward(), 0.0));
+
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl0 = lp.resolution(gl0, 0);
+        sim.on_resolve(rl0);
+
+        assert(near(sim.ws.cgw, 0.5));
+        assert(near(sim.reward(), 0.5));
+    }
+
+    // Test 4: Two goals, resolve both with facts → reward() == 1.0
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.atom("q"), {}});
+        goals goals;
+        goals.push_back(ep.atom("p")); // weight = 0.5
+        goals.push_back(ep.atom("q")); // weight = 0.5
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const goal_lineage* gl1 = lp.goal(nullptr, 1);
+        sim.on_resolve(lp.resolution(gl0, 0)); // resolve p with rule 0
+        assert(near(sim.reward(), 0.5));
+        sim.on_resolve(lp.resolution(gl1, 1)); // resolve q with rule 1
+        assert(near(sim.reward(), 1.0));
+        assert(near(sim.ws.cgw, 1.0));
+        assert(sim.gs.empty());
+    }
+
+    // Test 5: Resolve with 2-body rule → weight split equally, cgw unchanged,
+    // both sub-goals get equal weight in ws
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {ep.atom("q"), ep.atom("r")}}); // p :- q, r.
+        goals goals;
+        goals.push_back(ep.atom("p")); // weight = 1.0
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl = lp.resolution(gl0, 0);
+        sim.on_resolve(rl);
+
+        // 2-body rule: weight 1.0 split into 0.5 each, cgw unchanged
+        assert(near(sim.ws.cgw, 0.0));
+        assert(near(sim.reward(), 0.0));
+        const goal_lineage* sub_gl0 = lp.goal(rl, 0);
+        const goal_lineage* sub_gl1 = lp.goal(rl, 1);
+        assert(near(sim.ws.members.at(sub_gl0), 0.5));
+        assert(near(sim.ws.members.at(sub_gl1), 0.5));
+        // base class: gs has q and r
+        assert(sim.gs.size() == 2);
+    }
+
+    // Test 6: Chain resolution - p resolved with "p :- q", then q resolved with fact
+    // → total reward accumulates to 1.0 across two on_resolve calls
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {ep.atom("q")}}); // rule 0: p :- q.
+        db.push_back(rule{ep.atom("q"), {}});              // rule 1: q :-
+        goals goals;
+        goals.push_back(ep.atom("p")); // weight = 1.0
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl_p = lp.resolution(gl0, 0); // resolve p with rule 0
+
+        sim.on_resolve(rl_p);
+        assert(near(sim.reward(), 0.0));    // weight transferred to q sub-goal
+        assert(sim.gs.size() == 1);
+
+        // Now resolve q (the sub-goal) with rule 1 (fact)
+        const goal_lineage* sub_gl = lp.goal(rl_p, 0);
+        const resolution_lineage* rl_q = lp.resolution(sub_gl, 1); // resolve q with rule 1
+        sim.on_resolve(rl_q);
+
+        assert(near(sim.reward(), 1.0)); // full weight accumulated
+        assert(near(sim.ws.cgw, 1.0));
+        assert(sim.gs.empty());
+    }
+}
+
 void test_ridge_sim() {
     // Test 1: Immediate solution - single goal with matching fact
     // Database: a.
@@ -26430,6 +26730,8 @@ void unit_test_main() {
     TEST(test_ridge_sim_derive_one);
     TEST(test_ridge_sim_decide_one);
     TEST(test_ridge_sim_on_resolve);
+    TEST(test_horizon_sim_reward);
+    TEST(test_horizon_sim_on_resolve);
     TEST(test_ridge_sim);
     TEST(test_ridge_constructor_and_destructor);
     TEST(test_ridge_sim_one);
