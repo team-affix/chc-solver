@@ -13,7 +13,6 @@ ridge_sim::ridge_sim(
     monte_carlo::simulation<mcts_decider::choice, std::mt19937>& mc_sim
 ) :
     sim(max_resolutions),
-    max_resolutions(max_resolutions),
     db(db),
     t(t),
     lp(lp),

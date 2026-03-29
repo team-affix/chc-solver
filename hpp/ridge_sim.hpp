@@ -33,8 +33,6 @@ private:
     const resolution_lineage* decide_one() override;
     void on_resolve(const resolution_lineage*) override;
 
-    size_t max_resolutions;
-
     const database& db;
     trail& t;
     lineage_pool& lp;
