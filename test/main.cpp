@@ -17904,7 +17904,7 @@ void test_ridge_sim_constructor() {
         {
             resolution_store rs;
             decision_store ds;
-            ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+            ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
             
             // Verify max_resolutions stored
             assert(simulation.max_resolutions == 100);
@@ -17936,8 +17936,6 @@ void test_ridge_sim_constructor() {
             // CRITICAL: Verify decider references (public in DEBUG)
             assert(&simulation.dec.cs == &simulation.cs);
             assert(&simulation.dec.sim == &sim);
-            assert(&simulation.rs == &rs);
-            assert(&simulation.ds == &ds);
         }
     }
     
@@ -17967,7 +17965,7 @@ void test_ridge_sim_constructor() {
             resolution_store rs;
             decision_store ds;
 
-            ridge_sim simulation(50, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+            ridge_sim simulation(50, db, goals, t, seq, ep, bm, lp, c, sim);
             
             // CRITICAL: Goal added to goal_store with index 0
             assert(simulation.gs.size() == 1);
@@ -18022,7 +18020,7 @@ void test_ridge_sim_constructor() {
         resolution_store rs;
         decision_store ds;
 
-        ridge_sim simulation(200, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(200, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // CRITICAL: Three goals added with indices 0, 1, 2
         assert(simulation.gs.size() == 3);
@@ -18105,7 +18103,7 @@ void test_ridge_sim_constructor() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // CRITICAL: All goals added to goal_store
         assert(simulation.gs.size() == 3);
@@ -18169,7 +18167,7 @@ void test_ridge_sim_constructor() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Goal added
         assert(simulation.gs.size() == 1);
@@ -18222,7 +18220,7 @@ void test_ridge_sim_constructor() {
         resolution_store rs;
         decision_store ds;
         size_t c_size_before = c.avoidances.size();
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // CRITICAL: cdcl is passed by value — simulation.c is a separate copy
         assert(&simulation.c != &c);
@@ -18266,7 +18264,7 @@ void test_ridge_sim_constructor() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(75, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(75, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // CRITICAL: 4 goals added
         assert(simulation.gs.size() == 4);
@@ -18374,7 +18372,7 @@ void test_ridge_sim_constructor() {
         resolution_store rs;
         decision_store ds;
         size_t c_size_before = c.avoidances.size();
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // CRITICAL: cdcl copy has same content but is a distinct object
         assert(&simulation.c != &c);
@@ -18408,7 +18406,7 @@ void test_ridge_sim_constructor() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Verify copier references match (via members)
         assert(&simulation.cp.expr_pool_ref == &ep);
@@ -18438,21 +18436,21 @@ void test_ridge_sim_constructor() {
         {
             resolution_store rs;
             decision_store ds;
-            ridge_sim sim1(1, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+            ridge_sim sim1(1, db, goals, t, seq, ep, bm, lp, c, sim);
             assert(sim1.max_resolutions == 1);
         }
         
         {
             resolution_store rs;
             decision_store ds;
-            ridge_sim sim2(1000, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+            ridge_sim sim2(1000, db, goals, t, seq, ep, bm, lp, c, sim);
             assert(sim2.max_resolutions == 1000);
         }
         
         {
             resolution_store rs;
             decision_store ds;
-            ridge_sim sim3(999999, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+            ridge_sim sim3(999999, db, goals, t, seq, ep, bm, lp, c, sim);
             assert(sim3.max_resolutions == 999999);
         }
     }
@@ -18477,11 +18475,7 @@ void test_ridge_sim_constructor() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
-        
-        // CRITICAL: decisions() returns reference to ds
-        assert(&simulation.ds == &ds);
-        assert(&simulation.rs == &rs);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
     }
     
     // Test 14: Verify component initialization with non-empty avoidance store
@@ -18514,7 +18508,7 @@ void test_ridge_sim_constructor() {
         resolution_store rs;
         decision_store ds;
         size_t c_size_before = c.avoidances.size();
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // CRITICAL: Verify cdcl copy is distinct and has expected content
         assert(&simulation.c != &c);
@@ -18522,9 +18516,6 @@ void test_ridge_sim_constructor() {
         assert(simulation.c.avoidances.size() == 1);
         assert(std::any_of(simulation.c.avoidances.begin(), simulation.c.avoidances.end(),
             [&](const auto& p){ return p.second == avoid; }));
-        
-        assert(&simulation.ds == &ds);
-        assert(&simulation.rs == &rs);
     }
     
     // Test 15: Verify all store sizes after construction with various goal counts
@@ -18555,7 +18546,7 @@ void test_ridge_sim_constructor() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(500, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(500, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // CRITICAL: 5 goals added
         assert(simulation.gs.size() == 5);
@@ -18607,7 +18598,7 @@ void test_ridge_sim_constructor() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // CRITICAL: Verify ordering - idx matches position in list
         const goal_lineage* gl_idx0 = nullptr;
@@ -18669,7 +18660,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Execute simulation
         bool result = simulation();
@@ -18726,7 +18717,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -18774,7 +18765,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -18837,7 +18828,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -18895,7 +18886,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -18960,7 +18951,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // CRITICAL: Pre-populate MCTS tree to force decision on (gl0, idx 1)
         // Get the actual goal pointer from simulation.gs
@@ -19037,7 +19028,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Note: With only 1 candidate per goal, both will be unit props
         
@@ -19097,7 +19088,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Pre-populate MCTS to force decision on idx 0
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -19175,7 +19166,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(3, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);  // Max 3 resolutions!
+        ridge_sim simulation(3, db, goals, t, seq, ep, bm, lp, c, sim);  // Max 3 resolutions!
         
         bool result = simulation();
         
@@ -19247,7 +19238,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Before execution, verify 5 candidates added
         const goal_lineage* gl0_for_check = lp.goal(nullptr, 0);
@@ -19320,7 +19311,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Verify avoidance copied
         assert(simulation.c.avoidances.size() == 1);
@@ -19380,7 +19371,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Pre-populate MCTS to force decision on (gl0, idx 0)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -19449,7 +19440,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -19497,7 +19488,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -19563,7 +19554,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -19622,7 +19613,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -19688,7 +19679,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -19752,7 +19743,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Force decision on idx 0
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -19821,7 +19812,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Initial state: 20 candidates
         const goal_lineage* gl0_for_check = lp.goal(nullptr, 0);
@@ -19875,7 +19866,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -19944,7 +19935,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Force decision on idx 1
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -20018,7 +20009,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -20076,7 +20067,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Force first decision on (gl0, idx 0)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -20169,7 +20160,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -20235,7 +20226,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Verify 30 candidates initially
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
@@ -20301,7 +20292,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Pre-populate MCTS to force decision on idx 0
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -20363,7 +20354,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -20407,7 +20398,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -20452,7 +20443,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -20496,7 +20487,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -20558,7 +20549,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -20627,7 +20618,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -20694,7 +20685,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -20741,7 +20732,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -20831,7 +20822,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -20910,7 +20901,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Force decision on idx 0 (q path -> apple)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -20979,7 +20970,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Pre-populate MCTS to force base case (idx 2)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -21068,7 +21059,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -21142,7 +21133,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -21193,7 +21184,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Pre-populate MCTS to force idx 2 (NOT idx 0, to prove MCTS works!)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -21258,7 +21249,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -21312,7 +21303,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -21373,7 +21364,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -21444,7 +21435,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -21534,7 +21525,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -21611,7 +21602,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -21663,7 +21654,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Pre-populate MCTS to force idx 1 (bob)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -21739,7 +21730,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -21799,7 +21790,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -21854,7 +21845,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(5, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);  // Low max_resolutions
+        ridge_sim simulation(5, db, goals, t, seq, ep, bm, lp, c, sim);  // Low max_resolutions
         
         bool result = simulation();
         
@@ -21898,7 +21889,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -21942,7 +21933,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -22011,7 +22002,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -22101,7 +22092,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -22151,7 +22142,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -22200,7 +22191,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -22256,7 +22247,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(5, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);  // Max 5
+        ridge_sim simulation(5, db, goals, t, seq, ep, bm, lp, c, sim);  // Max 5
         
         bool result = simulation();
         
@@ -22298,7 +22289,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -22349,7 +22340,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Pre-populate MCTS to force idx 2
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -22414,7 +22405,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -22460,7 +22451,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -22522,7 +22513,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -22562,7 +22553,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         
@@ -22606,7 +22597,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, rs, ds, c, sim);
+        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
         

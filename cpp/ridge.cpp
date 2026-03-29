@@ -76,10 +76,14 @@ bool ridge::sim_one(monte_carlo::tree_node<mcts_decider::choice>& root, decision
     monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, exploration_constant, rng);
 
     // construct the a01_sim
-    ridge_sim sim_instance(max_resolutions, db, gl, t, vars, ep, bm, lp, rs, ds, c, sim);
+    ridge_sim sim_instance(max_resolutions, db, gl, t, vars, ep, bm, lp, c, sim);
 
     // run the simulation
     bool sim_result = sim_instance();
+    
+    // get the rs and ds
+    rs = sim_instance.get_resolutions();
+    ds = sim_instance.get_decisions();
 
     // terminate the simulation
     sim.terminate(-(double)ds.size());
