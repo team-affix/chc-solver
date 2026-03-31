@@ -20670,6 +20670,39 @@ void test_horizon() {
         assert(!soln.has_value());
     };
 
+    // Like next_until_refuted but without the final refutation assertion.
+    // Used for problems where the full search space is too large to exhaust,
+    // or where horizon is exploring a semi-decidable region where refutation
+    // cannot be guaranteed in finite time.
+    auto enumerate_all_solutions = [](
+        horizon& solver,
+        std::set<solution> expected,
+        auto get_solution,
+        size_t iterations = 1000
+    ) {
+        std::set<solution> visited;
+        std::optional<resolution_store> soln;
+        while (!expected.empty()) {
+            solution s;
+            do {
+                bool r = solver(iterations, soln);
+                assert(r == true);
+                s = get_solution();
+            } while (visited.count(s));
+            std::cout << "Solution: " << visited.size()
+                      << " resolutions: " << soln.value().size() << std::endl;
+            expr_printer printer(std::cout);
+            for (const auto& e : s) {
+                printer(e);
+                std::cout << std::endl;
+            }
+            std::cout << std::endl;
+            assert(expected.count(s) == 1);
+            expected.erase(s);
+            visited.insert(s);
+        }
+    };
+
     // Test 10: 3-colouring of K3 (the triangle) with colours {red, green, blue}.
     //
     // All 3 nodes A, B, C are mutually adjacent, so every valid colouring assigns
@@ -21350,6 +21383,136 @@ void test_horizon() {
 
         next_until_refuted(solver, expected, [&]() -> solution {
             return {ep.import(norm(X)), ep.import(norm(Y))};
+        });
+    }
+
+    // Test 20: 3×3 Latin square — find all 12 valid grid completions.
+    //
+    // A 3×3 Latin square fills a 3×3 grid with values from {v1, v2, v3} such that
+    // each value appears exactly once in every row and every column.
+    //
+    // This is the deepest horizon test: 27 conjoined goals (9 domain + 9 row-diff +
+    // 9 col-diff) over 9 logic variables.  The MCTS weight-based reward provides a
+    // continuous gradient — each grounded cell earns 1/27 of the total reward —
+    // guiding exploration toward consistent partial assignments and away from dead ends
+    // where a diff constraint has no matching rule.
+    //
+    // DB:
+    //   idx 0-2: val(v1), val(v2), val(v3).
+    //   idx 3-8: diff(vi, vj) for every ordered pair with i ≠ j  (6 facts).
+    //
+    // Variables: R11..R33 (row-major; Rij = cell at row i, column j).
+    //
+    // Goals (27 total):
+    //   Domain    : val(R11), val(R12), ..., val(R33)
+    //   Row diffs : diff(Ri1,Ri2), diff(Ri1,Ri3), diff(Ri2,Ri3)  for i ∈ {1,2,3}
+    //   Col diffs : diff(R1j,R2j), diff(R1j,R3j), diff(R2j,R3j)  for j ∈ {1,2,3}
+    //
+    // Expected: exactly 12 solutions (the 12 distinct 3×3 Latin squares).
+    // enumerate_all_solutions is used instead of next_until_refuted because we
+    // only claim to find all solutions, not that the solver then proves refutation
+    // (refuting the remaining 3^9 - 12 assignments could take longer).
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+
+        database db;
+        // Domain facts
+        db.push_back(rule{ep.cons(ep.atom("val"), ep.atom("v1")), {}});  // idx 0
+        db.push_back(rule{ep.cons(ep.atom("val"), ep.atom("v2")), {}});  // idx 1
+        db.push_back(rule{ep.cons(ep.atom("val"), ep.atom("v3")), {}});  // idx 2
+        // Distinctness facts — all 6 ordered pairs of distinct values
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("v1")), ep.atom("v2")), {}});  // idx 3
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("v2")), ep.atom("v1")), {}});  // idx 4
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("v1")), ep.atom("v3")), {}});  // idx 5
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("v3")), ep.atom("v1")), {}});  // idx 6
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("v2")), ep.atom("v3")), {}});  // idx 7
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("v3")), ep.atom("v2")), {}});  // idx 8
+
+        // 9 logic variables — one per grid cell
+        const expr* R11 = ep.var(seq());
+        const expr* R12 = ep.var(seq());
+        const expr* R13 = ep.var(seq());
+        const expr* R21 = ep.var(seq());
+        const expr* R22 = ep.var(seq());
+        const expr* R23 = ep.var(seq());
+        const expr* R31 = ep.var(seq());
+        const expr* R32 = ep.var(seq());
+        const expr* R33 = ep.var(seq());
+
+        goals goals;
+
+        // 9 domain goals
+        goals.push_back(ep.cons(ep.atom("val"), R11));
+        goals.push_back(ep.cons(ep.atom("val"), R12));
+        goals.push_back(ep.cons(ep.atom("val"), R13));
+        goals.push_back(ep.cons(ep.atom("val"), R21));
+        goals.push_back(ep.cons(ep.atom("val"), R22));
+        goals.push_back(ep.cons(ep.atom("val"), R23));
+        goals.push_back(ep.cons(ep.atom("val"), R31));
+        goals.push_back(ep.cons(ep.atom("val"), R32));
+        goals.push_back(ep.cons(ep.atom("val"), R33));
+
+        // 9 row-distinctness goals (3 pairs per row)
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R11), R12));
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R11), R13));
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R12), R13));
+
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R21), R22));
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R21), R23));
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R22), R23));
+
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R31), R32));
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R31), R33));
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R32), R33));
+
+        // 9 column-distinctness goals (3 pairs per column)
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R11), R21));
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R11), R31));
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R21), R31));
+
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R12), R22));
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R12), R32));
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R22), R32));
+
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R13), R23));
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R13), R33));
+        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R23), R33));
+
+        // All 12 distinct 3×3 Latin squares over {v1, v2, v3}, listed row-major.
+        // Each solution vector has 9 elements: {R11,R12,R13, R21,R22,R23, R31,R32,R33}.
+        const expr* v1 = ep.atom("v1");
+        const expr* v2 = ep.atom("v2");
+        const expr* v3 = ep.atom("v3");
+
+        std::set<solution> expected = {
+            {v1,v2,v3, v2,v3,v1, v3,v1,v2},
+            {v1,v2,v3, v3,v1,v2, v2,v3,v1},
+            {v1,v3,v2, v2,v1,v3, v3,v2,v1},
+            {v1,v3,v2, v3,v2,v1, v2,v1,v3},
+            {v2,v1,v3, v1,v3,v2, v3,v2,v1},
+            {v2,v1,v3, v3,v2,v1, v1,v3,v2},
+            {v2,v3,v1, v1,v2,v3, v3,v1,v2},
+            {v2,v3,v1, v3,v1,v2, v1,v2,v3},
+            {v3,v1,v2, v1,v2,v3, v2,v3,v1},
+            {v3,v1,v2, v2,v3,v1, v1,v2,v3},
+            {v3,v2,v1, v1,v3,v2, v2,v1,v3},
+            {v3,v2,v1, v2,v1,v3, v1,v3,v2},
+        };
+        assert(expected.size() == 12);
+
+        std::mt19937 rng(42);
+        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+
+        normalizer norm(ep, bm);
+
+        enumerate_all_solutions(solver, expected, [&]() -> solution {
+            return {ep.import(norm(R11)), ep.import(norm(R12)), ep.import(norm(R13)),
+                    ep.import(norm(R21)), ep.import(norm(R22)), ep.import(norm(R23)),
+                    ep.import(norm(R31)), ep.import(norm(R32)), ep.import(norm(R33))};
         });
     }
 }
