@@ -21515,6 +21515,166 @@ void test_horizon() {
                     ep.import(norm(R31)), ep.import(norm(R32)), ep.import(norm(R33))};
         });
     }
+
+    // Test 21: Constrained network routing — deep recursive path finding.
+    //
+    // This test exercises horizon's reward-guided advantage over ridge on a problem
+    // where each resolution chain is deep and partial progress is meaningful.
+    //
+    // Predicate structure (3 chained rules):
+    //   road/2          — raw directed edges (facts only)
+    //   safe_node/1     — safety certificate, holds for all nodes except h (facts only)
+    //   safe_edge(X,Y)  :- road(X,Y), safe_node(Y).
+    //   safe_path(X,Y,suc(zero))    :- safe_edge(X,Y).                         — base
+    //   safe_path(X,Z,suc(suc(N))) :- safe_edge(X,Y), safe_path(Y,Z,suc(N)).  — recursive
+    //
+    // One safe_path call triggers a 4-level chain:
+    //   safe_path → safe_edge → road (fact) + safe_node (fact).
+    //
+    // Resolutions per solution:
+    //   safe_path(s,M,two):   2 safe_path rules + 2 safe_edge rules + 4 facts = 8
+    //   safe_path(M,t,three): 3 safe_path rules + 3 safe_edge rules + 6 facts = 12
+    //   Total: ~20 resolutions per solution.
+    //
+    // Graph (layered DAG, 12 nodes, 18 road edges):
+    //   s → a, b
+    //   a → c, d       b → d, e
+    //   c → f, g       d → g, h      e → g, h
+    //   f → i          g → i, j      h → j   (h is UNSAFE)
+    //   i → t          j → t
+    //
+    // Node h is the only unsafe node.  Any path through h fails at safe_node(h),
+    // pruning 3 of the 10 possible length-5 paths from s to t.
+    //
+    // Conjoined initial goals (shared free variable M):
+    //   Goal 0: safe_path(s, M, two)   — M is reachable from s in 2 safe hops
+    //   Goal 1: safe_path(M, t, three) — t is reachable from M in 3 safe hops
+    //
+    // M must satisfy BOTH goals simultaneously.
+    //
+    // Expected solutions — 3 distinct midpoints:
+    //   M=c: s→a→c (2 hops); c→{f,g}→{i,j}→t (3 hops, all safe) ✓
+    //   M=d: s→{a,b}→d (2 hops); d→g→{i,j}→t (3 hops; d→h→j→t blocked) ✓
+    //   M=e: s→b→e (2 hops); e→g→{i,j}→t (3 hops; e→h→j→t blocked) ✓
+    //
+    // enumerate_all_solutions is used: the solver need not refute the (large)
+    // remaining search space, only confirm that all 3 witnesses are found.
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+
+        // Peano length constants
+        const expr* zero  = ep.atom("zero");
+        const expr* one   = ep.cons(ep.atom("suc"), zero);
+        const expr* two   = ep.cons(ep.atom("suc"), one);
+        const expr* three = ep.cons(ep.atom("suc"), two);
+
+        database db;
+
+        // --- road facts (18) ---
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("s")), ep.atom("a")), {}});  // idx 0
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("s")), ep.atom("b")), {}});  // idx 1
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("a")), ep.atom("c")), {}});  // idx 2
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("a")), ep.atom("d")), {}});  // idx 3
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("b")), ep.atom("d")), {}});  // idx 4
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("b")), ep.atom("e")), {}});  // idx 5
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("c")), ep.atom("f")), {}});  // idx 6
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("c")), ep.atom("g")), {}});  // idx 7
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("d")), ep.atom("g")), {}});  // idx 8
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("d")), ep.atom("h")), {}});  // idx 9
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("e")), ep.atom("g")), {}});  // idx 10
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("e")), ep.atom("h")), {}});  // idx 11
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("f")), ep.atom("i")), {}});  // idx 12
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("g")), ep.atom("i")), {}});  // idx 13
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("g")), ep.atom("j")), {}});  // idx 14
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("h")), ep.atom("j")), {}});  // idx 15
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("i")), ep.atom("t")), {}});  // idx 16
+        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("j")), ep.atom("t")), {}});  // idx 17
+
+        // --- safe_node facts (10) — all nodes except h ---
+        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("a")), {}});  // idx 18
+        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("b")), {}});  // idx 19
+        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("c")), {}});  // idx 20
+        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("d")), {}});  // idx 21
+        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("e")), {}});  // idx 22
+        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("f")), {}});  // idx 23
+        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("g")), {}});  // idx 24
+        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("i")), {}});  // idx 25
+        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("j")), {}});  // idx 26
+        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("t")), {}});  // idx 27
+        // NOTE: safe_node(h) is deliberately absent — h is the unsafe node.
+
+        // --- safe_edge(X, Y) :- road(X, Y), safe_node(Y). ---
+        {
+            const expr* X = ep.var(seq());
+            const expr* Y = ep.var(seq());
+            db.push_back(rule{                                                // idx 28
+                ep.cons(ep.cons(ep.atom("safe_edge"), X), Y),
+                {ep.cons(ep.cons(ep.atom("road"),      X), Y),
+                 ep.cons(ep.atom("safe_node"), Y)}
+            });
+        }
+
+        // --- safe_path(X, Y, suc(zero)) :- safe_edge(X, Y).   [base case] ---
+        {
+            const expr* X = ep.var(seq());
+            const expr* Y = ep.var(seq());
+            db.push_back(rule{                                                // idx 29
+                ep.cons(ep.cons(ep.cons(ep.atom("safe_path"), X), Y), one),
+                {ep.cons(ep.cons(ep.atom("safe_edge"), X), Y)}
+            });
+        }
+
+        // --- safe_path(X, Z, suc(suc(N))) :- safe_edge(X, Y), safe_path(Y, Z, suc(N)).
+        //     [recursive case: length ≥ 2, avoids ambiguity with base at length 1] ---
+        {
+            const expr* X = ep.var(seq());
+            const expr* Y = ep.var(seq());
+            const expr* Z = ep.var(seq());
+            const expr* N = ep.var(seq());
+            db.push_back(rule{                                                // idx 30
+                ep.cons(ep.cons(ep.cons(ep.atom("safe_path"), X), Z),
+                        ep.cons(ep.atom("suc"), ep.cons(ep.atom("suc"), N))),
+                {ep.cons(ep.cons(ep.atom("safe_edge"), X), Y),
+                 ep.cons(ep.cons(ep.cons(ep.atom("safe_path"), Y), Z),
+                         ep.cons(ep.atom("suc"), N))}
+            });
+        }
+
+        // Shared free variable: M is the "safe midpoint" between the two goals.
+        const expr* M = ep.var(seq());
+
+        goals goals;
+        // Goal 0: safe_path(s, M, two)   — M is 2 safe hops from s
+        goals.push_back(
+            ep.cons(ep.cons(ep.cons(ep.atom("safe_path"), ep.atom("s")), M), two));
+        // Goal 1: safe_path(M, t, three) — t is 3 safe hops from M
+        goals.push_back(
+            ep.cons(ep.cons(ep.cons(ep.atom("safe_path"), M), ep.atom("t")), three));
+
+        // Expected solutions: M ∈ {c, d, e}
+        const expr* c_node = ep.atom("c");
+        const expr* d_node = ep.atom("d");
+        const expr* e_node = ep.atom("e");
+
+        std::set<solution> expected = {
+            {c_node},
+            {d_node},
+            {e_node},
+        };
+
+        std::mt19937 rng(42);
+        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+
+        normalizer norm(ep, bm);
+
+        enumerate_all_solutions(solver, expected, [&]() -> solution {
+            return {ep.import(norm(M))};
+        });
+    }
 }
 
 void test_ridge_sim() {
