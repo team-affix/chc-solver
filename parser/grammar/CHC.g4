@@ -5,19 +5,19 @@ program
     ;
 
 clause
-    : sexp '.'
-    | sexp ':-' body '.'
+    : expr '.'
+    | expr ':-' body '.'
     ;
 
 body
-    : sexp (',' sexp)*
+    : expr (',' expr)*
     ;
 
-sexp
+expr
     : ATOM
     | VARIABLE
-    | '(' sexp '.' sexp ')'
-    | '(' sexp+ ')'
+    | '(' expr '.' expr ')'
+    | '(' expr+ ')'
     ;
 
 ATOM     : [a-z][a-zA-Z0-9_]*

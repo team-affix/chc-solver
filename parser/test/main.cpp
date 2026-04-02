@@ -6,27 +6,27 @@
 
 struct TestVisitor : public CHCBaseVisitor {
     int clause_count = 0;
-    int sexp_count   = 0;
+    int expr_count   = 0;
 
     antlrcpp::Any visitClause(CHCParser::ClauseContext* ctx) override {
         clause_count++;
         return visitChildren(ctx);
     }
-    antlrcpp::Any visitSexp(CHCParser::SexpContext* ctx) override {
-        sexp_count++;
+    antlrcpp::Any visitExpr(CHCParser::ExprContext* ctx) override {
+        expr_count++;
         return visitChildren(ctx);
     }
 };
 
-// Helper: parse a string as a bare sexp (no trailing period required).
-static CHCParser::SexpContext* first_sexp(antlr4::ANTLRInputStream& stream,
+// Helper: parse a string as a bare expr (no trailing period required).
+static CHCParser::ExprContext* first_expr(antlr4::ANTLRInputStream& stream,
                                           antlr4::CommonTokenStream& tokens,
                                           CHCLexer& lexer,
                                           CHCParser& parser) {
     (void)stream; (void)tokens; (void)lexer;
-    auto* sexp = parser.sexp();
+    auto* ctx = parser.expr();
     assert(parser.getNumberOfSyntaxErrors() == 0);
-    return sexp;
+    return ctx;
 }
 
 void test_visitor_traversal() {
@@ -42,7 +42,7 @@ void test_visitor_traversal() {
     TestVisitor v;
     v.visit(tree);
     assert(v.clause_count == 1);
-    assert(v.sexp_count   == 1);
+    assert(v.expr_count   == 1);
 }
 
 void test_expr_visitor_visitAtom() {
@@ -57,9 +57,9 @@ void test_expr_visitor_visitAtom() {
     CHCLexer lexer(&stream);
     antlr4::CommonTokenStream tokens(&lexer);
     CHCParser parser(&tokens);
-    auto* sexp = first_sexp(stream, tokens, lexer, parser);
+    auto* ctx = first_expr(stream, tokens, lexer, parser);
 
-    const expr* result = std::any_cast<const expr*>(ev.visitSexp(sexp));
+    const expr* result = std::any_cast<const expr*>(ev.visitExpr(ctx));
     assert(result == pool.atom("foo"));
     assert(var_map.empty());
 }
@@ -78,7 +78,7 @@ void test_expr_visitor_visitVar() {
         CHCLexer lexer(&stream);
         antlr4::CommonTokenStream tokens(&lexer);
         CHCParser parser(&tokens);
-        result = std::any_cast<const expr*>(ev.visitSexp(first_sexp(stream, tokens, lexer, parser)));
+        result = std::any_cast<const expr*>(ev.visitExpr(first_expr(stream, tokens, lexer, parser)));
         assert(result == pool.var(var_map.at("X")));
     }
 
@@ -89,7 +89,7 @@ void test_expr_visitor_visitVar() {
         CHCLexer lexer(&stream);
         antlr4::CommonTokenStream tokens(&lexer);
         CHCParser parser(&tokens);
-        assert(std::any_cast<const expr*>(ev.visitSexp(first_sexp(stream, tokens, lexer, parser))) == result);
+        assert(std::any_cast<const expr*>(ev.visitExpr(first_expr(stream, tokens, lexer, parser))) == result);
     }
 }
 
@@ -105,9 +105,9 @@ void test_expr_visitor_visitCons() {
     CHCLexer lexer(&stream);
     antlr4::CommonTokenStream tokens(&lexer);
     CHCParser parser(&tokens);
-    auto* sexp = first_sexp(stream, tokens, lexer, parser);
+    auto* ctx = first_expr(stream, tokens, lexer, parser);
 
-    const expr* result = std::any_cast<const expr*>(ev.visitSexp(sexp));
+    const expr* result = std::any_cast<const expr*>(ev.visitExpr(ctx));
     assert(result == pool.cons(pool.atom("a"), pool.atom("b")));
 }
 
@@ -124,9 +124,9 @@ void test_expr_visitor_visitList() {
     CHCLexer lexer(&stream);
     antlr4::CommonTokenStream tokens(&lexer);
     CHCParser parser(&tokens);
-    auto* sexp = first_sexp(stream, tokens, lexer, parser);
+    auto* ctx = first_expr(stream, tokens, lexer, parser);
 
-    const expr* result = std::any_cast<const expr*>(ev.visitSexp(sexp));
+    const expr* result = std::any_cast<const expr*>(ev.visitExpr(ctx));
     assert(result == pool.cons(pool.atom("f"),
                     pool.cons(pool.atom("x"),
                     pool.cons(pool.atom("y"), pool.atom("nil")))));
@@ -145,9 +145,9 @@ void test_expr_visitor_visitCons_nested() {
     CHCLexer lexer(&stream);
     antlr4::CommonTokenStream tokens(&lexer);
     CHCParser parser(&tokens);
-    auto* sexp = first_sexp(stream, tokens, lexer, parser);
+    auto* ctx = first_expr(stream, tokens, lexer, parser);
 
-    const expr* result = std::any_cast<const expr*>(ev.visitSexp(sexp));
+    const expr* result = std::any_cast<const expr*>(ev.visitExpr(ctx));
     assert(result == pool.cons(pool.atom("a"),
                     pool.cons(pool.atom("b"), pool.atom("c"))));
 }
@@ -165,9 +165,9 @@ void test_expr_visitor_visitList_withVars() {
     CHCLexer lexer(&stream);
     antlr4::CommonTokenStream tokens(&lexer);
     CHCParser parser(&tokens);
-    auto* sexp = first_sexp(stream, tokens, lexer, parser);
+    auto* ctx = first_expr(stream, tokens, lexer, parser);
 
-    const expr* result = std::any_cast<const expr*>(ev.visitSexp(sexp));
+    const expr* result = std::any_cast<const expr*>(ev.visitExpr(ctx));
     assert(var_map.at("X") != var_map.at("Y"));
     assert(result == pool.cons(pool.atom("f"),
                     pool.cons(pool.var(var_map.at("X")),
@@ -187,10 +187,10 @@ void test_expr_visitor_visitList_nestedList() {
     CHCLexer lexer(&stream);
     antlr4::CommonTokenStream tokens(&lexer);
     CHCParser parser(&tokens);
-    auto* sexp = first_sexp(stream, tokens, lexer, parser);
+    auto* ctx = first_expr(stream, tokens, lexer, parser);
 
     const expr* ga   = pool.cons(pool.atom("g"), pool.cons(pool.atom("a"), pool.atom("nil")));
-    const expr* result = std::any_cast<const expr*>(ev.visitSexp(sexp));
+    const expr* result = std::any_cast<const expr*>(ev.visitExpr(ctx));
     assert(result == pool.cons(pool.atom("f"),
                     pool.cons(ga,
                     pool.cons(pool.atom("b"), pool.atom("nil")))));
@@ -209,9 +209,9 @@ void test_expr_visitor_visitVar_sharing() {
     CHCLexer lexer(&stream);
     antlr4::CommonTokenStream tokens(&lexer);
     CHCParser parser(&tokens);
-    auto* sexp = first_sexp(stream, tokens, lexer, parser);
+    auto* ctx = first_expr(stream, tokens, lexer, parser);
 
-    const expr* result = std::any_cast<const expr*>(ev.visitSexp(sexp));
+    const expr* result = std::any_cast<const expr*>(ev.visitExpr(ctx));
     const expr* x = pool.var(var_map.at("X"));
     assert(result == pool.cons(pool.atom("f"),
                     pool.cons(x,
@@ -231,14 +231,12 @@ void test_expr_visitor_visitVar_discard() {
     CHCLexer lexer(&stream);
     antlr4::CommonTokenStream tokens(&lexer);
     CHCParser parser(&tokens);
-    auto* sexp = first_sexp(stream, tokens, lexer, parser);
+    auto* ctx = first_expr(stream, tokens, lexer, parser);
 
-    const expr* result = std::any_cast<const expr*>(ev.visitSexp(sexp));
-    // Extract the two arms of the cons.
+    const expr* result = std::any_cast<const expr*>(ev.visitExpr(ctx));
     const expr* lhs = std::get<expr::cons>(result->content).lhs;
     const expr* rhs = std::get<expr::cons>(result->content).rhs;
     assert(lhs != rhs);
-    // Neither _ should appear in var_map.
     assert(var_map.find("_") == var_map.end());
 }
 
@@ -249,21 +247,21 @@ void test_expr_visitor_visitVar_discard_inList() {
     std::map<std::string, uint32_t> var_map;
     expr_visitor ev(pool, seq, var_map);
 
-    // (f _ _) — both discards are distinct, X is tracked normally
+    // (f _ _) — both discards are distinct
     std::string input = "(f _ _)";
     antlr4::ANTLRInputStream stream(input);
     CHCLexer lexer(&stream);
     antlr4::CommonTokenStream tokens(&lexer);
     CHCParser parser(&tokens);
-    auto* sexp = first_sexp(stream, tokens, lexer, parser);
+    auto* ctx = first_expr(stream, tokens, lexer, parser);
 
-    const expr* result = std::any_cast<const expr*>(ev.visitSexp(sexp));
+    const expr* result = std::any_cast<const expr*>(ev.visitExpr(ctx));
     // cons(f, cons(d1, cons(d2, nil)))
     auto& outer = std::get<expr::cons>(result->content);
     assert(outer.lhs == pool.atom("f"));
     auto& mid   = std::get<expr::cons>(outer.rhs->content);
     auto& inner = std::get<expr::cons>(mid.rhs->content);
-    assert(mid.lhs != inner.lhs);   // the two _ are distinct
+    assert(mid.lhs != inner.lhs);
     assert(var_map.find("_") == var_map.end());
 }
 
