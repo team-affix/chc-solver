@@ -71,25 +71,26 @@ void test_expr_visitor_visitVar() {
     std::map<std::string, uint32_t> var_map;
     expr_visitor ev(pool, seq, var_map);
 
-    std::string input = "X";
-    antlr4::ANTLRInputStream stream(input);
-    CHCLexer lexer(&stream);
-    antlr4::CommonTokenStream tokens(&lexer);
-    CHCParser parser(&tokens);
-    auto* sexp = first_sexp(stream, tokens, lexer, parser);
-
-    const expr* result = std::any_cast<const expr*>(ev.visitSexp(sexp));
-    assert(result == pool.var(var_map.at("X")));
+    const expr* result;
+    {
+        std::string input = "X";
+        antlr4::ANTLRInputStream stream(input);
+        CHCLexer lexer(&stream);
+        antlr4::CommonTokenStream tokens(&lexer);
+        CHCParser parser(&tokens);
+        result = std::any_cast<const expr*>(ev.visitSexp(first_sexp(stream, tokens, lexer, parser)));
+        assert(result == pool.var(var_map.at("X")));
+    }
 
     // Visiting the same variable again must return the same interned expr*.
-    std::string input2 = "X";
-    antlr4::ANTLRInputStream stream2(input2);
-    CHCLexer lexer2(&stream2);
-    antlr4::CommonTokenStream tokens2(&lexer2);
-    CHCParser parser2(&tokens2);
-    auto* sexp2 = first_sexp(stream2, tokens2, lexer2, parser2);
-
-    assert(std::any_cast<const expr*>(ev.visitSexp(sexp2)) == result);
+    {
+        std::string input = "X";
+        antlr4::ANTLRInputStream stream(input);
+        CHCLexer lexer(&stream);
+        antlr4::CommonTokenStream tokens(&lexer);
+        CHCParser parser(&tokens);
+        assert(std::any_cast<const expr*>(ev.visitSexp(first_sexp(stream, tokens, lexer, parser))) == result);
+    }
 }
 
 void test_expr_visitor_visitCons() {
