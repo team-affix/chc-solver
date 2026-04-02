@@ -54,7 +54,7 @@ PARSER_DEBUG_FAST_OBJ = $(patsubst %, build/obj/parser_debug_fast/%.o, $(PARSER_
 
 .PHONY: all core core_debug core_debug_fast parser parser_debug parser_debug_fast clean
 
-all: core_debug
+all: core core_debug core_debug_fast parser parser_debug parser_debug_fast
 
 core: $(CORE_LIB)
 
@@ -62,7 +62,7 @@ core_debug: $(CORE_DEBUG_LIB)
 	$(CXX) $(CXXFLAGS) -DDEBUG -g core/test/main.cpp -Lbuild -lchc_core_debug -o build/core_debug
 
 core_debug_fast: $(CORE_DEBUG_FAST_LIB)
-	$(CXX) $(CXXFLAGS) -DDEBUG -O3 core/test/main.cpp -Lbuild -lchc_core_debug_fast -o build/core_debug
+	$(CXX) $(CXXFLAGS) -DDEBUG -O3 core/test/main.cpp -Lbuild -lchc_core_debug_fast -o build/core_debug_fast
 
 # Parser targets use recursive make: the dependency graph is resolved statically
 # at startup, before codegen has produced the .cpp files.  Phase 1 runs ANTLR4;
@@ -89,7 +89,7 @@ parser_debug_fast:
 	    parser/test/main.cpp \
 	    -Lbuild -lchc_parser_debug_fast \
 	    -L$(ANTLR4_LIB) -lantlr4-runtime \
-	    -o build/parser_debug
+	    -o build/parser_debug_fast
 
 clean:
 	rm -rf build
