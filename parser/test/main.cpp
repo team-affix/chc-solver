@@ -5,6 +5,7 @@
 #include "../hpp/expr_visitor.hpp"
 #include "../hpp/clause_visitor.hpp"
 #include "../hpp/database_visitor.hpp"
+#include "../hpp/import_database_from_file.hpp"
 
 // Lightweight parse/lex helpers — return true iff the input matches.
 static bool lexes_atom(const std::string& s) {
@@ -547,6 +548,77 @@ void test_database_visitor_visitDatabase() {
     assert(rules[1].body[0] == pool.cons(pool.atom("base"), pool.cons(x1, pool.atom("nil"))));
 }
 
+void test_import_database_from_file_facts() {
+    trail t;
+    expr_pool pool(t);
+    sequencer seq(t);
+
+    database db = import_database_from_file("parser/fixtures/facts.chc", pool, seq);
+    assert(db.size() == 3);
+
+    // All three are facts (empty body).
+    for (const auto& r : db)
+        assert(r.body.empty());
+
+    // Each head is (base N) — cons(atom("base"), cons(atom(N), nil)).
+    assert(db[0].head == pool.cons(pool.atom("base"), pool.cons(pool.atom("0"), pool.atom("nil"))));
+    assert(db[1].head == pool.cons(pool.atom("base"), pool.cons(pool.atom("1"), pool.atom("nil"))));
+    assert(db[2].head == pool.cons(pool.atom("base"), pool.cons(pool.atom("2"), pool.atom("nil"))));
+}
+
+void test_import_database_from_file_rules() {
+    trail t;
+    expr_pool pool(t);
+    sequencer seq(t);
+
+    database db = import_database_from_file("parser/fixtures/rules.chc", pool, seq);
+    assert(db.size() == 2);
+
+    // Both clauses are rules (non-empty body).
+    assert(db[0].body.size() == 2);
+    assert(db[1].body.size() == 2);
+
+    // Head functors: step in both clauses.
+    // Head of clause 0: (step X Y) — right-fold visits Y first (idx 0), X next (idx 1).
+    const expr* x0 = pool.var(1);
+    const expr* y0 = pool.var(0);
+    assert(db[0].head == pool.cons(pool.atom("step"),
+                         pool.cons(x0, pool.cons(y0, pool.atom("nil")))));
+
+    // Body[0] of clause 0: (base X) — X already mapped to idx 1.
+    assert(db[0].body[0] == pool.cons(pool.atom("base"), pool.cons(x0, pool.atom("nil"))));
+
+    // Body[1] of clause 0: (next X Y) — X=1, Y=0.
+    assert(db[0].body[1] == pool.cons(pool.atom("next"),
+                            pool.cons(x0, pool.cons(y0, pool.atom("nil")))));
+}
+
+void test_import_database_from_file_mixed() {
+    trail t;
+    expr_pool pool(t);
+    sequencer seq(t);
+
+    database db = import_database_from_file("parser/fixtures/mixed.chc", pool, seq);
+    assert(db.size() == 5);
+
+    // First three clauses are facts.
+    assert(db[0].body.empty());
+    assert(db[1].body.empty());
+    assert(db[2].body.empty());
+
+    // Last two clauses are rules.
+    assert(db[3].body.size() == 2);
+    assert(db[4].body.size() == 2);
+}
+
+void test_import_database_from_file_bad_path() {
+    trail t;
+    expr_pool pool(t);
+    sequencer seq(t);
+
+    assert_throws(import_database_from_file("parser/fixtures/nonexistent.chc", pool, seq), const std::runtime_error&);
+}
+
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
 
@@ -572,6 +644,10 @@ void unit_test_main() {
     TEST(test_clause_visitor_visitClause_rule);
     TEST(test_clause_visitor_visitClause_varScope);
     TEST(test_database_visitor_visitDatabase);
+    TEST(test_import_database_from_file_facts);
+    TEST(test_import_database_from_file_rules);
+    TEST(test_import_database_from_file_mixed);
+    TEST(test_import_database_from_file_bad_path);
 }
 
 int main() {
