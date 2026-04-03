@@ -3,6 +3,7 @@
 #include "../generated/CHCParser.h"
 #include "../generated/CHCBaseVisitor.h"
 #include "../hpp/expr_visitor.hpp"
+#include "../hpp/clause_visitor.hpp"
 
 struct TestVisitor : public CHCBaseVisitor {
     int clause_count = 0;
@@ -265,6 +266,96 @@ void test_expr_visitor_visitVar_discard_inList() {
     assert(var_map.find("_") == var_map.end());
 }
 
+// Helper: parse a string as a clause (trailing period required by grammar).
+static CHCParser::ClauseContext* parse_clause(antlr4::ANTLRInputStream& stream,
+                                              antlr4::CommonTokenStream& tokens,
+                                              CHCLexer& lexer,
+                                              CHCParser& parser) {
+    (void)stream; (void)tokens; (void)lexer;
+    auto* ctx = parser.clause();
+    assert(parser.getNumberOfSyntaxErrors() == 0);
+    return ctx;
+}
+
+void test_clause_visitor_visitClause_fact() {
+    trail t;
+    expr_pool pool(t);
+    sequencer seq(t);
+    clause_visitor cv(pool, seq);
+
+    // "(p X Y)." is a fact — head present, body empty.
+    std::string input = "(p X Y).";
+    antlr4::ANTLRInputStream stream(input);
+    CHCLexer lexer(&stream);
+    antlr4::CommonTokenStream tokens(&lexer);
+    CHCParser parser(&tokens);
+
+    rule r = std::any_cast<rule>(cv.visitClause(parse_clause(stream, tokens, lexer, parser)));
+    assert(r.body.empty());
+    // head = cons(p, cons(X, cons(Y, nil))) — extract X and Y from the structure.
+    auto& outer = std::get<expr::cons>(r.head->content);
+    assert(outer.lhs == pool.atom("p"));
+    auto& mid   = std::get<expr::cons>(outer.rhs->content);
+    auto& inner = std::get<expr::cons>(mid.rhs->content);
+    assert(mid.lhs != inner.lhs);           // X and Y are distinct vars
+    assert(inner.rhs == pool.atom("nil"));
+}
+
+void test_clause_visitor_visitClause_rule() {
+    trail t;
+    expr_pool pool(t);
+    sequencer seq(t);
+    clause_visitor cv(pool, seq);
+
+    // "(p X) :- (q X), (r X)." — X is shared across head and both body atoms.
+    std::string input = "(p X) :- (q X), (r X).";
+    antlr4::ANTLRInputStream stream(input);
+    CHCLexer lexer(&stream);
+    antlr4::CommonTokenStream tokens(&lexer);
+    CHCParser parser(&tokens);
+
+    rule r = std::any_cast<rule>(cv.visitClause(parse_clause(stream, tokens, lexer, parser)));
+    // Extract X from head: cons(p, cons(X, nil))
+    const expr* x = std::get<expr::cons>(
+                    std::get<expr::cons>(r.head->content).rhs->content).lhs;
+    assert(r.head == pool.cons(pool.atom("p"), pool.cons(x, pool.atom("nil"))));
+    assert(r.body.size() == 2);
+    assert(r.body[0] == pool.cons(pool.atom("q"), pool.cons(x, pool.atom("nil"))));
+    assert(r.body[1] == pool.cons(pool.atom("r"), pool.cons(x, pool.atom("nil"))));
+}
+
+void test_clause_visitor_visitClause_varScope() {
+    trail t;
+    expr_pool pool(t);
+    sequencer seq(t);
+    clause_visitor cv(pool, seq);
+
+    // X in the first clause and X in the second must be distinct interned expr*.
+    const expr* x1;
+    const expr* x2;
+    {
+        std::string input = "(p X).";
+        antlr4::ANTLRInputStream stream(input);
+        CHCLexer lexer(&stream);
+        antlr4::CommonTokenStream tokens(&lexer);
+        CHCParser parser(&tokens);
+        rule r = std::any_cast<rule>(cv.visitClause(parse_clause(stream, tokens, lexer, parser)));
+        x1 = std::get<expr::cons>(
+             std::get<expr::cons>(r.head->content).rhs->content).lhs;
+    }
+    {
+        std::string input = "(p X).";
+        antlr4::ANTLRInputStream stream(input);
+        CHCLexer lexer(&stream);
+        antlr4::CommonTokenStream tokens(&lexer);
+        CHCParser parser(&tokens);
+        rule r = std::any_cast<rule>(cv.visitClause(parse_clause(stream, tokens, lexer, parser)));
+        x2 = std::get<expr::cons>(
+             std::get<expr::cons>(r.head->content).rhs->content).lhs;
+    }
+    assert(x1 != x2);
+}
+
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
 
@@ -279,6 +370,9 @@ void unit_test_main() {
     TEST(test_expr_visitor_visitVar_sharing);
     TEST(test_expr_visitor_visitVar_discard);
     TEST(test_expr_visitor_visitVar_discard_inList);
+    TEST(test_clause_visitor_visitClause_fact);
+    TEST(test_clause_visitor_visitClause_rule);
+    TEST(test_clause_visitor_visitClause_varScope);
 }
 
 int main() {
