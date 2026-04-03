@@ -119,6 +119,8 @@ void test_parse_cons() {
 }
 
 void test_parse_list() {
+    // Empty list — parses as nil
+    assert(parses_expr("()"));
     // Single-element list
     assert(parses_expr("(f x)"));
     // Multi-element list
@@ -260,6 +262,23 @@ void test_expr_visitor_visitCons() {
 
     const expr* result = std::any_cast<const expr*>(ev.visitExpr(ctx));
     assert(result == pool.cons(pool.atom("a"), pool.atom("b")));
+}
+
+void test_expr_visitor_visitList_empty() {
+    trail t;
+    expr_pool pool(t);
+    sequencer seq(t);
+    std::map<std::string, uint32_t> var_map;
+    expr_visitor ev(pool, seq, var_map);
+
+    std::string input = "()";
+    antlr4::ANTLRInputStream stream(input);
+    CHCLexer lexer(&stream);
+    antlr4::CommonTokenStream tokens(&lexer);
+    CHCParser parser(&tokens);
+    auto* ctx = first_expr(stream, tokens, lexer, parser);
+
+    assert(std::any_cast<const expr*>(ev.visitExpr(ctx)) == pool.atom("nil"));
 }
 
 void test_expr_visitor_visitList() {
@@ -541,6 +560,7 @@ void unit_test_main() {
     TEST(test_expr_visitor_visitAtom);
     TEST(test_expr_visitor_visitVar);
     TEST(test_expr_visitor_visitCons);
+    TEST(test_expr_visitor_visitList_empty);
     TEST(test_expr_visitor_visitList);
     TEST(test_expr_visitor_visitCons_nested);
     TEST(test_expr_visitor_visitList_withVars);

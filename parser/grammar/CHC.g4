@@ -17,7 +17,7 @@ expr
     : ATOM
     | VARIABLE
     | '(' expr '.' expr ')'
-    | '(' expr+ ')'
+    | '(' expr* ')'
     ;
 
 ATOM     : [a-z][a-zA-Z0-9_]*

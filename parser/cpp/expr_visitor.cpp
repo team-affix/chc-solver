@@ -10,9 +10,9 @@ antlrcpp::Any expr_visitor::visitExpr(CHCParser::ExprContext* ctx) {
     if (auto* var = ctx->VARIABLE())
         return visitVar(var);
 
-    // Parenthesized form: children are ( expr+ ) or ( expr . expr ).
+    // Parenthesized form: children are ( expr* ) or ( expr . expr ).
     auto exprs = ctx->expr();
-    if (ctx->children[2]->getText() == ".")
+    if (exprs.size() == 2 && ctx->children[2]->getText() == ".")
         return visitCons(exprs);
 
     return visitList(exprs);
