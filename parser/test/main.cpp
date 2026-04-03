@@ -4,6 +4,7 @@
 #include "../generated/CHCBaseVisitor.h"
 #include "../hpp/expr_visitor.hpp"
 #include "../hpp/clause_visitor.hpp"
+#include "../hpp/database_visitor.hpp"
 
 struct TestVisitor : public CHCBaseVisitor {
     int clause_count = 0;
@@ -349,6 +350,35 @@ void test_clause_visitor_visitClause_varScope() {
     assert(pool.var(0) != pool.var(1));
 }
 
+void test_database_visitor_visitDatabase() {
+    trail t;
+    expr_pool pool(t);
+    sequencer seq(t);
+    database_visitor dv(pool, seq);
+
+    // Two clauses: a fact and a rule. Variables are clause-scoped so each X
+    // gets a fresh index: X in clause 1 → 0, X in clause 2 → 1.
+    std::string input = "(base X). (step X) :- (base X).";
+    antlr4::ANTLRInputStream stream(input);
+    CHCLexer lexer(&stream);
+    antlr4::CommonTokenStream tokens(&lexer);
+    CHCParser parser(&tokens);
+
+    auto rules = std::any_cast<std::vector<rule>>(dv.visitDatabase(parser.database()));
+    assert(rules.size() == 2);
+
+    // Clause 1: "(base X)." — fact, X gets index 0.
+    const expr* x0 = pool.var(0);
+    assert(rules[0].head == pool.cons(pool.atom("base"), pool.cons(x0, pool.atom("nil"))));
+    assert(rules[0].body.empty());
+
+    // Clause 2: "(step X) :- (base X)." — rule, X gets index 1.
+    const expr* x1 = pool.var(1);
+    assert(rules[1].head == pool.cons(pool.atom("step"), pool.cons(x1, pool.atom("nil"))));
+    assert(rules[1].body.size() == 1);
+    assert(rules[1].body[0] == pool.cons(pool.atom("base"), pool.cons(x1, pool.atom("nil"))));
+}
+
 void unit_test_main() {
     constexpr bool ENABLE_DEBUG_LOGS = true;
 
@@ -366,6 +396,7 @@ void unit_test_main() {
     TEST(test_clause_visitor_visitClause_fact);
     TEST(test_clause_visitor_visitClause_rule);
     TEST(test_clause_visitor_visitClause_varScope);
+    TEST(test_database_visitor_visitDatabase);
 }
 
 int main() {
