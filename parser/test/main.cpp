@@ -517,42 +517,6 @@ void test_body_visitor_varSharing() {
     assert(body[1] == pool.cons(pool.atom("g"), pool.cons(y, pool.cons(z, pool.atom("nil")))));
 }
 
-void test_import_goals_from_string_single() {
-    trail t;
-    expr_pool pool(t);
-    sequencer seq(t);
-
-    auto [gl, var_map] = import_goals_from_string("(reach 0 2)", pool, seq);
-    assert(gl.size() == 1);
-    assert(gl[0] == pool.cons(pool.atom("reach"),
-                   pool.cons(pool.atom("0"),
-                   pool.cons(pool.atom("2"), pool.atom("nil")))));
-    assert(var_map.empty());
-}
-
-void test_import_goals_from_string_multiple() {
-    trail t;
-    expr_pool pool(t);
-    sequencer seq(t);
-
-    auto [gl, var_map] = import_goals_from_string("(p X), (q X)", pool, seq);
-    assert(gl.size() == 2);
-
-    // Right-fold of (p X): X → idx 0.
-    const expr* x = pool.var(0);
-    assert(gl[0] == pool.cons(pool.atom("p"), pool.cons(x, pool.atom("nil"))));
-    assert(gl[1] == pool.cons(pool.atom("q"), pool.cons(x, pool.atom("nil"))));
-    assert(var_map.at("X") == 0);
-}
-
-void test_import_goals_from_string_bad() {
-    trail t;
-    expr_pool pool(t);
-    sequencer seq(t);
-
-    assert_throws(import_goals_from_string(":-", pool, seq), const std::runtime_error&);
-}
-
 // Helper: parse a string as a clause (trailing period required by grammar).
 static CHCParser::ClauseContext* parse_clause(antlr4::ANTLRInputStream& stream,
                                               antlr4::CommonTokenStream& tokens,
@@ -665,6 +629,42 @@ void test_database_visitor_visitDatabase() {
     assert(rules[1].body[0] == pool.cons(pool.atom("base"), pool.cons(x1, pool.atom("nil"))));
 }
 
+void test_import_goals_from_string_single() {
+    trail t;
+    expr_pool pool(t);
+    sequencer seq(t);
+
+    auto [gl, var_map] = import_goals_from_string("(reach 0 2)", pool, seq);
+    assert(gl.size() == 1);
+    assert(gl[0] == pool.cons(pool.atom("reach"),
+                   pool.cons(pool.atom("0"),
+                   pool.cons(pool.atom("2"), pool.atom("nil")))));
+    assert(var_map.empty());
+}
+
+void test_import_goals_from_string_multiple() {
+    trail t;
+    expr_pool pool(t);
+    sequencer seq(t);
+
+    auto [gl, var_map] = import_goals_from_string("(p X), (q X)", pool, seq);
+    assert(gl.size() == 2);
+
+    // Right-fold of (p X): X → idx 0.
+    const expr* x = pool.var(0);
+    assert(gl[0] == pool.cons(pool.atom("p"), pool.cons(x, pool.atom("nil"))));
+    assert(gl[1] == pool.cons(pool.atom("q"), pool.cons(x, pool.atom("nil"))));
+    assert(var_map.at("X") == 0);
+}
+
+void test_import_goals_from_string_bad() {
+    trail t;
+    expr_pool pool(t);
+    sequencer seq(t);
+
+    assert_throws(import_goals_from_string(":-", pool, seq), const std::runtime_error&);
+}
+
 void test_import_database_from_file_facts() {
     trail t;
     expr_pool pool(t);
@@ -760,13 +760,13 @@ void unit_test_main() {
     TEST(test_body_visitor_single_atom);
     TEST(test_body_visitor_multiple);
     TEST(test_body_visitor_varSharing);
-    TEST(test_import_goals_from_string_single);
-    TEST(test_import_goals_from_string_multiple);
-    TEST(test_import_goals_from_string_bad);
     TEST(test_clause_visitor_visitClause_fact);
     TEST(test_clause_visitor_visitClause_rule);
     TEST(test_clause_visitor_visitClause_varScope);
     TEST(test_database_visitor_visitDatabase);
+    TEST(test_import_goals_from_string_single);
+    TEST(test_import_goals_from_string_multiple);
+    TEST(test_import_goals_from_string_bad);
     TEST(test_import_database_from_file_facts);
     TEST(test_import_database_from_file_rules);
     TEST(test_import_database_from_file_mixed);
