@@ -3,3 +3,4 @@ a01_main
 build/
 parser/generated
 tools/
+bin
