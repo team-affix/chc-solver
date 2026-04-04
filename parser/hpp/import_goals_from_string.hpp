@@ -10,7 +10,7 @@
 
 struct parsed_goals {
     goals gl;
-    std::map<std::string, uint32_t> var_map;
+    std::map<uint32_t, std::string> var_names;
 };
 
 parsed_goals import_goals_from_string(const std::string& body, expr_pool&, sequencer&);

@@ -11947,6 +11947,386 @@ struct int_frontier : frontier<int> {
     }
 };
 
+void test_expr_printer_constructor() {
+    // Test 1: Construct with std::cout - reference is stored correctly
+    {
+        expr_printer ep(std::cout);
+        assert(&ep.os == &std::cout);
+    }
+
+    // Test 2: Construct with std::cerr - different stream, different reference
+    {
+        expr_printer ep(std::cerr);
+        assert(&ep.os == &std::cerr);
+    }
+
+    // Test 3: Construct with a stringstream - reference is to the local stream
+    {
+        std::ostringstream oss;
+        expr_printer ep(oss);
+        assert(&ep.os == &oss);
+    }
+
+    // Test 4: Two printers bound to the same stream share the same reference
+    {
+        std::ostringstream oss;
+        expr_printer ep1(oss);
+        expr_printer ep2(oss);
+        assert(&ep1.os == &ep2.os);
+    }
+
+    // Test 5: var_names map is copy-constructed into the member
+    {
+        std::ostringstream oss;
+        std::map<uint32_t, std::string> var_names = {{0, "X"}, {1, "Y"}};
+        expr_printer ep(oss, var_names);
+        assert(ep.var_names == var_names);
+    }
+
+    // Test 6: default argument gives an empty var_names map
+    {
+        std::ostringstream oss;
+        expr_printer ep(oss);
+        assert(ep.var_names.empty());
+    }
+}
+
+void test_expr_printer() {
+    // Test 1: Print an atom
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        const expr* e = pool.atom("hello");
+        std::ostringstream oss;
+        expr_printer ep(oss);
+        ep(e);
+        assert(oss.str() == "hello");
+        t.pop();
+    }
+
+    // Test 2: Print an empty-string atom
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        const expr* e = pool.atom("");
+        std::ostringstream oss;
+        expr_printer ep(oss);
+        ep(e);
+        assert(oss.str() == "");
+        t.pop();
+    }
+
+    // Test 3: Print a var
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        const expr* e = pool.var(0);
+        std::ostringstream oss;
+        expr_printer ep(oss);
+        ep(e);
+        assert(oss.str() == "?0");
+        t.pop();
+    }
+
+    // Test 4: Print a var with a larger index
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        const expr* e = pool.var(42);
+        std::ostringstream oss;
+        expr_printer ep(oss);
+        ep(e);
+        assert(oss.str() == "?42");
+        t.pop();
+    }
+
+    // Test 5: Print a flat cons cell
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        const expr* e = pool.cons(pool.atom("a"), pool.atom("b"));
+        std::ostringstream oss;
+        expr_printer ep(oss);
+        ep(e);
+        assert(oss.str() == "(a . b)");
+        t.pop();
+    }
+
+    // Test 6: Print a nested cons — left-heavy
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        const expr* inner = pool.cons(pool.atom("f"), pool.atom("x"));
+        const expr* outer = pool.cons(inner, pool.atom("y"));
+        std::ostringstream oss;
+        expr_printer ep(oss);
+        ep(outer);
+        assert(oss.str() == "((f . x) . y)");
+        t.pop();
+    }
+
+    // Test 7: Print a nested cons — right-heavy
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        const expr* inner = pool.cons(pool.atom("x"), pool.atom("y"));
+        const expr* outer = pool.cons(pool.atom("f"), inner);
+        std::ostringstream oss;
+        expr_printer ep(oss);
+        ep(outer);
+        assert(oss.str() == "(f . (x . y))");
+        t.pop();
+    }
+
+    // Test 8: Print a cons containing a var
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        const expr* e = pool.cons(pool.atom("f"), pool.var(3));
+        std::ostringstream oss;
+        expr_printer ep(oss);
+        ep(e);
+        assert(oss.str() == "(f . ?3)");
+        t.pop();
+    }
+
+    // Test 9: Print the same expression twice into the same stream — output concatenates
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        const expr* e = pool.atom("x");
+        std::ostringstream oss;
+        expr_printer ep(oss);
+        ep(e);
+        ep(e);
+        assert(oss.str() == "xx");
+        t.pop();
+    }
+
+    // Test 10: Two separate printers on separate streams produce independent output
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        const expr* a = pool.atom("a");
+        const expr* b = pool.atom("b");
+        std::ostringstream oss1, oss2;
+        expr_printer ep1(oss1);
+        expr_printer ep2(oss2);
+        ep1(a);
+        ep2(b);
+        assert(oss1.str() == "a");
+        assert(oss2.str() == "b");
+        t.pop();
+    }
+
+    // Test 11: Deep nesting — Peano numeral suc(suc(suc(zero)))
+    // Encoded as cons(atom("suc"), cons(atom("suc"), cons(atom("suc"), atom("zero"))))
+    // Expected: (suc . (suc . (suc . zero)))
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        const expr* e = pool.cons(pool.atom("suc"),
+                        pool.cons(pool.atom("suc"),
+                        pool.cons(pool.atom("suc"), pool.atom("zero"))));
+        std::ostringstream oss;
+        expr_printer ep(oss);
+        ep(e);
+        assert(oss.str() == "(suc . (suc . (suc . zero)))");
+        t.pop();
+    }
+
+    // Test 12: Named var is printed by name, not by index
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        std::map<uint32_t, std::string> var_names = {{0, "X"}};
+        std::ostringstream oss;
+        expr_printer ep(oss, var_names);
+        ep(pool.var(0));
+        assert(oss.str() == "X");
+        t.pop();
+    }
+
+    // Test 13: Two distinct named vars each print their own name
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        std::map<uint32_t, std::string> var_names = {{0, "X"}, {1, "Y"}};
+        std::ostringstream oss;
+        expr_printer ep(oss, var_names);
+        ep(pool.var(0));
+        oss << ",";
+        ep(pool.var(1));
+        assert(oss.str() == "X,Y");
+        t.pop();
+    }
+
+    // Test 14: Var whose index is not in the map falls back to ?<index>
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        std::map<uint32_t, std::string> var_names = {{0, "X"}};
+        std::ostringstream oss;
+        expr_printer ep(oss, var_names);
+        ep(pool.var(5));
+        assert(oss.str() == "?5");
+        t.pop();
+    }
+
+    // Test 15: Empty var_names map — all vars fall back to ?<index>
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        std::ostringstream oss;
+        expr_printer ep(oss, {});
+        ep(pool.var(7));
+        assert(oss.str() == "?7");
+        t.pop();
+    }
+
+    // Test 16: Named var in cons — lhs named, rhs unnamed
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        std::map<uint32_t, std::string> var_names = {{0, "Head"}};
+        std::ostringstream oss;
+        expr_printer ep(oss, var_names);
+        ep(pool.cons(pool.var(0), pool.var(99)));
+        assert(oss.str() == "(Head . ?99)");
+        t.pop();
+    }
+
+    // Test 17: Named vars mixed with atoms in nested structure: (f . (X . Y))
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        std::map<uint32_t, std::string> var_names = {{0, "X"}, {1, "Y"}};
+        std::ostringstream oss;
+        expr_printer ep(oss, var_names);
+        ep(pool.cons(pool.atom("f"), pool.cons(pool.var(0), pool.var(1))));
+        assert(oss.str() == "(f . (X . Y))");
+        t.pop();
+    }
+
+    // Test 18: X unified with Y — normalised X prints as "Y"
+    {
+        trail t;
+        expr_pool pool(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        t.push();
+        const expr* x = pool.var(seq()); // 0
+        const expr* y = pool.var(seq()); // 1
+        std::map<uint32_t, std::string> var_names = {{0, "X"}, {1, "Y"}};
+        bm.unify(x, y);
+        normalizer norm(pool, bm);
+        std::ostringstream oss;
+        expr_printer ep(oss, var_names);
+        ep(norm(x));
+        assert(oss.str() == "Y");
+        t.pop();
+    }
+
+    // Test 19: Y unified with X — result is a known name, not a raw index
+    {
+        trail t;
+        expr_pool pool(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        t.push();
+        const expr* x = pool.var(seq()); // 0
+        const expr* y = pool.var(seq()); // 1
+        std::map<uint32_t, std::string> var_names = {{0, "X"}, {1, "Y"}};
+        bm.unify(y, x);
+        normalizer norm(pool, bm);
+        std::ostringstream oss;
+        expr_printer ep(oss, var_names);
+        ep(norm(y));
+        assert(oss.str() == "X" || oss.str() == "Y");
+        t.pop();
+    }
+
+    // Test 20: Var chain resolves to atom — atom printed directly
+    {
+        trail t;
+        expr_pool pool(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        t.push();
+        const expr* x = pool.var(seq()); // 0
+        const expr* y = pool.var(seq()); // 1
+        std::map<uint32_t, std::string> var_names = {{0, "X"}, {1, "Y"}};
+        bm.unify(x, y);
+        bm.unify(y, pool.atom("foo"));
+        normalizer norm(pool, bm);
+        std::ostringstream oss;
+        expr_printer ep(oss, var_names);
+        ep(norm(x));
+        assert(oss.str() == "foo");
+        t.pop();
+    }
+
+    // Test 21: Free var prints by name
+    {
+        trail t;
+        expr_pool pool(t);
+        sequencer seq(t);
+        bind_map bm(t);
+        t.push();
+        const expr* x = pool.var(seq()); // 0
+        std::map<uint32_t, std::string> var_names = {{0, "X"}};
+        normalizer norm(pool, bm);
+        std::ostringstream oss;
+        expr_printer ep(oss, var_names);
+        ep(norm(x));
+        assert(oss.str() == "X");
+        t.pop();
+    }
+
+    // Test 22: Same var appearing multiple times — (X . X)
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        std::map<uint32_t, std::string> var_names = {{0, "X"}};
+        const expr* xv = pool.var(0);
+        std::ostringstream oss;
+        expr_printer ep(oss, var_names);
+        ep(pool.cons(xv, xv));
+        assert(oss.str() == "(X . X)");
+        t.pop();
+    }
+
+    // Test 23: Deeply nested named vars — (X . (Y . (Z . nil)))
+    {
+        trail t;
+        expr_pool pool(t);
+        t.push();
+        std::map<uint32_t, std::string> var_names = {{0, "X"}, {1, "Y"}, {2, "Z"}};
+        std::ostringstream oss;
+        expr_printer ep(oss, var_names);
+        ep(pool.cons(pool.var(0), pool.cons(pool.var(1), pool.cons(pool.var(2), pool.atom("nil")))));
+        assert(oss.str() == "(X . (Y . (Z . nil)))");
+        t.pop();
+    }
+}
 void test_frontier_constructor() {
     // Test 1: empty database and fresh pool - db and lp refs stored, members empty
     {
@@ -28801,190 +29181,6 @@ void test_ridge() {
     }
 }
 
-void test_expr_printer_constructor() {
-    // Test 1: Construct with std::cout - reference is stored correctly
-    {
-        expr_printer ep(std::cout);
-        assert(&ep.os == &std::cout);
-    }
-
-    // Test 2: Construct with std::cerr - different stream, different reference
-    {
-        expr_printer ep(std::cerr);
-        assert(&ep.os == &std::cerr);
-    }
-
-    // Test 3: Construct with a stringstream - reference is to the local stream
-    {
-        std::ostringstream oss;
-        expr_printer ep(oss);
-        assert(&ep.os == &oss);
-    }
-
-    // Test 4: Two printers bound to the same stream share the same reference
-    {
-        std::ostringstream oss;
-        expr_printer ep1(oss);
-        expr_printer ep2(oss);
-        assert(&ep1.os == &ep2.os);
-    }
-}
-
-void test_expr_printer() {
-    // Test 1: Print an atom
-    {
-        trail t;
-        expr_pool pool(t);
-        t.push();
-        const expr* e = pool.atom("hello");
-        std::ostringstream oss;
-        expr_printer ep(oss);
-        ep(e);
-        assert(oss.str() == "hello");
-        t.pop();
-    }
-
-    // Test 2: Print an empty-string atom
-    {
-        trail t;
-        expr_pool pool(t);
-        t.push();
-        const expr* e = pool.atom("");
-        std::ostringstream oss;
-        expr_printer ep(oss);
-        ep(e);
-        assert(oss.str() == "");
-        t.pop();
-    }
-
-    // Test 3: Print a var
-    {
-        trail t;
-        expr_pool pool(t);
-        t.push();
-        const expr* e = pool.var(0);
-        std::ostringstream oss;
-        expr_printer ep(oss);
-        ep(e);
-        assert(oss.str() == "?0");
-        t.pop();
-    }
-
-    // Test 4: Print a var with a larger index
-    {
-        trail t;
-        expr_pool pool(t);
-        t.push();
-        const expr* e = pool.var(42);
-        std::ostringstream oss;
-        expr_printer ep(oss);
-        ep(e);
-        assert(oss.str() == "?42");
-        t.pop();
-    }
-
-    // Test 5: Print a flat cons cell
-    {
-        trail t;
-        expr_pool pool(t);
-        t.push();
-        const expr* e = pool.cons(pool.atom("a"), pool.atom("b"));
-        std::ostringstream oss;
-        expr_printer ep(oss);
-        ep(e);
-        assert(oss.str() == "(a . b)");
-        t.pop();
-    }
-
-    // Test 6: Print a nested cons — left-heavy
-    {
-        trail t;
-        expr_pool pool(t);
-        t.push();
-        const expr* inner = pool.cons(pool.atom("f"), pool.atom("x"));
-        const expr* outer = pool.cons(inner, pool.atom("y"));
-        std::ostringstream oss;
-        expr_printer ep(oss);
-        ep(outer);
-        assert(oss.str() == "((f . x) . y)");
-        t.pop();
-    }
-
-    // Test 7: Print a nested cons — right-heavy
-    {
-        trail t;
-        expr_pool pool(t);
-        t.push();
-        const expr* inner = pool.cons(pool.atom("x"), pool.atom("y"));
-        const expr* outer = pool.cons(pool.atom("f"), inner);
-        std::ostringstream oss;
-        expr_printer ep(oss);
-        ep(outer);
-        assert(oss.str() == "(f . (x . y))");
-        t.pop();
-    }
-
-    // Test 8: Print a cons containing a var
-    {
-        trail t;
-        expr_pool pool(t);
-        t.push();
-        const expr* e = pool.cons(pool.atom("f"), pool.var(3));
-        std::ostringstream oss;
-        expr_printer ep(oss);
-        ep(e);
-        assert(oss.str() == "(f . ?3)");
-        t.pop();
-    }
-
-    // Test 9: Print the same expression twice into the same stream — output concatenates
-    {
-        trail t;
-        expr_pool pool(t);
-        t.push();
-        const expr* e = pool.atom("x");
-        std::ostringstream oss;
-        expr_printer ep(oss);
-        ep(e);
-        ep(e);
-        assert(oss.str() == "xx");
-        t.pop();
-    }
-
-    // Test 10: Two separate printers on separate streams produce independent output
-    {
-        trail t;
-        expr_pool pool(t);
-        t.push();
-        const expr* a = pool.atom("a");
-        const expr* b = pool.atom("b");
-        std::ostringstream oss1, oss2;
-        expr_printer ep1(oss1);
-        expr_printer ep2(oss2);
-        ep1(a);
-        ep2(b);
-        assert(oss1.str() == "a");
-        assert(oss2.str() == "b");
-        t.pop();
-    }
-
-    // Test 11: Deep nesting — Peano numeral suc(suc(suc(zero)))
-    // Encoded as cons(atom("suc"), cons(atom("suc"), cons(atom("suc"), atom("zero"))))
-    // Expected: (suc . (suc . (suc . zero)))
-    {
-        trail t;
-        expr_pool pool(t);
-        t.push();
-        const expr* e = pool.cons(pool.atom("suc"),
-                        pool.cons(pool.atom("suc"),
-                        pool.cons(pool.atom("suc"), pool.atom("zero"))));
-        std::ostringstream oss;
-        expr_printer ep(oss);
-        ep(e);
-        assert(oss.str() == "(suc . (suc . (suc . zero)))");
-        t.pop();
-    }
-}
 
 void unit_test_main() {
 
@@ -29022,6 +29218,8 @@ void unit_test_main() {
     TEST(test_copier);
     TEST(test_normalizer_constructor);
     TEST(test_normalizer);
+    TEST(test_expr_printer_constructor);
+    TEST(test_expr_printer);
     TEST(test_frontier_constructor);
     TEST(test_frontier_insert);
     TEST(test_frontier_empty);
@@ -29073,15 +29271,9 @@ void unit_test_main() {
     TEST(test_ridge_sim_one);
     TEST(test_ridge_next_avoidance);
     TEST(test_ridge);
-    TEST(test_expr_printer_constructor);
-    TEST(test_expr_printer);
 }
-
-#ifdef DEBUG
 
 int main() {
     unit_test_main();
     return 0;
 }
-
-#endif

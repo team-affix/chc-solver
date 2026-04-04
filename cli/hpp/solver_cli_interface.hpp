@@ -27,7 +27,7 @@ protected:
 
     database db;
     goals gl;
-    std::map<std::string, uint32_t> var_map;
+    std::map<uint32_t, std::string> var_names;
 };
 
 #endif

@@ -14,7 +14,7 @@ solver_cli_interface::solver_cli_interface(
 {
     auto [g, vm] = import_goals_from_string(goals_str, pool, seq);
     gl = std::move(g);
-    var_map = std::move(vm);
+    var_names = std::move(vm);
 }
 
 void solver_cli_interface::operator()() {
@@ -28,8 +28,8 @@ void solver_cli_interface::operator()() {
 }
 
 void solver_cli_interface::print_bindings() {
-    expr_printer print(std::cout);
-    for (const auto& [name, idx] : var_map) {
+    expr_printer print(std::cout, var_names);
+    for (const auto& [idx, name] : var_names) {
         std::cout << "  " << name << " = ";
         print(norm(pool.var(idx)));
         std::cout << "\n";

@@ -1,7 +1,8 @@
 #include "../hpp/expr_printer.hpp"
 
-expr_printer::expr_printer(std::ostream& os) : os(os) {
-}
+expr_printer::expr_printer(std::ostream& os, const std::map<uint32_t, std::string>& var_names)
+    : os(os), var_names(var_names)
+{}
 
 void expr_printer::operator()(const expr* e) const {
     if (const expr::atom* a = std::get_if<expr::atom>(&e->content)) {
@@ -10,7 +11,11 @@ void expr_printer::operator()(const expr* e) const {
     }
 
     if (const expr::var* v = std::get_if<expr::var>(&e->content)) {
-        os << "?" << v->index;
+        auto it = var_names.find(v->index);
+        if (it != var_names.end())
+            os << it->second;
+        else
+            os << "?" << v->index;
         return;
     }
 
