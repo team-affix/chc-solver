@@ -19,7 +19,6 @@ protected:
     virtual bool advance() = 0;
     void print_bindings();
 
-    // trail must be declared first — pool, seq, bm, norm are initialised from it
     trail t;
     expr_pool pool;
     sequencer seq;
@@ -33,7 +32,6 @@ private:
 
     std::map<std::string, uint32_t> var_name_to_idx;
     std::map<uint32_t, std::string> var_idx_to_name;
-    // printer holds a const& to var_idx_to_name — must be declared after it
     expr_printer printer;
 };
 
