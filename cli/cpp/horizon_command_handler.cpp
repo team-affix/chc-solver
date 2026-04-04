@@ -10,22 +10,24 @@
 #include "../../parser/hpp/import_database_from_file.hpp"
 #include "../../parser/hpp/import_goals_from_string.hpp"
 #include <iostream>
+#include <limits>
+#include <map>
 #include <random>
+
+static void print_bindings(const std::map<std::string, uint32_t>&, normalizer&, expr_pool&);
 
 horizon_command_handler::horizon_command_handler(
     const std::string& file,
     const std::string& goals_str,
     size_t max_resolutions,
     double exploration_constant,
-    uint64_t seed,
-    size_t steps
+    uint64_t seed
 ) :
     file(file),
     goals_str(goals_str),
     max_resolutions(max_resolutions),
     exploration_constant(exploration_constant),
-    seed(seed),
-    steps(steps)
+    seed(seed)
 {}
 
 void horizon_command_handler::operator()() {
@@ -41,17 +43,20 @@ void horizon_command_handler::operator()() {
     horizon solver(db, gl, t, seq, bm,
                    max_resolutions, exploration_constant, rng);
     std::optional<resolutions> res;
-    bool sat = solver(steps, res);
+    normalizer norm(pool, bm);
 
-    if (sat) {
-        normalizer norm(pool, bm);
-        expr_printer print(std::cout);
-        for (const auto& [name, idx] : var_map) {
-            std::cout << name << " = ";
-            print(norm(pool.var(idx)));
-            std::cout << "\n";
-        }
-    } else {
-        std::cout << "UNSAT\n";
+    while (solver(std::numeric_limits<size_t>::max(), res))
+        print_bindings(var_map, norm, pool);
+
+    std::cout << "REFUTED\n";
+}
+
+static void print_bindings(const std::map<std::string, uint32_t>& var_map,
+                           normalizer& norm, expr_pool& pool) {
+    expr_printer print(std::cout);
+    for (const auto& [name, idx] : var_map) {
+        std::cout << name << " = ";
+        print(norm(pool.var(idx)));
+        std::cout << "\n";
     }
 }

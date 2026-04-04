@@ -11,8 +11,7 @@ struct horizon_command_handler {
         const std::string& goals_str,
         size_t max_resolutions,
         double exploration_constant,
-        uint64_t seed,
-        size_t steps
+        uint64_t seed
     );
     void operator()();
 private:
@@ -21,7 +20,6 @@ private:
     size_t max_resolutions;
     double exploration_constant;
     uint64_t seed;
-    size_t steps;
 };
 
 #endif
