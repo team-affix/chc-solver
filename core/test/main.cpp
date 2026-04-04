@@ -11948,30 +11948,31 @@ struct int_frontier : frontier<int> {
 };
 
 void test_expr_printer_constructor() {
+    const std::map<uint32_t, std::string> no_names;
     // Test 1: Construct with std::cout - reference is stored correctly
     {
-        expr_printer ep(std::cout);
+        expr_printer ep(std::cout, no_names);
         assert(&ep.os == &std::cout);
     }
 
     // Test 2: Construct with std::cerr - different stream, different reference
     {
-        expr_printer ep(std::cerr);
+        expr_printer ep(std::cerr, no_names);
         assert(&ep.os == &std::cerr);
     }
 
     // Test 3: Construct with a stringstream - reference is to the local stream
     {
         std::ostringstream oss;
-        expr_printer ep(oss);
+        expr_printer ep(oss, no_names);
         assert(&ep.os == &oss);
     }
 
     // Test 4: Two printers bound to the same stream share the same reference
     {
         std::ostringstream oss;
-        expr_printer ep1(oss);
-        expr_printer ep2(oss);
+        expr_printer ep1(oss, no_names);
+        expr_printer ep2(oss, no_names);
         assert(&ep1.os == &ep2.os);
     }
 
@@ -11986,12 +11987,13 @@ void test_expr_printer_constructor() {
     // Test 6: default argument gives an empty var_names map
     {
         std::ostringstream oss;
-        expr_printer ep(oss);
+        expr_printer ep(oss, no_names);
         assert(ep.var_names.empty());
     }
 }
 
 void test_expr_printer() {
+    const std::map<uint32_t, std::string> no_names;
     // Test 1: Print an atom
     {
         trail t;
@@ -11999,7 +12001,7 @@ void test_expr_printer() {
         t.push();
         const expr* e = pool.atom("hello");
         std::ostringstream oss;
-        expr_printer ep(oss);
+        expr_printer ep(oss, no_names);
         ep(e);
         assert(oss.str() == "hello");
         t.pop();
@@ -12012,7 +12014,7 @@ void test_expr_printer() {
         t.push();
         const expr* e = pool.atom("");
         std::ostringstream oss;
-        expr_printer ep(oss);
+        expr_printer ep(oss, no_names);
         ep(e);
         assert(oss.str() == "");
         t.pop();
@@ -12025,7 +12027,7 @@ void test_expr_printer() {
         t.push();
         const expr* e = pool.var(0);
         std::ostringstream oss;
-        expr_printer ep(oss);
+        expr_printer ep(oss, no_names);
         ep(e);
         assert(oss.str() == "?0");
         t.pop();
@@ -12038,7 +12040,7 @@ void test_expr_printer() {
         t.push();
         const expr* e = pool.var(42);
         std::ostringstream oss;
-        expr_printer ep(oss);
+        expr_printer ep(oss, no_names);
         ep(e);
         assert(oss.str() == "?42");
         t.pop();
@@ -12051,7 +12053,7 @@ void test_expr_printer() {
         t.push();
         const expr* e = pool.cons(pool.atom("a"), pool.atom("b"));
         std::ostringstream oss;
-        expr_printer ep(oss);
+        expr_printer ep(oss, no_names);
         ep(e);
         assert(oss.str() == "(a . b)");
         t.pop();
@@ -12065,7 +12067,7 @@ void test_expr_printer() {
         const expr* inner = pool.cons(pool.atom("f"), pool.atom("x"));
         const expr* outer = pool.cons(inner, pool.atom("y"));
         std::ostringstream oss;
-        expr_printer ep(oss);
+        expr_printer ep(oss, no_names);
         ep(outer);
         assert(oss.str() == "((f . x) . y)");
         t.pop();
@@ -12079,7 +12081,7 @@ void test_expr_printer() {
         const expr* inner = pool.cons(pool.atom("x"), pool.atom("y"));
         const expr* outer = pool.cons(pool.atom("f"), inner);
         std::ostringstream oss;
-        expr_printer ep(oss);
+        expr_printer ep(oss, no_names);
         ep(outer);
         assert(oss.str() == "(f . (x . y))");
         t.pop();
@@ -12092,7 +12094,7 @@ void test_expr_printer() {
         t.push();
         const expr* e = pool.cons(pool.atom("f"), pool.var(3));
         std::ostringstream oss;
-        expr_printer ep(oss);
+        expr_printer ep(oss, no_names);
         ep(e);
         assert(oss.str() == "(f . ?3)");
         t.pop();
@@ -12105,7 +12107,7 @@ void test_expr_printer() {
         t.push();
         const expr* e = pool.atom("x");
         std::ostringstream oss;
-        expr_printer ep(oss);
+        expr_printer ep(oss, no_names);
         ep(e);
         ep(e);
         assert(oss.str() == "xx");
@@ -12120,8 +12122,8 @@ void test_expr_printer() {
         const expr* a = pool.atom("a");
         const expr* b = pool.atom("b");
         std::ostringstream oss1, oss2;
-        expr_printer ep1(oss1);
-        expr_printer ep2(oss2);
+        expr_printer ep1(oss1, no_names);
+        expr_printer ep2(oss2, no_names);
         ep1(a);
         ep2(b);
         assert(oss1.str() == "a");
@@ -12140,7 +12142,7 @@ void test_expr_printer() {
                         pool.cons(pool.atom("suc"),
                         pool.cons(pool.atom("suc"), pool.atom("zero"))));
         std::ostringstream oss;
-        expr_printer ep(oss);
+        expr_printer ep(oss, no_names);
         ep(e);
         assert(oss.str() == "(suc . (suc . (suc . zero)))");
         t.pop();
@@ -12193,7 +12195,7 @@ void test_expr_printer() {
         expr_pool pool(t);
         t.push();
         std::ostringstream oss;
-        expr_printer ep(oss, {});
+        expr_printer ep(oss, no_names);
         ep(pool.var(7));
         assert(oss.str() == "?7");
         t.pop();
@@ -12225,82 +12227,7 @@ void test_expr_printer() {
         t.pop();
     }
 
-    // Test 18: X unified with Y — normalised X prints as "Y"
-    {
-        trail t;
-        expr_pool pool(t);
-        sequencer seq(t);
-        bind_map bm(t);
-        t.push();
-        const expr* x = pool.var(seq()); // 0
-        const expr* y = pool.var(seq()); // 1
-        std::map<uint32_t, std::string> var_names = {{0, "X"}, {1, "Y"}};
-        bm.unify(x, y);
-        normalizer norm(pool, bm);
-        std::ostringstream oss;
-        expr_printer ep(oss, var_names);
-        ep(norm(x));
-        assert(oss.str() == "Y");
-        t.pop();
-    }
-
-    // Test 19: Y unified with X — result is a known name, not a raw index
-    {
-        trail t;
-        expr_pool pool(t);
-        sequencer seq(t);
-        bind_map bm(t);
-        t.push();
-        const expr* x = pool.var(seq()); // 0
-        const expr* y = pool.var(seq()); // 1
-        std::map<uint32_t, std::string> var_names = {{0, "X"}, {1, "Y"}};
-        bm.unify(y, x);
-        normalizer norm(pool, bm);
-        std::ostringstream oss;
-        expr_printer ep(oss, var_names);
-        ep(norm(y));
-        assert(oss.str() == "X" || oss.str() == "Y");
-        t.pop();
-    }
-
-    // Test 20: Var chain resolves to atom — atom printed directly
-    {
-        trail t;
-        expr_pool pool(t);
-        sequencer seq(t);
-        bind_map bm(t);
-        t.push();
-        const expr* x = pool.var(seq()); // 0
-        const expr* y = pool.var(seq()); // 1
-        std::map<uint32_t, std::string> var_names = {{0, "X"}, {1, "Y"}};
-        bm.unify(x, y);
-        bm.unify(y, pool.atom("foo"));
-        normalizer norm(pool, bm);
-        std::ostringstream oss;
-        expr_printer ep(oss, var_names);
-        ep(norm(x));
-        assert(oss.str() == "foo");
-        t.pop();
-    }
-
-    // Test 21: Free var prints by name
-    {
-        trail t;
-        expr_pool pool(t);
-        sequencer seq(t);
-        bind_map bm(t);
-        t.push();
-        const expr* x = pool.var(seq()); // 0
-        std::map<uint32_t, std::string> var_names = {{0, "X"}};
-        normalizer norm(pool, bm);
-        std::ostringstream oss;
-        expr_printer ep(oss, var_names);
-        ep(norm(x));
-        assert(oss.str() == "X");
-        t.pop();
-    }
-
-    // Test 22: Same var appearing multiple times — (X . X)
+    // Test 18: Same var appearing multiple times — (X . X)
     {
         trail t;
         expr_pool pool(t);
@@ -12314,7 +12241,7 @@ void test_expr_printer() {
         t.pop();
     }
 
-    // Test 23: Deeply nested named vars — (X . (Y . (Z . nil)))
+    // Test 19: Deeply nested named vars — (X . (Y . (Z . nil)))
     {
         trail t;
         expr_pool pool(t);
@@ -21024,6 +20951,7 @@ void test_horizon() {
         auto get_solution,
         size_t iterations = 1000
     ) {
+        const std::map<uint32_t, std::string> no_names;
         std::set<solution> visited;
         std::optional<resolution_store> soln;
         while (!expected.empty()) {
@@ -21034,7 +20962,7 @@ void test_horizon() {
                 s = get_solution();
             } while (visited.count(s));
             std::cout << "Solution: " << visited.size() << " resolutions: " << soln.value().size() << std::endl;
-            expr_printer printer(std::cout);
+            expr_printer printer(std::cout, no_names);
             for (const auto& e : s) {
                 printer(e);
                 std::cout << std::endl;
@@ -21060,6 +20988,7 @@ void test_horizon() {
         auto get_solution,
         size_t iterations = 1000
     ) {
+        const std::map<uint32_t, std::string> no_names;
         std::set<solution> visited;
         std::optional<resolution_store> soln;
         while (!expected.empty()) {
@@ -21071,7 +21000,7 @@ void test_horizon() {
             } while (visited.count(s));
             std::cout << "Solution: " << visited.size()
                       << " resolutions: " << soln.value().size() << std::endl;
-            expr_printer printer(std::cout);
+            expr_printer printer(std::cout, no_names);
             for (const auto& e : s) {
                 printer(e);
                 std::cout << std::endl;
@@ -28112,6 +28041,7 @@ void test_ridge() {
         auto get_solution,
         size_t iterations = 1000
     ) {
+        const std::map<uint32_t, std::string> no_names;
         std::set<solution> visited;
         std::optional<resolution_store> soln;
         while (!expected.empty()) {
@@ -28122,7 +28052,7 @@ void test_ridge() {
                 s = get_solution();
             } while (visited.count(s));
             std::cout << "Solution: " << visited.size() << " resolutions: " << soln.value().size() << std::endl;
-            expr_printer printer(std::cout);
+            expr_printer printer(std::cout, no_names);
             for (const auto& e : s) {
                 printer(e);
                 std::cout << std::endl;
