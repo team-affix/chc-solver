@@ -6,6 +6,9 @@ sequencer::sequencer(trail& trail_ref)
 }
 
 uint32_t sequencer::operator()() {
-    trail_ref.log([this]{--index;});
+    trail_ref.log(
+        [this]{--index;},
+        [this]{++index;}
+    );
     return index++;
 }

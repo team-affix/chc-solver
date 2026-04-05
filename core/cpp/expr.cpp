@@ -1,4 +1,5 @@
 #include <stdexcept>
+#include <memory>
 #include "../hpp/expr.hpp"
 
 expr_pool::expr_pool(trail& t) : trail_ref(t) {
@@ -36,6 +37,12 @@ size_t expr_pool::size() const {
 
 const expr* expr_pool::intern(expr&& e) {
     auto [it, inserted] = exprs.insert(std::move(e));
-    if (inserted) trail_ref.log([this, it]() { exprs.erase(it); });
+    if (inserted) {
+        auto node = std::make_shared<std::set<expr>::node_type>();
+        trail_ref.log(
+            [this, node, val = *it] { *node = exprs.extract(val); },
+            [this, node]{ exprs.insert(std::move(*node)); }
+        );
+    }
     return &*it;
 }

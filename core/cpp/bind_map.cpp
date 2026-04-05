@@ -101,8 +101,13 @@ void bind_map::bind(uint32_t index, const expr* value) {
 
     if (it == bindings.end()) {
         // if the value is not found, insert it
-        trail_ref.log([this, index]{bindings.erase(index);});
         it = bindings.insert({index, value}).first;
+
+        // log the insertion
+        trail_ref.log(
+            [this, index]{bindings.erase(index);},
+            [this, index, value]{bindings.insert({index, value});}
+        );
     }
     else {
         // Get the old value
@@ -112,12 +117,13 @@ void bind_map::bind(uint32_t index, const expr* value) {
         if (old_value == value)
             return;
 
-        // If the new value is different from the old value, insert it
-        trail_ref.log([it, old_value]{it->second = old_value;});
-
         // Update the value
         it->second = value;
+
+        // log the update
+        trail_ref.log(
+            [this, index, old_value]{bindings[index] = old_value;},
+            [this, index, value]{bindings[index] = value;}
+        );
     }
-    
-    return;
 }
