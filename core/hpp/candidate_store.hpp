@@ -9,7 +9,8 @@ struct candidate_store : frontier<std::vector<size_t>> {
     candidate_store(
         const database&,
         const goals&,
-        lineage_pool&
+        lineage_pool&,
+        trail&
     );
     size_t eliminate(const std::function<bool(const goal_lineage*, size_t)>&);
     bool unit(const goal_lineage*&, size_t&) const;
@@ -21,6 +22,7 @@ private:
 
     const database& db;
     lineage_pool& lp;
+    trail& t;
 
     std::vector<size_t> initial_candidates;
 };

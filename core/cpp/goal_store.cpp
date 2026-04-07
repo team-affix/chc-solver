@@ -9,7 +9,7 @@ goal_store::goal_store(
     bind_map& bm,
     lineage_pool& lp)
     :
-    frontier<const expr*>(db, lp),
+    frontier<const expr*>(db, lp, t),
     db(db),
     t(t),
     cp(cp),
@@ -18,7 +18,7 @@ goal_store::goal_store(
 {
     // add the goals to the frontier
     for (int i = 0; i < goals.size(); ++i)
-        insert(lp.goal(nullptr, i), goals.at(i));
+        upsert(lp.goal(nullptr, i), goals.at(i));
 }
 
 bool goal_store::try_unify_head(const expr* const& e, const rule& r, std::map<uint32_t, uint32_t>& translation_map) {

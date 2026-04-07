@@ -3,13 +3,17 @@
 weight_store::weight_store(
     const goals& goals,
     const database& db,
-    lineage_pool& lp
-) : frontier<double>(db, lp), cgw(0.0) {
+    lineage_pool& lp,
+    trail& t
+) :
+    frontier<double>(db, lp, t), 
+    t(t),
+    cgw(0.0) {
     if (goals.size() == 0)
         return;
     double weight_per_goal = 1.0 / (double)goals.size();
     for (size_t i = 0; i < goals.size(); ++i)
-        insert(lp.goal(nullptr, i), weight_per_goal);
+        upsert(lp.goal(nullptr, i), weight_per_goal);
 }
 
 double weight_store::total() const {
@@ -20,6 +24,10 @@ std::vector<double> weight_store::expand(const double& weight, const rule& r) {
     std::vector<double> result;
     // if grounding against a fact, we receive the full weight
     if (r.body.size() == 0) {
+        t.log(
+            [this, weight]{cgw -= weight;},
+            [this, weight]{cgw += weight;}
+        );
         cgw += weight;
         return result;
     }

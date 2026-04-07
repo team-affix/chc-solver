@@ -3,24 +3,26 @@
 candidate_store::candidate_store(
     const database& db,
     const goals& goals,
-    lineage_pool& lp) :
-    frontier<std::vector<size_t>>(db, lp),
+    lineage_pool& lp,
+    trail& t) :
+    frontier<std::vector<size_t>>(db, lp, t),
     db(db),
-    lp(lp)
+    lp(lp),
+    t(t)
 {
     // make the initial candidates
     for (int i = 0; i < db.size(); ++i)
         initial_candidates.push_back(i);
     // make the initial members
     for (int i = 0; i < goals.size(); ++i)
-        insert(lp.goal(nullptr, i), initial_candidates);
+        upsert(lp.goal(nullptr, i), initial_candidates);
 }
 
 size_t candidate_store::eliminate(const std::function<bool(const goal_lineage*, size_t)>& pred) {
     size_t result = 0;
     for (auto it = begin(); it != end(); ++it) {
         const goal_lineage* gl = it->first;
-        std::vector<size_t>& candidates = it->second;
+        std::vector<size_t> candidates = it->second;
         for (size_t i = 0; i < candidates.size();) {
             if (pred(gl, candidates[i])) {
                 candidates[i] = candidates.back();
@@ -31,6 +33,7 @@ size_t candidate_store::eliminate(const std::function<bool(const goal_lineage*, 
                 ++i;
             }
         }
+        upsert(gl, candidates);
     }
     return result;
 }
