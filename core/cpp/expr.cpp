@@ -2,7 +2,7 @@
 #include <memory>
 #include "../hpp/expr.hpp"
 
-expr_pool::expr_pool(trail& t) : trail_ref(t) {
+expr_pool::expr_pool(trail& t) : exprs(t, {}) {
 
 }
 
@@ -32,17 +32,10 @@ const expr* expr_pool::import(const expr* e) {
 }
 
 size_t expr_pool::size() const {
-    return exprs.size();
+    return exprs.get().size();
 }
 
-const expr* expr_pool::intern(expr&& e) {
-    auto [it, inserted] = exprs.insert(std::move(e));
-    if (inserted) {
-        auto node = std::make_shared<std::set<expr>::node_type>();
-        trail_ref.log(
-            [this, node, val = *it] { *node = exprs.extract(val); },
-            [this, node]{ exprs.insert(std::move(*node)); }
-        );
-    }
-    return &*it;
+const expr* expr_pool::intern(const expr& e) {
+    exprs.insert(e);
+    return &*exprs.get().find(e);
 }

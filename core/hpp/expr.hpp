@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <string>
 #include <variant>
-#include <set>
+#include "delta_set.hpp"
 #include "trail.hpp"
 
 struct expr {
@@ -28,10 +28,8 @@ struct expr_pool {
 #ifndef DEBUG
 private:
 #endif
-    const expr* intern(expr&&);
-    trail& trail_ref;
-    std::set<expr> exprs;
+    const expr* intern(const expr&);
+    delta<std::set<expr>> exprs;
 };
 
 #endif
-
