@@ -1,7 +1,7 @@
 #ifndef FRONTIER_HPP
 #define FRONTIER_HPP
 
-#include <unordered_map>
+#include "delta_map.hpp"
 #include "defs.hpp"
 
 template<typename T>
@@ -26,34 +26,22 @@ private:
 #endif
     const database& db;
     lineage_pool& lp;
-    trail& t;
 
-    std::unordered_map<const goal_lineage*, T> members;
+    delta<std::map<const goal_lineage*, T>> members;
 };
 
 template<typename T>
 frontier<T>::frontier(
     const database& db,
     lineage_pool& lp,
-    trail& t) : db(db), lp(lp), t(t) {}
+    trail& t) : db(db), lp(lp), members(t, {}) {}
 
 template<typename T>
 void frontier<T>::upsert(const goal_lineage* gl, const T& value) {
-    auto [it, inserted] = members.insert({gl, value});
-
-    if (inserted) {
-        t.log(
-            [this, gl]{members.erase(gl);},
-            [this, gl, value]{members.insert({gl, value});}
-        );
-    }
-    else {
-        t.log(
-            [this, gl, old = it->second]{members.at(gl) = old;},
-            [this, gl, value]{members.at(gl) = value;}
-        );
-        it->second = value;
-    }
+    if (members.get().contains(gl))
+        members.assign(gl, value);
+    else
+        members.insert(gl, value);
 }
 
 template<typename T>
@@ -68,17 +56,14 @@ void frontier<T>::resolve(const resolution_lineage* r) {
     auto child_values = expand(parent_value, db.at(r->idx));
 
     // log the erasure of the parent
-    t.log(
-        [this, parent, val = parent_value]{members.insert({parent, val});},
-        [this, parent]{members.erase(parent);}
-    );
+    members.erase(parent);
 
     // erase the parent from the frontier
     members.erase(parent);
     
-    // add the children to the frontier
+    // add the children to the frontier (children should not be in frontier yet)
     for (int i = 0; i < child_values.size(); i++)
-        upsert(lp.goal(r, i), child_values[i]);
+        members.insert(lp.goal(r, i), child_values[i]);
 }
 
 template<typename T>
