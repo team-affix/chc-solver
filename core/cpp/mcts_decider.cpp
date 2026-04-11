@@ -16,10 +16,10 @@ std::pair<const goal_lineage*, size_t> mcts_decider::operator()() {
 const goal_lineage* mcts_decider::choose_goal() {
     // Get the goals to choose from
     std::vector<choice> goals;
-    goals.reserve(cs.size());
+    goals.reserve(cs.get().size());
 
     // Convert the goals to choices
-    for (auto it = cs.begin(); it != cs.end(); ++it)
+    for (auto it = cs.get().begin(); it != cs.get().end(); ++it)
         goals.push_back(it->first);
 
     // Choose a goal to resolve
@@ -30,10 +30,10 @@ const goal_lineage* mcts_decider::choose_goal() {
 size_t mcts_decider::choose_candidate(const goal_lineage* chosen_gl) {
     // Get the candidates to choose from
     std::vector<choice> candidates;
-    candidates.reserve(cs.at(chosen_gl).size());
+    candidates.reserve(cs.get().at(chosen_gl).size());
 
     // Convert the candidates to choices
-    for (size_t rule_id : cs.at(chosen_gl))
+    for (size_t rule_id : cs.get().at(chosen_gl))
         candidates.push_back(rule_id);
 
     // Choose a candidate for the goal
