@@ -8,19 +8,16 @@ cdcl::cdcl(trail& t) :
 
 }
 
-void cdcl::learn(const decisions& ds) {
-    // 1. reduce the decision store to a set of leaf resolutions
-    avoidance av = reduce(ds);
-
-    // 2. get a new id for the avoidance
+void cdcl::learn(const lemma& l) {
+    // 1. get a new id for the avoidance
     size_t id = next_avoidance_id();
     
-    // 3. add the avoidance to the store
-    upsert(id, av);
+    // 2. add the avoidance to the store
+    upsert(id, l.get());
 
-    // 4. get all the goals that are watching this avoidance
+    // 3. get all the goals that are watching this avoidance
     //    and link the avoidance to the goals
-    for (const resolution_lineage* rl : av) {
+    for (const resolution_lineage* rl : l.get()) {
         auto gl = rl->parent;
         if (!watched_goals.get().contains(gl))
             watched_goals.insert(gl, {id});
@@ -48,14 +45,14 @@ void cdcl::constrain(const resolution_lineage* rl) {
     for (size_t id : ids) {
 
         // 4. get the avoidance
-        avoidance av = avoidances.get().at(id);
+        resolutions rs = avoidances.get().at(id);
 
         // 5. reduce the avoidance
-        size_t erased = av.erase(rl);
+        size_t erased = rs.erase(rl);
 
         // 6a. if the resolution was found, then it is consistent
         if (erased > 0)
-            upsert(id, av);
+            upsert(id, rs);
 
         // 6b. if the resolution was not found, then it is conflicting
         else
@@ -66,9 +63,9 @@ void cdcl::constrain(const resolution_lineage* rl) {
     watched_goals.erase(gl);
 }
 
-void cdcl::upsert(size_t id, const avoidance& av) {
+void cdcl::upsert(size_t id, const resolutions& rs) {
     // 1. if the avoidance is empty, we are refuted.
-    if (av.empty() && !is_refuted.get())
+    if (rs.empty() && !is_refuted.get())
         is_refuted.mutate(
             [](bool& is_refuted) { is_refuted = true; },
             [](bool& is_refuted) { is_refuted = false; }
@@ -76,18 +73,18 @@ void cdcl::upsert(size_t id, const avoidance& av) {
 
     // 2. update the avoidance in the store
     if (avoidances.get().contains(id))
-        avoidances.assign(id, av);
+        avoidances.assign(id, rs);
     else
-        avoidances.insert(id, av);
+        avoidances.insert(id, rs);
 }
 
 void cdcl::erase(size_t id) {
     // 1. get the avoidance
-    const avoidance& av = avoidances.get().at(id);
+    const resolutions& rs = avoidances.get().at(id);
 
     // 2. for each goal that is watching this avoidance,
     //    unlink the avoidance from the goal
-    for (const resolution_lineage* rl : av) {
+    for (const resolution_lineage* rl : rs) {
         const goal_lineage* gl = rl->parent;
         if (!watched_goals.get().contains(gl))
             continue;
@@ -100,45 +97,6 @@ void cdcl::erase(size_t id) {
     
     // 3. remove the avoidance from the store
     avoidances.erase(id);
-}
-
-avoidance cdcl::reduce(const decisions& ds) {
-    // 1. create sets of visited lineages
-    std::set<const resolution_lineage*> visited;
-
-    // 2. create result avoidance
-    avoidance av = ds;
-
-    // 3. iterate over ds, and for each entry, remove all ancestors from av
-    for (const resolution_lineage* rl : ds)
-        remove_ancestors(rl, av, visited);
-
-    // 4. return the avoidance
-    return av;
-    
-}
-
-void cdcl::remove_ancestors(const resolution_lineage* rl, avoidance& av, std::set<const resolution_lineage*>& visited) {
-    while (rl) {
-        // 1. get grandparent
-        //    (double-dereference safe because resolutions should
-        //     never have null parent goals)
-        const resolution_lineage* grandparent = rl->parent->parent;
-        
-        // 2. check grandparent visited
-        if (visited.contains(grandparent))
-            break;
-
-        // 3. visit grandparent
-        visited.insert(grandparent);
-
-        // 4. remove grandparent from av
-        av.erase(grandparent);
-
-        // 5. rl = grandparent
-        rl = grandparent;
-
-    }
 }
 
 bool cdcl::refuted() const {
