@@ -76,6 +76,9 @@ struct delta<std::map<K, V>> {
             }
         );
     }
+    const std::map<K, V>& get() const {
+        return underlying.get();
+    }
 #ifndef DEBUG
 private:
 #endif
