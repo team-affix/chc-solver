@@ -1,17 +1,19 @@
 #ifndef AVOIDANCE_HPP
 #define AVOIDANCE_HPP
 
+#include "trail.hpp"
 #include "lineage.hpp"
 #include "defs.hpp"
+#include "delta_map.hpp"
+#include "sequencer.hpp"
 
 using avoidance = std::unordered_set<const resolution_lineage*>;
 
 struct cdcl {
-    cdcl();
+    cdcl(trail&);
     void learn(const decisions&);
     void constrain(const resolution_lineage*);
     bool refuted() const;
-    bool eliminated(const resolution_lineage*) const;
     #ifndef DEBUG
     private:
     #endif
@@ -20,11 +22,10 @@ struct cdcl {
     static avoidance reduce(const decisions&);
     static void remove_ancestors(const resolution_lineage*, avoidance&, std::set<const resolution_lineage*>&);
 
-    std::map<size_t, avoidance> avoidances;
-    std::map<const goal_lineage*, std::set<size_t>> watched_goals;
-    bool is_refuted;
-    std::set<const resolution_lineage*> eliminated_resolutions;
-    size_t next_avoidance_id;
+    tracked<bool> is_refuted;
+    sequencer next_avoidance_id;
+    delta<std::map<size_t, avoidance>> avoidances;
+    delta<std::map<const goal_lineage*, std::set<size_t>>> watched_goals;
 };
 
 #endif
