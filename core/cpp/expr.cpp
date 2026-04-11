@@ -1,5 +1,4 @@
 #include <stdexcept>
-#include <memory>
 #include "../hpp/expr.hpp"
 
 expr_pool::expr_pool(trail& t) : exprs(t, {}) {
