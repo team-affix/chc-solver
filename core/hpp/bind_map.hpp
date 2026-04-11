@@ -1,8 +1,8 @@
 #ifndef BIND_MAP_HPP
 #define BIND_MAP_HPP
 
-#include <map>
 #include "expr.hpp"
+#include "delta_map.hpp"
 
 struct bind_map {
     bind_map(trail&);
@@ -13,8 +13,7 @@ private:
 #endif
     bool occurs_check(uint32_t, const expr*);
     void bind(uint32_t, const expr*);
-    std::map<uint32_t, const expr*> bindings;
-    trail& trail_ref;
+    delta<std::map<uint32_t, const expr*>> bindings;
 };
 
 #endif

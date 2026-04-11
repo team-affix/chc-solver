@@ -1,6 +1,6 @@
 #include "../hpp/bind_map.hpp"
 
-bind_map::bind_map(trail& trail_ref) : trail_ref(trail_ref) {
+bind_map::bind_map(trail& t) : bindings(t, {}) {
 
 }
 
@@ -13,10 +13,10 @@ const expr* bind_map::whnf(const expr* key) {
     const expr::var& var = std::get<expr::var>(key->content);
 
     // Check if the variable is bound
-    auto it = bindings.find(var.index);
+    auto it = bindings.get().find(var.index);
     
     // If the variable is not bound, return the key
-    if (it == bindings.end())
+    if (it == bindings.get().end())
         return key;
 
     // Get the bound value
@@ -96,34 +96,8 @@ bool bind_map::occurs_check(uint32_t index, const expr* key) {
 }
 
 void bind_map::bind(uint32_t index, const expr* value) {
-    // look up the entry for the index
-    auto it = bindings.find(index);
-
-    if (it == bindings.end()) {
-        // if the value is not found, insert it
-        it = bindings.insert({index, value}).first;
-
-        // log the insertion
-        trail_ref.log(
-            [this, index]{bindings.erase(index);},
-            [this, index, value]{bindings.insert({index, value});}
-        );
-    }
-    else {
-        // Get the old value
-        const expr* old_value = it->second;
-        
-        // If the new value is the same as the old value, do nothing
-        if (old_value == value)
-            return;
-
-        // Update the value
-        it->second = value;
-
-        // log the update
-        trail_ref.log(
-            [this, index, old_value]{bindings[index] = old_value;},
-            [this, index, value]{bindings[index] = value;}
-        );
-    }
+    if (bindings.get().contains(index))
+        bindings.assign(index, value);
+    else
+        bindings.insert(index, value);
 }
