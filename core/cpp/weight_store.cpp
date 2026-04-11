@@ -7,28 +7,26 @@ weight_store::weight_store(
     trail& t
 ) :
     frontier<double>(db, lp, t), 
-    t(t),
-    cgw(0.0) {
+    cgw(t, 0.0) {
     if (goals.size() == 0)
         return;
     double weight_per_goal = 1.0 / (double)goals.size();
     for (size_t i = 0; i < goals.size(); ++i)
-        upsert(lp.goal(nullptr, i), weight_per_goal);
+        insert(lp.goal(nullptr, i), weight_per_goal);
 }
 
 double weight_store::total() const {
-    return cgw;
+    return cgw.get();
 }
 
-std::vector<double> weight_store::expand(const double& weight, const rule& r) {
+std::optional<std::vector<double>> weight_store::expand(const double& weight, const rule& r) {
     std::vector<double> result;
     // if grounding against a fact, we receive the full weight
     if (r.body.size() == 0) {
-        t.log(
-            [this, weight]{cgw -= weight;},
-            [this, weight]{cgw += weight;}
+        cgw.mutate(
+            [weight](double& sum) { sum += weight; },
+            [weight](double& sum) { sum -= weight; }
         );
-        cgw += weight;
         return result;
     }
     // if resolving a non-nullary rule, we divide the weight equally among the children

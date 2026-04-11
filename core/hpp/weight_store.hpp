@@ -5,6 +5,7 @@
 #include "rule.hpp"
 
 struct weight_store : frontier<double> {
+    virtual ~weight_store() = default;
     weight_store(
         const goals&,
         const database&,
@@ -12,13 +13,12 @@ struct weight_store : frontier<double> {
         trail&
     );
     double total() const;
-    std::vector<double> expand(const double&, const rule&) override;
+    std::optional<std::vector<double>> expand(const double&, const rule&) override;
 #ifndef DEBUG
 private:
 #endif
-    trail& t;
 
-    double cgw;
+    tracked<double> cgw;
 };
 
 #endif
