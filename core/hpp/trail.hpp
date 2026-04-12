@@ -1,9 +1,10 @@
 #ifndef TRAIL_HPP
 #define TRAIL_HPP
 
-#include <stack>
 #include <functional>
 #include <list>
+#include <unordered_map>
+#include <memory>
 
 struct action {
     std::function<void()> undo;
@@ -11,23 +12,25 @@ struct action {
 };
 
 struct frame {
+    frame* parent;
+    std::unordered_map<const frame*, std::unique_ptr<frame>> children;
+    size_t depth;
     std::list<action> actions;
-    std::list<frame> children;
+    void revert() const;
+    void replay() const;
 };
 
 struct trail {
+    void log(action);
+    void translate(frame*);
     void push();
     void pop();
-    std::list<frame>::iterator undo();
-    void redo(std::list<frame>::iterator);
-    void log(const std::function<void()>&, const std::function<void()>&);
-    size_t depth() const;
+    frame* location() const;
 #ifndef DEBUG
 private:
 #endif
-    frame& current();
     frame root;
-    std::stack<std::list<frame>::iterator> path;
+    frame* current_frame;
 };
 
 #endif
