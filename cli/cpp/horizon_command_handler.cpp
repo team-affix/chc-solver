@@ -13,6 +13,9 @@ horizon_command_handler::horizon_command_handler(
 {}
 
 bool horizon_command_handler::advance() {
-    return solver(std::numeric_limits<size_t>::max(), res);
+    std::optional<resolutions> soln;
+    while (solver(soln)) {
+        if (soln.has_value()) return true;
+    }
+    return false;
 }
-

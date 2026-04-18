@@ -10,23 +10,20 @@ int main(int argc, char** argv) {
     struct {
         std::string file;
         std::string goals_str;
-        size_t max_resolutions          = 1000;
-        size_t iterations_per_avoidance = 10;
-        double exploration_constant     = 1.41;
-        uint64_t seed                   = 0;
+        size_t max_resolutions      = 1000;
+        double exploration_constant = 1.41;
+        uint64_t seed               = 0;
     } ridge_opts;
 
     auto* ridge_sub = app.add_subcommand("ridge", "Run the Ridge solver");
     ridge_sub->add_option("file", ridge_opts.file, "CHC input file")->required();
     ridge_sub->add_option("-g,--goal", ridge_opts.goals_str, "Goal body string, e.g. \"(p X), (q X)\"")->required();
     ridge_sub->add_option("--max-resolutions", ridge_opts.max_resolutions, "Max resolutions");
-    ridge_sub->add_option("--iterations-per-avoidance", ridge_opts.iterations_per_avoidance, "Iterations per avoidance");
     ridge_sub->add_option("--exploration-constant", ridge_opts.exploration_constant, "MCTS exploration constant");
     ridge_sub->add_option("--seed", ridge_opts.seed, "RNG seed");
     ridge_sub->callback([&]() {
         ridge_command_handler h(ridge_opts.file, ridge_opts.goals_str,
                                 ridge_opts.max_resolutions,
-                                ridge_opts.iterations_per_avoidance,
                                 ridge_opts.exploration_constant,
                                 ridge_opts.seed);
         h();

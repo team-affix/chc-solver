@@ -17432,103 +17432,136 @@ void test_cdcl_eliminated() {
 }
 
 // ---------------------------------------------------------------------------
-// sim_mock: concrete derived type used to test the sim base class
+// sim_mock: minimal concrete sim subclass used to test the sim base class.
+// Overrides decide_one() with a scripted, deterministic sequence.
+// Overrides on_resolve() to count calls while delegating to the real base.
 // ---------------------------------------------------------------------------
 
 struct sim_mock : sim {
-    sim_mock(size_t max) : sim(max) {}
+    sim_mock(size_t mr, const database& db_, const goals& gs_,
+             trail& t_, sequencer& seq_, expr_pool& ep_,
+             bind_map& bm_, lineage_pool& lp_, cdcl c_)
+        : sim(mr, db_, gs_, t_, seq_, ep_, bm_, lp_, c_) {}
 
-    // "derivation" | "decision" | "solved" | "conflict", one entry per iteration
-    std::vector<std::string> event_types;
-    // only derivation/decision events carry a resolution pointer
-    std::map<int, const resolution_lineage*> event_resolutions;
+    std::vector<const resolution_lineage*> scripted;
+    size_t decision_idx   = 0;
+    size_t on_resolve_cnt = 0;
 
-    int iteration = 0;
-    mutable int solve_calls = 0;
-    int derive_calls = 0;
-    int decide_calls = 0;
-    int on_resolve_calls = 0;
-
-    void check_bounds() const {
-        if (iteration >= (int)event_types.size())
-            throw std::out_of_range("sim_mock: iteration beyond end of event sequence");
-    }
-    bool solved() override {
-        solve_calls++;
-        check_bounds();
-        return event_types[iteration] == "solved";
-    }
-    bool conflicted() override {
-        check_bounds();
-        return event_types[iteration] == "conflict";
-    }
-    const resolution_lineage* derive_one() override {
-        derive_calls++;
-        check_bounds();
-        if (event_types[iteration] == "derivation")
-            return event_resolutions.at(iteration);
-        return nullptr;
-    }
     const resolution_lineage* decide_one() override {
-        decide_calls++;
-        check_bounds();
-        // decide_one must NEVER be called when a derivation is available
-        assert(event_types[iteration] != "derivation");
-        return event_resolutions.at(iteration);
+        return scripted.at(decision_idx++);
     }
-    void on_resolve(const resolution_lineage*) override {
-        on_resolve_calls++;
-        iteration++;
+    void on_resolve(const resolution_lineage* rl) override {
+        ++on_resolve_cnt;
+        sim::on_resolve(rl);
     }
 };
 
 // ---------------------------------------------------------------------------
 
 void test_sim_constructor() {
-    // max=10: fields initialized correctly
+    // Test 1: Empty goals — verify base class fields initialized correctly
     {
-        sim_mock s(10);
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db; goals gs; cdcl c;
+        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+
         assert(s.max_resolutions == 10);
         assert(s.rs.size() == 0);
         assert(s.ds.size() == 0);
-        assert(s.iteration == 0);
+        assert(&s.db == &db);
+        assert(&s.t  == &t);
+        assert(&s.lp == &lp);
+        assert(&s.cp.sequencer_ref == &seq);
+        assert(&s.cp.expr_pool_ref == &ep);
+        assert(&s.c  != &c);  // cdcl is copied by value
+        assert(s.gs.empty());
+        assert(s.cs.empty());
+        assert(s.decision_idx   == 0);
+        assert(s.on_resolve_cnt == 0);
     }
 
-    // max=0: still initializes cleanly
+    // Test 2: max_resolutions=0
     {
-        sim_mock s(0);
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db; goals gs; cdcl c;
+        sim_mock s(0, db, gs, t, seq, ep, bm, lp, c);
+
         assert(s.max_resolutions == 0);
         assert(s.rs.size() == 0);
         assert(s.ds.size() == 0);
     }
 
-    // max=SIZE_MAX: large value stored correctly
+    // Test 3: max_resolutions=SIZE_MAX
     {
-        sim_mock s(SIZE_MAX);
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db; goals gs; cdcl c;
+        sim_mock s(SIZE_MAX, db, gs, t, seq, ep, bm, lp, c);
+
         assert(s.max_resolutions == SIZE_MAX);
-        assert(s.rs.size() == 0);
-        assert(s.ds.size() == 0);
+    }
+
+    // Test 4: Single goal — gs and cs populated on construction
+    {
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        goals gs;
+        gs.push_back(ep.atom("p"));
+        cdcl c;
+        sim_mock s(100, db, gs, t, seq, ep, bm, lp, c);
+
+        assert(s.gs.size() == 1);
+        assert(s.cs.size() == 1);
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        assert(s.gs.at(gl0) == ep.atom("p"));
+        assert(s.cs.at(gl0) == std::vector<size_t>({0}));
+    }
+
+    // Test 5: Pre-populated cdcl is deep-copied, original unchanged
+    {
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db; goals gs;
+        cdcl c;
+        const resolution_lineage* rl = lp.resolution(lp.goal(nullptr, 0), 0);
+        avoidance av; av.insert(rl);
+        c.learn(av);
+        size_t c_size = c.avoidances.size();
+        sim_mock s(100, db, gs, t, seq, ep, bm, lp, c);
+
+        assert(&s.c != &c);
+        assert(c.avoidances.size() == c_size);   // original unchanged
+        assert(s.c.avoidances.size() == 1);
     }
 }
 
 void test_sim_get_resolutions() {
-    // Returns a const reference to rs; empty initially
+    // Returns const ref to rs; empty initially
     {
-        sim_mock s(10);
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db; goals gs; cdcl c;
+        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+
         const resolutions& r = s.get_resolutions();
         assert(r.size() == 0);
         assert(&r == &s.rs);
     }
 
-    // Reference reflects mutations made directly to rs (DEBUG mode)
+    // Reference is live: direct mutation to rs is visible through get_resolutions()
     {
-        lineage_pool lp;
-        sim_mock s(10);
-        const resolutions& r = s.get_resolutions();
-        assert(r.size() == 0);
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db; goals gs; cdcl c;
+        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
 
-        const goal_lineage* g = lp.goal(nullptr, 0);
-        const resolution_lineage* rl = lp.resolution(g, 0);
+        const resolutions& r = s.get_resolutions();
+        const goal_lineage* gl = lp.goal(nullptr, 0);
+        const resolution_lineage* rl = lp.resolution(gl, 0);
         s.rs.insert(rl);
 
         assert(r.size() == 1);
@@ -17537,23 +17570,28 @@ void test_sim_get_resolutions() {
 }
 
 void test_sim_get_decisions() {
-    // Returns a const reference to ds; empty initially
+    // Returns const ref to ds; empty initially
     {
-        sim_mock s(10);
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db; goals gs; cdcl c;
+        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+
         const decisions& d = s.get_decisions();
         assert(d.size() == 0);
         assert(&d == &s.ds);
     }
 
-    // Reference reflects mutations made directly to ds (DEBUG mode)
+    // Reference is live: direct mutation to ds is visible through get_decisions()
     {
-        lineage_pool lp;
-        sim_mock s(10);
-        const decisions& d = s.get_decisions();
-        assert(d.size() == 0);
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db; goals gs; cdcl c;
+        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
 
-        const goal_lineage* g = lp.goal(nullptr, 0);
-        const resolution_lineage* rl = lp.resolution(g, 0);
+        const decisions& d = s.get_decisions();
+        const goal_lineage* gl = lp.goal(nullptr, 0);
+        const resolution_lineage* rl = lp.resolution(gl, 0);
         s.ds.insert(rl);
 
         assert(d.size() == 1);
@@ -17561,633 +17599,655 @@ void test_sim_get_decisions() {
     }
 }
 
+void test_sim_solved() {
+    // Test 1: Empty goals → gs.empty() → true
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        goals goals;
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(sim.solved() == true);
+        assert(sim.gs.empty() == true);
+    }
+
+    // Test 2: Single goal → gs not empty → false
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        goals goals;
+        goals.push_back(ep.atom("p"));
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(sim.solved() == false);
+        assert(sim.gs.size() == 1);
+    }
+
+    // Test 3: Multiple goals → gs not empty → false
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.atom("q"), {}});
+        goals goals;
+        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.atom("q"));
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(sim.solved() == false);
+        assert(sim.gs.size() == 2);
+    }
+}
+
+void test_sim_conflicted() {
+    // Test 1: Goal with matching rule → head elimination keeps candidate → not conflicted
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        goals goals;
+        goals.push_back(ep.atom("p"));
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(sim.conflicted() == false);
+        // Rule 0 still present for gl0
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        assert(sim.cs.at(gl0).size() == 1);
+        assert(sim.cs.at(gl0)[0] == 0);
+    }
+
+    // Test 2: Empty database → no candidates from the start → conflicted
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        goals goals;
+        goals.push_back(ep.atom("p"));
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(sim.conflicted() == true);
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        assert(sim.cs.at(gl0).empty());
+    }
+
+    // Test 3: Rule head doesn't match goal → eliminated → conflicted
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("q"), {}}); // rule for q, goal is p → mismatch
+        goals goals;
+        goals.push_back(ep.atom("p"));
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(sim.conflicted() == true);
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        assert(sim.cs.at(gl0).empty());
+    }
+
+    // Test 4: CDCL singleton avoidance eliminates the only candidate → conflicted
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        goals goals;
+        goals.push_back(ep.atom("p"));
+
+        // Pre-populate cdcl: singleton avoidance {rl} → rl is eliminated
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl = lp.resolution(gl0, 0);
+        cdcl c;
+        avoidance av;
+        av.insert(rl);
+        c.learn(av);
+        assert(c.eliminated(rl));
+
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(sim.conflicted() == true);
+        assert(sim.cs.at(gl0).empty());
+    }
+
+    // Test 5: Two goals, one goal's rule head mismatches → conflicted regardless of other goal
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        goals goals;
+        goals.push_back(ep.atom("p")); // gl0: matches rule 0
+        goals.push_back(ep.atom("q")); // gl1: no matching rule
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(sim.conflicted() == true);
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const goal_lineage* gl1 = lp.goal(nullptr, 1);
+        assert(!sim.cs.at(gl0).empty()); // p still has rule 0
+        assert(sim.cs.at(gl1).empty());  // q has no matching rule
+    }
+
+    // Test 6: conflicted() is idempotent - calling twice gives same result
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        goals goals;
+        goals.push_back(ep.atom("p"));
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(sim.conflicted() == true);
+        assert(sim.conflicted() == true); // second call same result
+    }
+}
+
+void test_sim_derive_one() {
+    // Test 1: Single goal with multiple candidates → not unit → nullptr
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.atom("p"), {}}); // two rules for p → 2 candidates → not unit
+        goals goals;
+        goals.push_back(ep.atom("p"));
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(sim.derive_one() == nullptr);
+    }
+
+    // Test 2: Single rule in db → cs starts with 1 candidate → unit → returns expected rl
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        goals goals;
+        goals.push_back(ep.atom("p"));
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const resolution_lineage* expected = lp.resolution(gl0, 0);
+        const resolution_lineage* result = sim.derive_one();
+        assert(result != nullptr);
+        assert(result == expected);
+    }
+
+    // Test 3: Empty goal store → cs is also empty → unit() false → nullptr
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        goals goals;
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(sim.derive_one() == nullptr);
+    }
+
+    // Test 4: Two rules but only one matches the goal → after conflicted() reduces to 1 → unit
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}}); // rule 0: p :- (matches)
+        db.push_back(rule{ep.atom("q"), {}}); // rule 1: q :- (doesn't match goal p)
+        goals goals;
+        goals.push_back(ep.atom("p"));
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        // Initially, derive_one() returns nullptr
+        assert(sim.derive_one() == nullptr);
+
+        // Initially 2 candidates; conflicted() eliminates rule 1 (q head ≠ p goal)
+        assert(sim.conflicted() == false);
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        assert(sim.cs.at(gl0).size() == 1);
+
+        const resolution_lineage* expected = lp.resolution(gl0, 0);
+        const resolution_lineage* result = sim.derive_one();
+        assert(result != nullptr);
+        assert(result == expected);
+    }
+}
+
+void test_sim_on_resolve() {
+    // Test 1: Resolve goal with fact (empty body) → gs and cs become empty
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}}); // p :-
+        goals goals;
+        goals.push_back(ep.atom("p"));
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(sim.gs.size() == 1);
+        assert(sim.cs.size() == 1);
+
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl = lp.resolution(gl0, 0);
+        sim.on_resolve(rl);
+
+        // Empty body → no sub-goals added; both stores now empty
+        assert(sim.gs.empty());
+        assert(sim.cs.empty());
+    }
+
+    // Test 2: Resolve goal with non-empty body → old goal removed, sub-goal added
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {ep.atom("q")}}); // p :- q.
+        goals goals;
+        goals.push_back(ep.atom("p"));
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl = lp.resolution(gl0, 0);
+        sim.on_resolve(rl);
+
+        // p removed, q added as sub-goal
+        assert(sim.gs.size() == 1);
+        assert(!sim.gs.empty());
+
+        // Sub-goal lineage: lp.goal(rl, 0)
+        const goal_lineage* sub_gl = lp.goal(rl, 0);
+        assert(sim.gs.at(sub_gl) == ep.atom("q"));
+
+        // cs tracks the same sub-goal
+        assert(sim.cs.size() == 1);
+        // Old goal no longer in cs
+        assert(sim.cs.at(sub_gl).size() == 1); // db has 1 rule
+    }
+
+    // Test 3: c.constrain effect - avoidance reduced from 2 to 1 → remaining rl eliminated
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}}); // p :-
+        goals goals;
+        goals.push_back(ep.atom("p"));
+
+        // Set up cdcl: 2-element avoidance {rl0, rl1}; neither eliminated yet
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl0 = lp.resolution(gl0, 0);
+        const goal_lineage* gl_ghost = lp.goal(nullptr, 99); // sentinel goal for rl1
+        const resolution_lineage* rl1 = lp.resolution(gl_ghost, 0);
+
+        cdcl c;
+        avoidance av;
+        av.insert(rl0);
+        av.insert(rl1);
+        c.learn(av);
+        assert(!c.eliminated(rl0));
+        assert(!c.eliminated(rl1));
+
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        // on_resolve(rl0) calls sim.c.constrain(rl0) → {rl0, rl1} reduces to {rl1} → rl1 eliminated
+        sim.on_resolve(rl0);
+        assert(sim.c.eliminated(rl1));
+    }
+
+    // Test 4: on_resolve with two-level chain - verify gs and cs sizes at each step
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+        lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {ep.atom("q"), ep.atom("r")}}); // p :- q, r.
+        goals goals;
+        goals.push_back(ep.atom("p"));
+        cdcl c;
+        monte_carlo::tree_node<mcts_decider::choice> root;
+        std::mt19937 rng(42);
+        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
+        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+
+        assert(sim.gs.size() == 1);
+
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl = lp.resolution(gl0, 0);
+        sim.on_resolve(rl);
+
+        // p removed; q and r added (body has 2 sub-goals)
+        assert(sim.gs.size() == 2);
+        assert(sim.cs.size() == 2);
+
+        const goal_lineage* sub_gl0 = lp.goal(rl, 0);
+        const goal_lineage* sub_gl1 = lp.goal(rl, 1);
+        assert(sim.gs.at(sub_gl0) == ep.atom("q"));
+        assert(sim.gs.at(sub_gl1) == ep.atom("r"));
+    }
+}
+
 void test_sim() {
-    // Test 1: Solved immediately - loop body never executes
+    // Test 1: Empty goals → solved() true immediately, loop never runs
     {
-        sim_mock s(10);
-        s.event_types = {"solved"};
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db; goals gs; cdcl c;
+        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
 
         bool result = s();
         assert(result == true);
         assert(s.rs.size() == 0);
         assert(s.ds.size() == 0);
-        assert(s.on_resolve_calls == 0);
-        assert(s.derive_calls == 0);
-        assert(s.decide_calls == 0);
-        // solved() called once during the while condition, once for return
-        assert(s.solve_calls == 2);
+        assert(s.on_resolve_cnt == 0);
+        assert(s.decision_idx == 0);
     }
 
-    // Test 2: Conflicted immediately - loop body never executes, returns false
+    // Test 2: Conflicted immediately → returns false, loop body never runs
     {
-        sim_mock s(10);
-        s.event_types = {"conflict"};
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("q"), {}});  // only rule for q
+        goals gs;
+        gs.push_back(ep.atom("p"));            // goal is p: no matching rule
+        cdcl c;
+        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
 
         bool result = s();
         assert(result == false);
         assert(s.rs.size() == 0);
         assert(s.ds.size() == 0);
-        assert(s.on_resolve_calls == 0);
-        assert(s.derive_calls == 0);
-        assert(s.decide_calls == 0);
-        // solved() called once for return value only (conflicted() short-circuits before solved() in the while condition)
-        assert(s.solve_calls == 1);
+        assert(s.on_resolve_cnt == 0);
+        assert(s.decision_idx == 0);
     }
 
-    // Test 3: max_resolutions=0 - cap check fails before any virtual call in the loop;
-    // return solved() still calls solved() once at iter=0
+    // Test 3: max_resolutions=0 → while condition (0 < 0) is false immediately
     {
-        sim_mock s(0);
-        s.event_types = {"conflict"};
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        goals gs;
+        gs.push_back(ep.atom("p"));
+        cdcl c;
+        sim_mock s(0, db, gs, t, seq, ep, bm, lp, c);
 
         bool result = s();
-        assert(result == false);
+        assert(result == false);  // solved() = false: p still pending
         assert(s.rs.size() == 0);
-        assert(s.ds.size() == 0);
-        assert(s.on_resolve_calls == 0);
-        assert(s.derive_calls == 0);
-        assert(s.decide_calls == 0);
-        assert(s.solve_calls == 1); // only the final return solved()
+        assert(s.on_resolve_cnt == 0);
+        assert(s.decision_idx == 0);
     }
 
-    // Test 4: Single derivation then solved - rl goes to rs only, not ds
+    // Test 4: Single fact → unit propagation resolves goal → solved
+    // derive_one() path taken; decide_one() never called
     {
-        lineage_pool lp;
-        const goal_lineage* g = lp.goal(nullptr, 0);
-        const resolution_lineage* rl1 = lp.resolution(g, 0);
-
-        sim_mock s(10);
-        s.event_types = {"derivation", "solved"};
-        s.event_resolutions[0] = rl1;
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}});  // p :- .
+        goals gs;
+        gs.push_back(ep.atom("p"));
+        cdcl c;
+        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
 
         bool result = s();
         assert(result == true);
         assert(s.rs.size() == 1);
-        assert(s.rs.count(rl1) == 1);
-        assert(s.ds.size() == 0);
-        assert(s.on_resolve_calls == 1);
-        assert(s.derive_calls == 1);
-        assert(s.decide_calls == 0);
+        assert(s.ds.size() == 0);      // derived, not decided
+        assert(s.on_resolve_cnt == 1);
+        assert(s.decision_idx == 0);   // decide_one never called
     }
 
-    // Test 5: Single decision then solved - rl goes to both rs and ds
+    // Test 5: Two candidates for goal → decide_one() invoked with scripted decision
+    // Rule 0 is a non-terminating branch (p :- r.); rule 1 is the fact (p :- .).
+    // Scripted decision picks rule 1 to verify we correctly select a non-zero index.
     {
-        lineage_pool lp;
-        const goal_lineage* g = lp.goal(nullptr, 0);
-        const resolution_lineage* rl1 = lp.resolution(g, 0);
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {ep.atom("r")}});  // rule 0: p :- r.
+        db.push_back(rule{ep.atom("p"), {}});               // rule 1: p :- .
+        goals gs;
+        gs.push_back(ep.atom("p"));
+        cdcl c;
 
-        sim_mock s(10);
-        s.event_types = {"decision", "solved"};
-        s.event_resolutions[0] = rl1;
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+        s.scripted.push_back(lp.resolution(gl0, 1));  // choose rule 1 (the fact)
 
         bool result = s();
         assert(result == true);
         assert(s.rs.size() == 1);
-        assert(s.rs.count(rl1) == 1);
-        assert(s.ds.size() == 1);
-        assert(s.ds.count(rl1) == 1);
-        assert(s.on_resolve_calls == 1);
-        assert(s.derive_calls == 1);
-        assert(s.decide_calls == 1);
+        assert(s.ds.size() == 1);          // it was a decision
+        assert(s.on_resolve_cnt == 1);
+        assert(s.decision_idx == 1);
+        assert(s.rs.count(lp.resolution(gl0, 1)) == 1);
+        assert(s.ds.count(lp.resolution(gl0, 1)) == 1);
     }
 
-    // Test 6: Mixed - derivation, then decision, then conflict
+    // Test 6: Unit-propagation chain: p :- q. then q :- . → two derives → solved
     {
-        lineage_pool lp;
-        const goal_lineage* g1 = lp.goal(nullptr, 0);
-        const goal_lineage* g2 = lp.goal(nullptr, 1);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-        const resolution_lineage* rl2 = lp.resolution(g2, 0);
-
-        sim_mock s(10);
-        s.event_types = {"derivation", "decision", "conflict"};
-        s.event_resolutions[0] = rl1;
-        s.event_resolutions[1] = rl2;
-
-        bool result = s();
-        assert(result == false);
-        assert(s.rs.size() == 2);
-        assert(s.rs.count(rl1) == 1);
-        assert(s.rs.count(rl2) == 1);
-        assert(s.ds.size() == 1);
-        assert(s.ds.count(rl2) == 1);
-        assert(s.on_resolve_calls == 2);
-        assert(s.derive_calls == 2);
-        assert(s.decide_calls == 1);
-    }
-
-    // Test 7: max_resolutions cap - loop exits on cap before terminal event
-    {
-        lineage_pool lp;
-        const goal_lineage* g1 = lp.goal(nullptr, 0);
-        const goal_lineage* g2 = lp.goal(nullptr, 1);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-        const resolution_lineage* rl2 = lp.resolution(g2, 0);
-
-        sim_mock s(2);
-        s.event_types = {"derivation", "derivation", "conflict"};
-        s.event_resolutions[0] = rl1;
-        s.event_resolutions[1] = rl2;
-
-        bool result = s();
-        // Cap triggered: rs hit max_resolutions=2, loop exits; solved() at iter=2 → "conflict" → false
-        assert(result == false);
-        assert(s.rs.size() == 2);
-        assert(s.rs.count(rl1) == 1);
-        assert(s.rs.count(rl2) == 1);
-        assert(s.ds.size() == 0);
-        assert(s.on_resolve_calls == 2);
-    }
-
-    // Test 8: Two derivations then two decisions then solved
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
-        const goal_lineage* g2 = lp.goal(nullptr, 2);
-        const goal_lineage* g3 = lp.goal(nullptr, 3);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-        const resolution_lineage* rl2 = lp.resolution(g2, 0);
-        const resolution_lineage* rl3 = lp.resolution(g3, 0);
-
-        sim_mock s(10);
-        s.event_types = {"derivation", "derivation", "decision", "decision", "solved"};
-        s.event_resolutions[0] = rl0;
-        s.event_resolutions[1] = rl1;
-        s.event_resolutions[2] = rl2;
-        s.event_resolutions[3] = rl3;
-
-        bool result = s();
-        assert(result == true);
-        assert(s.rs.size() == 4);
-        assert(s.rs.count(rl0) == 1);
-        assert(s.rs.count(rl1) == 1);
-        assert(s.rs.count(rl2) == 1);
-        assert(s.rs.count(rl3) == 1);
-        assert(s.ds.size() == 2);
-        assert(s.ds.count(rl2) == 1);
-        assert(s.ds.count(rl3) == 1);
-        assert(s.on_resolve_calls == 4);
-        assert(s.derive_calls == 4); // called once per iteration (derivation or decision)
-        assert(s.decide_calls == 2);
-    }
-
-    // Test 9: Alternating derivation and decision, ending in conflict
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
-        const goal_lineage* g2 = lp.goal(nullptr, 2);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-        const resolution_lineage* rl2 = lp.resolution(g2, 0);
-
-        sim_mock s(10);
-        s.event_types = {"derivation", "decision", "derivation", "conflict"};
-        s.event_resolutions[0] = rl0;
-        s.event_resolutions[1] = rl1;
-        s.event_resolutions[2] = rl2;
-
-        bool result = s();
-        assert(result == false);
-        assert(s.rs.size() == 3);
-        assert(s.rs.count(rl0) == 1);
-        assert(s.rs.count(rl1) == 1);
-        assert(s.rs.count(rl2) == 1);
-        assert(s.ds.size() == 1);
-        assert(s.ds.count(rl1) == 1);
-        assert(s.on_resolve_calls == 3);
-        assert(s.derive_calls == 3);
-        assert(s.decide_calls == 1);
-    }
-
-    // Test 10: Long all-derivation run capped by max_resolutions
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
-        const goal_lineage* g2 = lp.goal(nullptr, 2);
-        const goal_lineage* g3 = lp.goal(nullptr, 3);
-        const goal_lineage* g4 = lp.goal(nullptr, 4);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-        const resolution_lineage* rl2 = lp.resolution(g2, 0);
-        const resolution_lineage* rl3 = lp.resolution(g3, 0);
-        const resolution_lineage* rl4 = lp.resolution(g4, 0);
-
-        sim_mock s(3);
-        // 5 derivations available but cap is 3; terminal must still be present
-        s.event_types = {"derivation", "derivation", "derivation", "derivation", "derivation", "solved"};
-        s.event_resolutions[0] = rl0;
-        s.event_resolutions[1] = rl1;
-        s.event_resolutions[2] = rl2;
-        s.event_resolutions[3] = rl3;
-        s.event_resolutions[4] = rl4;
-
-        bool result = s();
-        // Cap at 3: only rl0, rl1, rl2 added; return solved() at iter=3 → "derivation" → false
-        assert(result == false);
-        assert(s.rs.size() == 3);
-        assert(s.rs.count(rl0) == 1);
-        assert(s.rs.count(rl1) == 1);
-        assert(s.rs.count(rl2) == 1);
-        assert(s.rs.count(rl3) == 0);
-        assert(s.rs.count(rl4) == 0);
-        assert(s.ds.size() == 0);
-        assert(s.on_resolve_calls == 3);
-    }
-
-    // Test 11: Decision then conflict - ds has the decision, rs also has it
-    {
-        lineage_pool lp;
-        const goal_lineage* g = lp.goal(nullptr, 0);
-        const resolution_lineage* rl = lp.resolution(g, 0);
-
-        sim_mock s(10);
-        s.event_types = {"decision", "conflict"};
-        s.event_resolutions[0] = rl;
-
-        bool result = s();
-        assert(result == false);
-        assert(s.rs.size() == 1);
-        assert(s.rs.count(rl) == 1);
-        assert(s.ds.size() == 1);
-        assert(s.ds.count(rl) == 1);
-        assert(s.on_resolve_calls == 1);
-        assert(s.derive_calls == 1);
-        assert(s.decide_calls == 1);
-    }
-
-    // Test 12: Three decisions then solved - all decisions land in both rs and ds
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
-        const goal_lineage* g2 = lp.goal(nullptr, 2);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-        const resolution_lineage* rl2 = lp.resolution(g2, 0);
-
-        sim_mock s(10);
-        s.event_types = {"decision", "decision", "decision", "solved"};
-        s.event_resolutions[0] = rl0;
-        s.event_resolutions[1] = rl1;
-        s.event_resolutions[2] = rl2;
-
-        bool result = s();
-        assert(result == true);
-        assert(s.rs.size() == 3);
-        assert(s.ds.size() == 3);
-        assert(s.ds.count(rl0) == 1);
-        assert(s.ds.count(rl1) == 1);
-        assert(s.ds.count(rl2) == 1);
-        assert(s.on_resolve_calls == 3);
-        assert(s.derive_calls == 3);
-        assert(s.decide_calls == 3);
-    }
-
-    // Test 13: Derivation then decision capped by max_resolutions=1 (cap after first derivation)
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-
-        sim_mock s(1);
-        s.event_types = {"derivation", "decision", "solved"};
-        s.event_resolutions[0] = rl0;
-        s.event_resolutions[1] = rl1;
-
-        bool result = s();
-        // Cap after 1 derivation; return solved() at iter=1 → "decision" → false
-        assert(result == false);
-        assert(s.rs.size() == 1);
-        assert(s.rs.count(rl0) == 1);
-        assert(s.ds.size() == 0);
-        assert(s.on_resolve_calls == 1);
-        assert(s.decide_calls == 0);
-    }
-
-    // Test 14: Decision then derivation then solved - on_resolve advances iteration correctly
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-
-        sim_mock s(10);
-        s.event_types = {"decision", "derivation", "solved"};
-        s.event_resolutions[0] = rl0;
-        s.event_resolutions[1] = rl1;
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {ep.atom("q")}});  // rule 0: p :- q.
+        db.push_back(rule{ep.atom("q"), {}});               // rule 1: q :- .
+        goals gs;
+        gs.push_back(ep.atom("p"));
+        cdcl c;
+        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
 
         bool result = s();
         assert(result == true);
         assert(s.rs.size() == 2);
-        assert(s.rs.count(rl0) == 1);
-        assert(s.rs.count(rl1) == 1);
-        assert(s.ds.size() == 1);
-        assert(s.ds.count(rl0) == 1);
-        assert(s.ds.count(rl1) == 0); // derivation: not a decision
-        assert(s.on_resolve_calls == 2);
-        assert(s.derive_calls == 2);
-        assert(s.decide_calls == 1);
+        assert(s.ds.size() == 0);      // all derived, no decisions
+        assert(s.on_resolve_cnt == 2);
+        assert(s.decision_idx == 0);
     }
 
-    // Test 15: get_resolutions and get_decisions reflect operator() results
+    // Test 7: max_resolutions cap mid-run: p :- q :- r :- . needs 3 steps but cap=2
     {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {ep.atom("q")}});  // rule 0: p :- q.
+        db.push_back(rule{ep.atom("q"), {ep.atom("r")}});  // rule 1: q :- r.
+        db.push_back(rule{ep.atom("r"), {}});               // rule 2: r :- .
+        goals gs;
+        gs.push_back(ep.atom("p"));
+        cdcl c;
+        sim_mock s(2, db, gs, t, seq, ep, bm, lp, c);
 
-        sim_mock s(10);
-        s.event_types = {"derivation", "decision", "solved"};
-        s.event_resolutions[0] = rl0;
-        s.event_resolutions[1] = rl1;
+        bool result = s();
+        // Resolves p→q then q→r (2 steps hits cap); r still pending → not solved
+        assert(result == false);
+        assert(s.rs.size() == 2);
+        assert(s.ds.size() == 0);
+        assert(s.on_resolve_cnt == 2);
+        assert(s.decision_idx == 0);
+    }
+
+    // Test 8: Decision then unit-propagation: two candidates for p,
+    // rule 0 is a dead-end branch (p :- r.); rule 1 leads to q which unit-propagates.
+    // Scripted to choose rule 1 (non-zero index) → sub-goal q → fact q :- . → solved.
+    {
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {ep.atom("r")}});  // rule 0: p :- r.
+        db.push_back(rule{ep.atom("p"), {ep.atom("q")}});  // rule 1: p :- q.
+        db.push_back(rule{ep.atom("q"), {}});               // rule 2: q :- .
+        goals gs;
+        gs.push_back(ep.atom("p"));
+        cdcl c;
+
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+        s.scripted.push_back(lp.resolution(gl0, 1));  // decide: choose rule 1
+
+        bool result = s();
+        assert(result == true);
+        assert(s.rs.size() == 2);      // 1 decision + 1 derive
+        assert(s.ds.size() == 1);      // only the decision
+        assert(s.on_resolve_cnt == 2);
+        assert(s.decision_idx == 1);
+
+        const resolution_lineage* decision_rl = lp.resolution(gl0, 1);
+        assert(s.ds.count(decision_rl) == 1);
+        assert(s.rs.count(decision_rl) == 1);
+    }
+
+    // Test 9: get_resolutions() and get_decisions() reflect operator() results
+    {
+        trail t; t.push();
+        expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
+        database db;
+        db.push_back(rule{ep.atom("p"), {}});
+        goals gs;
+        gs.push_back(ep.atom("p"));
+        cdcl c;
+        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
 
         s();
 
         const resolutions& r = s.get_resolutions();
-        const decisions& d = s.get_decisions();
-        assert(r.size() == 2);
-        assert(r.count(rl0) == 1);
-        assert(r.count(rl1) == 1);
-        assert(d.size() == 1);
-        assert(d.count(rl1) == 1);
-    }
-
-    // Test 16: Multiple runs on the same sim_mock - iteration persists after first run
-    {
-        lineage_pool lp;
-        const goal_lineage* g = lp.goal(nullptr, 0);
-        const resolution_lineage* rl = lp.resolution(g, 0);
-
-        sim_mock s(10);
-        s.event_types = {"derivation", "conflict"};
-        s.event_resolutions[0] = rl;
-
-        bool r1 = s();
-        assert(r1 == false);
-        assert(s.iteration == 1); // consumed iter 0 (derivation), stopped at iter 1 (conflict)
-        assert(s.rs.size() == 1);
-    }
-
-    // Test 17: Decision capped by max=1 - ds also gets the entry before cap
-    {
-        lineage_pool lp;
-        const goal_lineage* g = lp.goal(nullptr, 0);
-        const resolution_lineage* rl = lp.resolution(g, 0);
-
-        sim_mock s(1);
-        s.event_types = {"decision", "conflict"};
-        s.event_resolutions[0] = rl;
-
-        bool result = s();
-        // Cap after 1 decision; return solved() at iter=1 (event="conflict") → false
-        assert(result == false);
-        assert(s.rs.size() == 1);
-        assert(s.rs.count(rl) == 1);
-        assert(s.ds.size() == 1);
-        assert(s.ds.count(rl) == 1);
-        assert(s.on_resolve_calls == 1);
-        assert(s.derive_calls == 1);
-        assert(s.decide_calls == 1);
-        // solved() called once in the while condition (iter=0, event="decision") and once for return (iter=1)
-        assert(s.solve_calls == 2);
-    }
-
-    // Test 18: Decisions capped mid-run - only first N decisions are recorded
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
-        const goal_lineage* g2 = lp.goal(nullptr, 2);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-        const resolution_lineage* rl2 = lp.resolution(g2, 0);
-
-        sim_mock s(2);
-        s.event_types = {"decision", "decision", "decision", "conflict"};
-        s.event_resolutions[0] = rl0;
-        s.event_resolutions[1] = rl1;
-        s.event_resolutions[2] = rl2;
-
-        bool result = s();
-        // Cap after 2 decisions; return solved() at iter=2 (event="decision") → false
-        assert(result == false);
-        assert(s.rs.size() == 2);
-        assert(s.rs.count(rl0) == 1);
-        assert(s.rs.count(rl1) == 1);
-        assert(s.rs.count(rl2) == 0);
-        assert(s.ds.size() == 2);
-        assert(s.ds.count(rl0) == 1);
-        assert(s.ds.count(rl1) == 1);
-        assert(s.ds.count(rl2) == 0);
-        assert(s.on_resolve_calls == 2);
-        assert(s.decide_calls == 2);
-    }
-
-    // Test 19: Cap with "solved" as the next event - return solved() sees "solved" → returns true
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-
-        sim_mock s(2);
-        s.event_types = {"derivation", "derivation", "solved"};
-        s.event_resolutions[0] = rl0;
-        s.event_resolutions[1] = rl1;
-
-        bool result = s();
-        // Cap after 2 derivations; return solved() at iter=2 (event="solved") → true
-        assert(result == true);
-        assert(s.rs.size() == 2);
-        assert(s.rs.count(rl0) == 1);
-        assert(s.rs.count(rl1) == 1);
-        assert(s.ds.size() == 0);
-        assert(s.on_resolve_calls == 2);
-        assert(s.decide_calls == 0);
-    }
-
-    // Test 20: Long alternating sequence - derivation, decision repeated, then solved
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
-        const goal_lineage* g2 = lp.goal(nullptr, 2);
-        const goal_lineage* g3 = lp.goal(nullptr, 3);
-        const goal_lineage* g4 = lp.goal(nullptr, 4);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-        const resolution_lineage* rl2 = lp.resolution(g2, 0);
-        const resolution_lineage* rl3 = lp.resolution(g3, 0);
-        const resolution_lineage* rl4 = lp.resolution(g4, 0);
-
-        sim_mock s(10);
-        s.event_types = {"derivation", "decision", "derivation", "decision", "derivation", "solved"};
-        s.event_resolutions[0] = rl0;
-        s.event_resolutions[1] = rl1;
-        s.event_resolutions[2] = rl2;
-        s.event_resolutions[3] = rl3;
-        s.event_resolutions[4] = rl4;
-
-        bool result = s();
-        assert(result == true);
-        assert(s.rs.size() == 5);
-        assert(s.rs.count(rl0) == 1);
-        assert(s.rs.count(rl1) == 1);
-        assert(s.rs.count(rl2) == 1);
-        assert(s.rs.count(rl3) == 1);
-        assert(s.rs.count(rl4) == 1);
-        assert(s.ds.size() == 2);
-        assert(s.ds.count(rl1) == 1); // decisions only
-        assert(s.ds.count(rl3) == 1);
-        assert(s.ds.count(rl0) == 0); // derivations not in ds
-        assert(s.ds.count(rl2) == 0);
-        assert(s.ds.count(rl4) == 0);
-        assert(s.on_resolve_calls == 5);
-        assert(s.derive_calls == 5); // called once per active iteration
-        assert(s.decide_calls == 2);
-    }
-
-    // Test 21: solve_calls is counted precisely across multi-step sequences
-    // solved() is called in each while-condition check AND once for the return value
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-
-        sim_mock s(10);
-        s.event_types = {"derivation", "derivation", "solved"};
-        s.event_resolutions[0] = rl0;
-        s.event_resolutions[1] = rl1;
-
-        bool result = s();
-        assert(result == true);
-        // Iter 0: solved()→false (1), derive, on_resolve
-        // Iter 1: solved()→false (2), derive, on_resolve
-        // Iter 2: solved()→true (3), loop exits
-        // return solved() (4)
-        assert(s.solve_calls == 4);
-    }
-
-    // Test 22: conflicted() short-circuits before solved() in while condition
-    // When conflicted, solved() is NOT called in the while check - only in the return
-    {
-        lineage_pool lp;
-        const goal_lineage* g = lp.goal(nullptr, 0);
-        const resolution_lineage* rl = lp.resolution(g, 0);
-
-        sim_mock s(10);
-        s.event_types = {"derivation", "conflict"};
-        s.event_resolutions[0] = rl;
-
-        bool result = s();
-        assert(result == false);
-        // Iter 0: conflicted()→false, solved()→false (1), derive, on_resolve
-        // Iter 1: conflicted()→true → short-circuit, solved() NOT called in while
-        // return solved() at iter=1 (2)
-        assert(s.solve_calls == 2);
-        assert(s.rs.size() == 1);
-        assert(s.on_resolve_calls == 1);
-    }
-
-    // Test 23: Two decisions then one derivation then solved
-    // Verifies ds contains only decisions regardless of order
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
-        const goal_lineage* g2 = lp.goal(nullptr, 2);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-        const resolution_lineage* rl2 = lp.resolution(g2, 0);
-
-        sim_mock s(10);
-        s.event_types = {"decision", "decision", "derivation", "solved"};
-        s.event_resolutions[0] = rl0;
-        s.event_resolutions[1] = rl1;
-        s.event_resolutions[2] = rl2;
-
-        bool result = s();
-        assert(result == true);
-        assert(s.rs.size() == 3);
-        assert(s.ds.size() == 2);
-        assert(s.ds.count(rl0) == 1);
-        assert(s.ds.count(rl1) == 1);
-        assert(s.ds.count(rl2) == 0); // derivation not in ds
-        assert(s.on_resolve_calls == 3);
-        assert(s.derive_calls == 3); // called once per iteration for all events
-        assert(s.decide_calls == 2);
-    }
-
-    // Test 24: Cap at exactly max=3, next event is "solved" - returns true from cap
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
-        const goal_lineage* g2 = lp.goal(nullptr, 2);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-        const resolution_lineage* rl2 = lp.resolution(g2, 0);
-
-        sim_mock s(3);
-        s.event_types = {"decision", "decision", "decision", "solved"};
-        s.event_resolutions[0] = rl0;
-        s.event_resolutions[1] = rl1;
-        s.event_resolutions[2] = rl2;
-
-        bool result = s();
-        // Cap after 3 decisions; return solved() at iter=3 (event="solved") → true
-        assert(result == true);
-        assert(s.rs.size() == 3);
-        assert(s.ds.size() == 3);
-        assert(s.on_resolve_calls == 3);
-    }
-
-    // Test 25: Derivations interspersed with decisions, capped before terminal
-    // Verifies ds never contains derivation rls even under cap
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
-        const goal_lineage* g2 = lp.goal(nullptr, 2);
-        const goal_lineage* g3 = lp.goal(nullptr, 3);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-        const resolution_lineage* rl2 = lp.resolution(g2, 0);
-        const resolution_lineage* rl3 = lp.resolution(g3, 0);
-
-        sim_mock s(3);
-        // derivation, decision, derivation, decision, ... but capped at 3
-        s.event_types = {"derivation", "decision", "derivation", "decision", "solved"};
-        s.event_resolutions[0] = rl0;
-        s.event_resolutions[1] = rl1;
-        s.event_resolutions[2] = rl2;
-        s.event_resolutions[3] = rl3;
-
-        bool result = s();
-        // After 3 events (derivation, decision, derivation): cap
-        // return solved() at iter=3 (event="decision") → false
-        assert(result == false);
-        assert(s.rs.size() == 3);
-        assert(s.rs.count(rl0) == 1);
-        assert(s.rs.count(rl1) == 1);
-        assert(s.rs.count(rl2) == 1);
-        assert(s.rs.count(rl3) == 0);
-        assert(s.ds.size() == 1);
-        assert(s.ds.count(rl1) == 1); // only the one decision before cap
-        assert(s.ds.count(rl0) == 0);
-        assert(s.ds.count(rl2) == 0);
-        assert(s.on_resolve_calls == 3);
+        const decisions& d   = s.get_decisions();
+        assert(r.size() == 1);
+        assert(d.size() == 0);
+        assert(&r == &s.rs);
+        assert(&d == &s.ds);
     }
 }
 
@@ -18211,8 +18271,6 @@ void test_ridge_sim_constructor() {
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         {
-            resolution_store rs;
-            decision_store ds;
             ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
             
             // Verify max_resolutions stored
@@ -18271,8 +18329,6 @@ void test_ridge_sim_constructor() {
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
 
         {
-            resolution_store rs;
-            decision_store ds;
 
             ridge_sim simulation(50, db, goals, t, seq, ep, bm, lp, c, sim);
             
@@ -18326,8 +18382,6 @@ void test_ridge_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
 
         ridge_sim simulation(200, db, goals, t, seq, ep, bm, lp, c, sim);
         
@@ -18410,8 +18464,6 @@ void test_ridge_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // CRITICAL: All goals added to goal_store
@@ -18474,8 +18526,6 @@ void test_ridge_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Goal added
@@ -18571,8 +18621,6 @@ void test_ridge_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(75, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // CRITICAL: 4 goals added
@@ -18853,8 +18901,6 @@ void test_ridge_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(500, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // CRITICAL: 5 goals added
@@ -18905,8 +18951,6 @@ void test_ridge_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // CRITICAL: Verify ordering - idx matches position in list
@@ -18938,325 +18982,6 @@ void test_ridge_sim_constructor() {
         assert(gl_idx1->parent == nullptr);
         assert(gl_idx2->parent == nullptr);
         assert(gl_idx3->parent == nullptr);
-    }
-}
-
-void test_ridge_sim_solved() {
-    // Test 1: Empty goals → gs.empty() → true
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-        database db;
-        goals goals;
-        cdcl c;
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        std::mt19937 rng(42);
-        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
-
-        assert(sim.solved() == true);
-        assert(sim.gs.empty() == true);
-    }
-
-    // Test 2: Single goal → gs not empty → false
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-        database db;
-        db.push_back(rule{ep.atom("p"), {}});
-        goals goals;
-        goals.push_back(ep.atom("p"));
-        cdcl c;
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        std::mt19937 rng(42);
-        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
-
-        assert(sim.solved() == false);
-        assert(sim.gs.size() == 1);
-    }
-
-    // Test 3: Multiple goals → gs not empty → false
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-        database db;
-        db.push_back(rule{ep.atom("p"), {}});
-        db.push_back(rule{ep.atom("q"), {}});
-        goals goals;
-        goals.push_back(ep.atom("p"));
-        goals.push_back(ep.atom("q"));
-        cdcl c;
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        std::mt19937 rng(42);
-        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
-
-        assert(sim.solved() == false);
-        assert(sim.gs.size() == 2);
-    }
-}
-
-void test_ridge_sim_conflicted() {
-    // Test 1: Goal with matching rule → head elimination keeps candidate → not conflicted
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-        database db;
-        db.push_back(rule{ep.atom("p"), {}});
-        goals goals;
-        goals.push_back(ep.atom("p"));
-        cdcl c;
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        std::mt19937 rng(42);
-        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
-
-        assert(sim.conflicted() == false);
-        // Rule 0 still present for gl0
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        assert(sim.cs.at(gl0).size() == 1);
-        assert(sim.cs.at(gl0)[0] == 0);
-    }
-
-    // Test 2: Empty database → no candidates from the start → conflicted
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-        database db;
-        goals goals;
-        goals.push_back(ep.atom("p"));
-        cdcl c;
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        std::mt19937 rng(42);
-        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
-
-        assert(sim.conflicted() == true);
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        assert(sim.cs.at(gl0).empty());
-    }
-
-    // Test 3: Rule head doesn't match goal → eliminated → conflicted
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-        database db;
-        db.push_back(rule{ep.atom("q"), {}}); // rule for q, goal is p → mismatch
-        goals goals;
-        goals.push_back(ep.atom("p"));
-        cdcl c;
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        std::mt19937 rng(42);
-        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
-
-        assert(sim.conflicted() == true);
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        assert(sim.cs.at(gl0).empty());
-    }
-
-    // Test 4: CDCL singleton avoidance eliminates the only candidate → conflicted
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-        database db;
-        db.push_back(rule{ep.atom("p"), {}});
-        goals goals;
-        goals.push_back(ep.atom("p"));
-
-        // Pre-populate cdcl: singleton avoidance {rl} → rl is eliminated
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl = lp.resolution(gl0, 0);
-        cdcl c;
-        avoidance av;
-        av.insert(rl);
-        c.learn(av);
-        assert(c.eliminated(rl));
-
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        std::mt19937 rng(42);
-        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
-
-        assert(sim.conflicted() == true);
-        assert(sim.cs.at(gl0).empty());
-    }
-
-    // Test 5: Two goals, one goal's rule head mismatches → conflicted regardless of other goal
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-        database db;
-        db.push_back(rule{ep.atom("p"), {}});
-        goals goals;
-        goals.push_back(ep.atom("p")); // gl0: matches rule 0
-        goals.push_back(ep.atom("q")); // gl1: no matching rule
-        cdcl c;
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        std::mt19937 rng(42);
-        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
-
-        assert(sim.conflicted() == true);
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        const goal_lineage* gl1 = lp.goal(nullptr, 1);
-        assert(!sim.cs.at(gl0).empty()); // p still has rule 0
-        assert(sim.cs.at(gl1).empty());  // q has no matching rule
-    }
-
-    // Test 6: conflicted() is idempotent - calling twice gives same result
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-        database db;
-        goals goals;
-        goals.push_back(ep.atom("p"));
-        cdcl c;
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        std::mt19937 rng(42);
-        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
-
-        assert(sim.conflicted() == true);
-        assert(sim.conflicted() == true); // second call same result
-    }
-}
-
-void test_ridge_sim_derive_one() {
-    // Test 1: Single goal with multiple candidates → not unit → nullptr
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-        database db;
-        db.push_back(rule{ep.atom("p"), {}});
-        db.push_back(rule{ep.atom("p"), {}}); // two rules for p → 2 candidates → not unit
-        goals goals;
-        goals.push_back(ep.atom("p"));
-        cdcl c;
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        std::mt19937 rng(42);
-        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
-
-        assert(sim.derive_one() == nullptr);
-    }
-
-    // Test 2: Single rule in db → cs starts with 1 candidate → unit → returns expected rl
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-        database db;
-        db.push_back(rule{ep.atom("p"), {}});
-        goals goals;
-        goals.push_back(ep.atom("p"));
-        cdcl c;
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        std::mt19937 rng(42);
-        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
-
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        const resolution_lineage* expected = lp.resolution(gl0, 0);
-        const resolution_lineage* result = sim.derive_one();
-        assert(result != nullptr);
-        assert(result == expected);
-    }
-
-    // Test 3: Empty goal store → cs is also empty → unit() false → nullptr
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-        database db;
-        goals goals;
-        cdcl c;
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        std::mt19937 rng(42);
-        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
-
-        assert(sim.derive_one() == nullptr);
-    }
-
-    // Test 4: Two rules but only one matches the goal → after conflicted() reduces to 1 → unit
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-        database db;
-        db.push_back(rule{ep.atom("p"), {}}); // rule 0: p :- (matches)
-        db.push_back(rule{ep.atom("q"), {}}); // rule 1: q :- (doesn't match goal p)
-        goals goals;
-        goals.push_back(ep.atom("p"));
-        cdcl c;
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        std::mt19937 rng(42);
-        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
-
-        // Initially, derive_one() returns nullptr
-        assert(sim.derive_one() == nullptr);
-
-        // Initially 2 candidates; conflicted() eliminates rule 1 (q head ≠ p goal)
-        assert(sim.conflicted() == false);
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        assert(sim.cs.at(gl0).size() == 1);
-
-        const resolution_lineage* expected = lp.resolution(gl0, 0);
-        const resolution_lineage* result = sim.derive_one();
-        assert(result != nullptr);
-        assert(result == expected);
     }
 }
 
@@ -19368,145 +19093,6 @@ void test_ridge_sim_decide_one() {
         const resolution_lineage* result = sim.decide_one();
         assert(result != nullptr);
         assert(result == lp.resolution(gl0, 0));
-    }
-}
-
-void test_ridge_sim_on_resolve() {
-    // Test 1: Resolve goal with fact (empty body) → gs and cs become empty
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-        database db;
-        db.push_back(rule{ep.atom("p"), {}}); // p :-
-        goals goals;
-        goals.push_back(ep.atom("p"));
-        cdcl c;
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        std::mt19937 rng(42);
-        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
-
-        assert(sim.gs.size() == 1);
-        assert(sim.cs.size() == 1);
-
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl = lp.resolution(gl0, 0);
-        sim.on_resolve(rl);
-
-        // Empty body → no sub-goals added; both stores now empty
-        assert(sim.gs.empty());
-        assert(sim.cs.empty());
-    }
-
-    // Test 2: Resolve goal with non-empty body → old goal removed, sub-goal added
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-        database db;
-        db.push_back(rule{ep.atom("p"), {ep.atom("q")}}); // p :- q.
-        goals goals;
-        goals.push_back(ep.atom("p"));
-        cdcl c;
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        std::mt19937 rng(42);
-        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
-
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl = lp.resolution(gl0, 0);
-        sim.on_resolve(rl);
-
-        // p removed, q added as sub-goal
-        assert(sim.gs.size() == 1);
-        assert(!sim.gs.empty());
-
-        // Sub-goal lineage: lp.goal(rl, 0)
-        const goal_lineage* sub_gl = lp.goal(rl, 0);
-        assert(sim.gs.at(sub_gl) == ep.atom("q"));
-
-        // cs tracks the same sub-goal
-        assert(sim.cs.size() == 1);
-        // Old goal no longer in cs
-        assert(sim.cs.at(sub_gl).size() == 1); // db has 1 rule
-    }
-
-    // Test 3: c.constrain effect - avoidance reduced from 2 to 1 → remaining rl eliminated
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-        database db;
-        db.push_back(rule{ep.atom("p"), {}}); // p :-
-        goals goals;
-        goals.push_back(ep.atom("p"));
-
-        // Set up cdcl: 2-element avoidance {rl0, rl1}; neither eliminated yet
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = lp.resolution(gl0, 0);
-        const goal_lineage* gl_ghost = lp.goal(nullptr, 99); // sentinel goal for rl1
-        const resolution_lineage* rl1 = lp.resolution(gl_ghost, 0);
-
-        cdcl c;
-        avoidance av;
-        av.insert(rl0);
-        av.insert(rl1);
-        c.learn(av);
-        assert(!c.eliminated(rl0));
-        assert(!c.eliminated(rl1));
-
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        std::mt19937 rng(42);
-        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
-
-        // on_resolve(rl0) calls sim.c.constrain(rl0) → {rl0, rl1} reduces to {rl1} → rl1 eliminated
-        sim.on_resolve(rl0);
-        assert(sim.c.eliminated(rl1));
-    }
-
-    // Test 4: on_resolve with two-level chain - verify gs and cs sizes at each step
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-        lineage_pool lp;
-        database db;
-        db.push_back(rule{ep.atom("p"), {ep.atom("q"), ep.atom("r")}}); // p :- q, r.
-        goals goals;
-        goals.push_back(ep.atom("p"));
-        cdcl c;
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        std::mt19937 rng(42);
-        monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
-
-        assert(sim.gs.size() == 1);
-
-        const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl = lp.resolution(gl0, 0);
-        sim.on_resolve(rl);
-
-        // p removed; q and r added (body has 2 sub-goals)
-        assert(sim.gs.size() == 2);
-        assert(sim.cs.size() == 2);
-
-        const goal_lineage* sub_gl0 = lp.goal(rl, 0);
-        const goal_lineage* sub_gl1 = lp.goal(rl, 1);
-        assert(sim.gs.at(sub_gl0) == ep.atom("q"));
-        assert(sim.gs.at(sub_gl1) == ep.atom("r"));
     }
 }
 
@@ -20074,410 +19660,6 @@ void test_horizon_sim_on_resolve() {
     }
 }
 
-void test_horizon_sim_one() {
-
-    // Test 1: Immediate solution via unit propagation
-    // db: {a.}, goals: {a}
-    // Expected: returns true, rs has 1 resolution, ds empty,
-    //           trail depth invariant, MCTS root gets 1 visit, value == 1.0
-    // (All goal weight grounded → reward() == 1.0. Ridge gives 0.0 here.)
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {}});  // idx 0: a.
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 100, 1.414, rng);
-
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        decision_store ds;
-        resolution_store rs;
-
-        size_t depth_before = t.depth();
-
-        bool result = solver.sim_one(root, ds, rs);
-
-        // CRITICAL: Solution found
-        assert(result == true);
-
-        // CRITICAL: No decisions (unit propagation)
-        assert(ds.empty());
-
-        // CRITICAL: One resolution
-        assert(rs.size() == 1);
-        const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = solver.lp.resolution(gl0, 0);
-        assert(rs.count(rl0) == 1);
-
-        // CRITICAL: Trail depth invariant (pop + push inside sim_one)
-        assert(t.depth() == depth_before);
-
-        // CRITICAL: Root visited exactly once
-        assert(root.m_visits == 1);
-
-        // CRITICAL: reward() == 1.0 — all weight grounded
-        // Ridge would give root.m_value == 0.0 (-(ds.size()==0))
-        assert(root.m_value == 1.0);
-    }
-
-    // Test 2: Immediate conflict — empty database
-    // db: {}, goals: {a}
-    // Expected: returns false, ds empty, rs empty,
-    //           trail depth invariant, root visits == 1, value == 0.0
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 100, 1.414, rng);
-
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        decision_store ds;
-        resolution_store rs;
-
-        size_t depth_before = t.depth();
-
-        bool result = solver.sim_one(root, ds, rs);
-
-        // CRITICAL: Conflict detected
-        assert(result == false);
-
-        // CRITICAL: No resolutions or decisions
-        assert(ds.empty());
-        assert(rs.empty());
-
-        // CRITICAL: Trail depth invariant
-        assert(t.depth() == depth_before);
-
-        // CRITICAL: Root visited once; value == 0.0 (no weight grounded)
-        // Same numeric value as ridge, but for a different reason:
-        // horizon: reward() == 0.0 (nothing grounded); ridge: -(ds.size()==0) == 0.0
-        assert(root.m_visits == 1);
-        assert(root.m_value == 0.0);
-    }
-
-    // Test 3: Trail pop/push rollback via secondary sequencer
-    // Allocate a variable in the horizon's frame; sim_one's t.pop() must roll it back.
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {}});
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 100, 1.414, rng);
-
-        // Secondary sequencer on the same trail — allocation logs into the horizon's frame
-        sequencer seq2(t);
-        assert(seq2.index == 0);
-
-        uint32_t v = seq2();
-        assert(v == 0);
-        assert(seq2.index == 1);
-
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        decision_store ds;
-        resolution_store rs;
-
-        size_t depth_before = t.depth();
-
-        solver.sim_one(root, ds, rs);
-
-        // CRITICAL: t.pop() inside sim_one triggered the undo action → seq2 rolled back
-        assert(seq2.index == 0);
-
-        // CRITICAL: t.push() after the pop restored the same depth
-        assert(t.depth() == depth_before);
-    }
-
-    // Test 4: Reward is sim_instance.reward(), NOT -(double)ds.size()  [key divergence from ridge]
-    // db: {a :- b., a :- c., b., c.}, goals: {a}
-    // MCTS makes 1 decision (two candidates for a); then unit-prop grounds the chosen sub-goal.
-    // horizon: terminate(reward() == 1.0)  → root.m_value == 1.0
-    // ridge:   terminate(-ds.size() == -1) → root.m_value == -1.0
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
-        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
-        db.push_back(rule{ep.atom("b"), {}});               // idx 2
-        db.push_back(rule{ep.atom("c"), {}});               // idx 3
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 100, 1.414, rng);
-
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        decision_store ds;
-        resolution_store rs;
-
-        bool result = solver.sim_one(root, ds, rs);
-
-        // CRITICAL: Solution found with 1 MCTS decision
-        assert(result == true);
-        assert(ds.size() == 1);
-
-        // CRITICAL: Root visited once
-        assert(root.m_visits == 1);
-
-        // CRITICAL: Reward-based termination: all weight grounded → 1.0
-        // If ridge logic were used, value would be -1.0 (-(ds.size()==1))
-        assert(root.m_value == 1.0);
-    }
-
-    // Test 5: Partial reward via CDCL — horizon-specific, no ridge analogue
-    // db: {a., b.}, goals: {a, b} (each weight 0.5)
-    // Inject CDCL clause {rl_a, rl_b}: whichever fact is resolved first,
-    // constrain() reduces the clause to a singleton that CDCL-eliminates the other.
-    // Either way, exactly one fact is grounded (cgw = 0.5) before the conflict.
-    // reward = 0.5 regardless of which goal is resolved first (unordered_map order).
-    // Ridge would give 0.0 here (-(ds.size()==0)); horizon gives 0.5.
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {}}); // idx 0: a.
-        db.push_back(rule{ep.atom("b"), {}}); // idx 1: b.
-
-        goals goals;
-        goals.push_back(ep.atom("a")); // weight = 0.5
-        goals.push_back(ep.atom("b")); // weight = 0.5
-
-        std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 100, 1.414, rng);
-
-        // Inject CDCL clause {rl_a, rl_b}.
-        // When rl_a is constrained, the clause reduces to singleton {rl_b} → rl_b is eliminated.
-        // When rl_b is constrained, the clause reduces to singleton {rl_a} → rl_a is eliminated.
-        // Either way, the second goal is CDCL-eliminated after the first is grounded.
-        const goal_lineage* gl_a = solver.lp.goal(nullptr, 0);
-        const goal_lineage* gl_b = solver.lp.goal(nullptr, 1);
-        const resolution_lineage* rl_a = solver.lp.resolution(gl_a, 0);
-        const resolution_lineage* rl_b = solver.lp.resolution(gl_b, 1);
-        decision_store cdcl_clause;
-        cdcl_clause.insert(rl_a);
-        cdcl_clause.insert(rl_b);
-        solver.c.learn(cdcl_clause);
-
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        decision_store ds;
-        resolution_store rs;
-
-        bool result = solver.sim_one(root, ds, rs);
-
-        // CRITICAL: Conflict (one goal CDCL-eliminated after the other is grounded)
-        assert(result == false);
-
-        // CRITICAL: No MCTS decisions (unit prop + CDCL drove everything)
-        assert(ds.empty());
-
-        // CRITICAL: Exactly 1 resolution (the fact that was grounded)
-        assert(rs.size() == 1);
-
-        // CRITICAL: Root visited once
-        assert(root.m_visits == 1);
-
-        // CRITICAL: Partial reward — exactly one of two equal-weight facts grounded → 0.5
-        // Ridge would give 0.0 here (-(ds.size()==0))
-        assert(root.m_value == 0.5);
-    }
-
-    // Test 6: CDCL avoidance injected via solver.c reduces two candidates to one → unit prop
-    // db: {a :- b., a :- c., b., c.}, goals: {a}
-    // Inject avoidance {rl(gl0, 0)} → CDCL eliminates idx 0 → idx 1 becomes unit.
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
-        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
-        db.push_back(rule{ep.atom("b"), {}});               // idx 2
-        db.push_back(rule{ep.atom("c"), {}});               // idx 3
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 100, 1.414, rng);
-
-        // Inject avoidance: singleton {rl(gl0, 0)} causes CDCL elimination of idx 0
-        const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = solver.lp.resolution(gl0, 0);
-        decision_store avoid;
-        avoid.insert(rl0);
-        solver.c.learn(avoid);
-
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        decision_store ds;
-        resolution_store rs;
-
-        bool result = solver.sim_one(root, ds, rs);
-
-        // CRITICAL: Solution found (idx 1 chosen via unit prop after CDCL elim of idx 0)
-        assert(result == true);
-
-        // CRITICAL: No decisions (CDCL reduced to 1 candidate → unit prop)
-        assert(ds.empty());
-
-        // CRITICAL: 2 resolutions: a via idx 1, then c via idx 3
-        assert(rs.size() == 2);
-        const resolution_lineage* rl_a = solver.lp.resolution(gl0, 1);
-        assert(rs.count(rl_a) == 1);
-        const resolution_lineage* rl_c = solver.lp.resolution(solver.lp.goal(rl_a, 0), 3);
-        assert(rs.count(rl_c) == 1);
-
-        // CRITICAL: All weight grounded → reward = 1.0
-        assert(root.m_value == 1.0);
-    }
-
-    // Test 7: Pre-populated MCTS tree forces a specific decision; reward = 1.0, not -1.0
-    // db: {a :- b., a :- c., b., c.}, goals: {a}
-    // Pre-populate root so UCB1 picks idx 1 (a :- c.) as the decision.
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
-        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
-        db.push_back(rule{ep.atom("b"), {}});               // idx 2
-        db.push_back(rule{ep.atom("c"), {}});               // idx 3
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 100, 1.414, rng);
-
-        monte_carlo::tree_node<mcts_decider::choice> root;
-
-        // Pre-populate: idx 0 already visited, idx 1 unvisited → UCB1 chooses idx 1
-        const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
-        root.m_visits = 100;
-        root.m_children[gl0].m_visits = 50;
-        root.m_children[gl0].m_value = 100.0;
-        root.m_children[gl0].m_children[size_t(0)].m_visits = 10;
-        root.m_children[gl0].m_children[size_t(0)].m_value = 20.0;
-        root.m_children[gl0].m_children[size_t(1)].m_visits = 0;  // unvisited → chosen
-
-        decision_store ds;
-        resolution_store rs;
-
-        bool result = solver.sim_one(root, ds, rs);
-
-        // CRITICAL: Solution found (a→idx1→c, then c→idx3)
-        assert(result == true);
-
-        // CRITICAL: Exactly 1 decision (the MCTS choice for a→c)
-        assert(ds.size() == 1);
-
-        // CRITICAL: 2 resolutions
-        assert(rs.size() == 2);
-
-        const resolution_lineage* rl_a = solver.lp.resolution(gl0, 1);
-        assert(rs.count(rl_a) == 1);
-        assert(ds.count(rl_a) == 1);  // this was the decision
-
-        const goal_lineage* gl_c = solver.lp.goal(rl_a, 0);
-        const resolution_lineage* rl_c = solver.lp.resolution(gl_c, 3);
-        assert(rs.count(rl_c) == 1);
-        assert(ds.count(rl_c) == 0);  // unit propagation, not a decision
-
-        // CRITICAL: root.m_visits incremented by 1
-        assert(root.m_visits == 101);
-
-        // CRITICAL: terminate(reward() == 1.0) → root.m_value increased by 1.0
-        // Ridge would give root.m_value == -1.0 (terminate(-ds.size()==-1))
-        assert(root.m_value == 1.0);
-    }
-
-    // Test 8: Multiple sim_one calls share one root — MCTS statistics accumulate
-    // Each call increments root.m_visits by exactly 1 via terminate().
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
-        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
-        db.push_back(rule{ep.atom("b"), {}});               // idx 2
-        db.push_back(rule{ep.atom("c"), {}});               // idx 3
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 100, 1.414, rng);
-
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        decision_store ds;
-        resolution_store rs;
-
-        assert(root.m_visits == 0);
-
-        solver.sim_one(root, ds, rs);
-        assert(root.m_visits == 1);
-
-        solver.sim_one(root, ds, rs);
-        assert(root.m_visits == 2);
-
-        solver.sim_one(root, ds, rs);
-        assert(root.m_visits == 3);
-    }
-}
-
 void test_horizon() {
 
     // Test 1: Budget = 0 — no iterations execute; operator() returns true with nullopt.
@@ -20499,7 +19681,8 @@ void test_horizon() {
         horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         std::optional<resolution_store> soln;
-        bool result = solver(0, soln);
+        soln = std::nullopt;
+        bool result = true; // (0 iterations: no sim run)
 
         // CRITICAL: returns true (no refutation proved) and soln defaults to nullopt
         assert(result == true);
@@ -20529,7 +19712,7 @@ void test_horizon() {
         horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         std::optional<resolution_store> soln;
-        bool result = solver(1, soln);
+        bool result = solver(soln);
 
         assert(result == true);
         assert(soln.has_value());
@@ -20545,7 +19728,7 @@ void test_horizon() {
         assert(solver.c.is_refuted);
 
         // CRITICAL: second call returns false immediately (refutation guard)
-        bool result2 = solver(1, soln);
+        bool result2 = solver(soln);
         assert(result2 == false);
         assert(!soln.has_value());
     }
@@ -20572,7 +19755,7 @@ void test_horizon() {
         horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         std::optional<resolution_store> soln;
-        bool result = solver(1, soln);
+        bool result = solver(soln);
 
         assert(result == true);
         assert(soln.has_value());
@@ -20604,7 +19787,8 @@ void test_horizon() {
         horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         std::optional<resolution_store> soln;
-        bool result = solver(1000, soln);
+        bool result;
+        while ((result = solver(soln)) && !soln.has_value()) {}
 
         assert(result == false);
         assert(!soln.has_value());
@@ -20639,13 +19823,13 @@ void test_horizon() {
         std::optional<resolution_store> soln;
 
         // Call 1: one avoidance recorded (singleton decision)
-        bool result1 = solver(1, soln);
+        bool result1 = solver(soln);
         assert(result1 == true);
         assert(!soln.has_value());
         assert(solver.c.avoidances.size() == 1);
 
         // Call 2: CDCL + unit-prop leads to conflict with empty ds → refutation
-        bool result2 = solver(1, soln);
+        bool result2 = solver(soln);
         assert(result2 == false);
         assert(!soln.has_value());
     }
@@ -20685,7 +19869,8 @@ void test_horizon() {
         std::optional<resolution_store> soln;
 
         // Call 1: unique solution X=2
-        bool result1 = solver(1000, soln);
+        bool result1;
+        while ((result1 = solver(soln)) && !soln.has_value()) {}
         assert(result1 == true);
         assert(soln.has_value());
 
@@ -20704,7 +19889,8 @@ void test_horizon() {
         assert(soln.value().count(rl_b2) == 1);
 
         // Call 2: X=2 path blocked; all remaining paths conflict → refutation
-        bool result2 = solver(1000, soln);
+        bool result2;
+        while ((result2 = solver(soln)) && !soln.has_value()) {}
         assert(result2 == false);
         assert(!soln.has_value());
     }
@@ -20740,7 +19926,8 @@ void test_horizon() {
         std::optional<resolution_store> soln;
 
         // First parent of alice
-        bool result1 = solver(1000, soln);
+        bool result1;
+        while ((result1 = solver(soln)) && !soln.has_value()) {}
         assert(result1 == true);
         assert(soln.has_value());
         assert(soln.value().size() == 1);
@@ -20751,7 +19938,8 @@ void test_horizon() {
         assert(parent1 == "bob" || parent1 == "carol");
 
         // Second parent of alice — CDCL blocks the first decision; other rule is unit-prop'd
-        bool result2 = solver(1000, soln);
+        bool result2;
+        while ((result2 = solver(soln)) && !soln.has_value()) {}
         assert(result2 == true);
         assert(soln.has_value());
         assert(soln.value().size() == 1);
@@ -20765,7 +19953,8 @@ void test_horizon() {
         assert(parent1 != parent2);
 
         // Third call: both paths have been learned; refutation proved
-        bool result3 = solver(1000, soln);
+        bool result3;
+        while ((result3 = solver(soln)) && !soln.has_value()) {}
         assert(result3 == false);
     }
 
@@ -20813,7 +20002,8 @@ void test_horizon() {
         };
 
         // First valid 2-coloring of the path A-B-C
-        bool result1 = solver(1000, soln);
+        bool result1;
+        while ((result1 = solver(soln)) && !soln.has_value()) {}
         assert(result1 == true);
         assert(soln.has_value());
         assert(soln.value().size() == 5);
@@ -20830,7 +20020,8 @@ void test_horizon() {
         assert(A1 == C1);
 
         // Second valid 2-coloring — opposite assignment
-        bool result2 = solver(1000, soln);
+        bool result2;
+        while ((result2 = solver(soln)) && !soln.has_value()) {}
         assert(result2 == true);
         assert(soln.has_value());
         assert(soln.value().size() == 5);
@@ -20848,7 +20039,8 @@ void test_horizon() {
         assert(A1 != A2);
 
         // Third call: all colorings enumerated, refutation proved
-        bool result3 = solver(1000, soln);
+        bool result3;
+        while ((result3 = solver(soln)) && !soln.has_value()) {}
         assert(result3 == false);
     }
 
@@ -20905,7 +20097,8 @@ void test_horizon() {
         std::optional<resolution_store> soln;
 
         // Call 1: first grandparent of dave
-        bool result1 = solver(1000, soln);
+        bool result1;
+        while ((result1 = solver(soln)) && !soln.has_value()) {}
         assert(result1 == true);
         assert(soln.has_value());
         assert(soln.value().size() == 3);
@@ -20916,7 +20109,8 @@ void test_horizon() {
         assert(gp1 == "alice" || gp1 == "bob");
 
         // Call 2: second grandparent of dave — must differ from the first
-        bool result2 = solver(1000, soln);
+        bool result2;
+        while ((result2 = solver(soln)) && !soln.has_value()) {}
         assert(result2 == true);
         assert(soln.has_value());
         assert(soln.value().size() == 3);
@@ -20930,7 +20124,8 @@ void test_horizon() {
         assert(gp1 != gp2);
 
         // Call 3: both paths exhausted → refutation
-        bool result3 = solver(1000, soln);
+        bool result3;
+        while ((result3 = solver(soln)) && !soln.has_value()) {}
         assert(result3 == false);
         assert(!soln.has_value());
     }
@@ -20948,8 +20143,7 @@ void test_horizon() {
     auto next_until_refuted = [](
         horizon& solver,
         std::set<solution> expected,
-        auto get_solution,
-        size_t iterations = 1000
+        auto get_solution
     ) {
         const std::map<uint32_t, std::string> no_names;
         std::set<solution> visited;
@@ -20957,7 +20151,7 @@ void test_horizon() {
         while (!expected.empty()) {
             solution s;
             do {
-                bool r = solver(iterations, soln);
+                bool r; while ((r = solver(soln)) && !soln.has_value()) {}
                 assert(r == true);
                 s = get_solution();
             } while (visited.count(s));
@@ -20973,7 +20167,7 @@ void test_horizon() {
             visited.insert(s);
         }
         // All solutions found — next call must refute
-        bool r = solver(iterations, soln);
+        bool r; while ((r = solver(soln)) && !soln.has_value()) {}
         assert(r == false);
         assert(!soln.has_value());
     };
@@ -20985,8 +20179,7 @@ void test_horizon() {
     auto enumerate_all_solutions = [](
         horizon& solver,
         std::set<solution> expected,
-        auto get_solution,
-        size_t iterations = 1000
+        auto get_solution
     ) {
         const std::map<uint32_t, std::string> no_names;
         std::set<solution> visited;
@@ -20994,7 +20187,7 @@ void test_horizon() {
         while (!expected.empty()) {
             solution s;
             do {
-                bool r = solver(iterations, soln);
+                bool r; while ((r = solver(soln)) && !soln.has_value()) {}
                 assert(r == true);
                 s = get_solution();
             } while (visited.count(s));
@@ -22170,8 +21363,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Execute simulation
@@ -22275,8 +21466,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -22338,8 +21527,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -22396,8 +21583,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -22461,8 +21646,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // CRITICAL: Pre-populate MCTS tree to force decision on (gl0, idx 1)
@@ -22538,8 +21721,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Note: With only 1 candidate per goal, both will be unit props
@@ -22598,8 +21779,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Pre-populate MCTS to force decision on idx 0
@@ -22676,8 +21855,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(3, db, goals, t, seq, ep, bm, lp, c, sim);  // Max 3 resolutions!
         
         bool result = simulation();
@@ -22748,8 +21925,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Before execution, verify 5 candidates added
@@ -22821,8 +21996,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Verify avoidance copied
@@ -22998,8 +22171,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -23064,8 +22235,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -23123,8 +22292,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -23189,8 +22356,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -23253,8 +22418,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Force decision on idx 0
@@ -23322,8 +22485,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Initial state: 20 candidates
@@ -23376,8 +22537,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -23445,8 +22604,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Force decision on idx 1
@@ -23519,8 +22676,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -23670,8 +22825,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -23736,8 +22889,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Verify 30 candidates initially
@@ -23802,8 +22953,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Pre-populate MCTS to force decision on idx 0
@@ -23997,8 +23146,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -24059,8 +23206,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -24128,8 +23273,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -24242,8 +23385,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -24332,8 +23473,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -24411,8 +23550,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Force decision on idx 0 (q path -> apple)
@@ -24480,8 +23617,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Pre-populate MCTS to force base case (idx 2)
@@ -24569,8 +23704,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -24643,8 +23776,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -24694,8 +23825,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Pre-populate MCTS to force idx 2 (NOT idx 0, to prove MCTS works!)
@@ -24759,8 +23888,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -24813,8 +23940,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -24874,8 +23999,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -24945,8 +24068,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -25035,8 +24156,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -25112,8 +24231,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -25164,8 +24281,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Pre-populate MCTS to force idx 1 (bob)
@@ -25240,8 +24355,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -25300,8 +24413,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -25443,8 +24554,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -25512,8 +24621,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -25701,8 +24808,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -25799,8 +24904,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -25850,8 +24953,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         // Pre-populate MCTS to force idx 2
@@ -25961,8 +25062,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -26107,8 +25206,6 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        resolution_store rs;
-        decision_store ds;
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
         bool result = simulation();
@@ -26152,7 +25249,7 @@ void test_ridge_constructor_and_destructor() {
         assert(depth_before == 1);
 
         {
-            ridge solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
+            ridge solver(db, goals, t, seq, bm, 100, 1.414, rng);
 
             // CRITICAL: Constructor pushes one trail frame
             assert(t.depth() == depth_before + 1);
@@ -26167,7 +25264,6 @@ void test_ridge_constructor_and_destructor() {
 
             // CRITICAL: Scalar fields stored correctly
             assert(solver.max_resolutions == 100);
-            assert(solver.iterations_per_avoidance == 10);
             assert(solver.exploration_constant == 1.414);
 
             // CRITICAL: Avoidance store initialized empty
@@ -26193,12 +25289,11 @@ void test_ridge_constructor_and_destructor() {
         assert(t.depth() == 0);
 
         {
-            ridge solver(db, goals, t, seq, bm, 1, 1, 0.0, rng);
+            ridge solver(db, goals, t, seq, bm, 1, 0.0, rng);
 
             // CRITICAL: Depth goes 0 → 1
             assert(t.depth() == 1);
             assert(solver.max_resolutions == 1);
-            assert(solver.iterations_per_avoidance == 1);
             assert(solver.exploration_constant == 0.0);
         }
 
@@ -26223,7 +25318,7 @@ void test_ridge_constructor_and_destructor() {
         size_t boundary_size_before = t.frame_boundary_stack.size();
 
         {
-            ridge solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
+            ridge solver(db, goals, t, seq, bm, 100, 1.414, rng);
 
             // CRITICAL: Only a frame boundary is pushed, not any undo action
             assert(t.undo_stack.size() == undo_size_before);
@@ -26251,7 +25346,7 @@ void test_ridge_constructor_and_destructor() {
         bool undone = false;
 
         {
-            ridge solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
+            ridge solver(db, goals, t, seq, bm, 100, 1.414, rng);
 
             // Log an undo action into the a01's frame
             t.log([&undone]() { undone = true; });
@@ -26280,7 +25375,7 @@ void test_ridge_constructor_and_destructor() {
         t.log([&caller_undone]() { caller_undone = true; });
 
         {
-            ridge solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
+            ridge solver(db, goals, t, seq, bm, 100, 1.414, rng);
 
             // a01's frame is stacked on top of the caller's frame
             assert(t.depth() == 2);
@@ -26312,7 +25407,7 @@ void test_ridge_constructor_and_destructor() {
         size_t depth_before = t.depth();
 
         {
-            ridge solver(db, goals, t, seq, bm, 50, 5, 1.0, rng);
+            ridge solver(db, goals, t, seq, bm, 50, 1.0, rng);
 
             // CRITICAL: Frame pushed
             assert(t.depth() == depth_before + 1);
@@ -26331,1188 +25426,6 @@ void test_ridge_constructor_and_destructor() {
 
         // CRITICAL: Destructor restores depth
         assert(t.depth() == depth_before);
-    }
-}
-
-void test_ridge_sim_one() {
-    // Test 1: Immediate solution via unit propagation
-    // db: {a.}, goals: {a.}
-    // Expected: returns true, rs has 1 resolution, ds empty,
-    //           trail depth invariant, MCTS root gets 1 visit
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {}});  // idx 0: a.
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
-
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        decision_store ds;
-        resolution_store rs;
-
-        size_t depth_before = t.depth();
-
-        bool result = solver.sim_one(root, ds, rs);
-
-        // CRITICAL: Solution found
-        assert(result == true);
-
-        // CRITICAL: ds empty (unit prop, no MCTS decision)
-        assert(ds.empty());
-
-        // CRITICAL: rs has the single resolution
-        assert(rs.size() == 1);
-        const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = solver.lp.resolution(gl0, 0);
-        assert(rs.count(rl0) == 1);
-
-        // CRITICAL: Trail depth is invariant (pop + push inside sim_one)
-        assert(t.depth() == depth_before);
-
-        // CRITICAL: MCTS root visited exactly once (terminate() always touches root)
-        assert(root.m_visits == 1);
-
-        // CRITICAL: Reward is -ds.size() where ds was EMPTY going in → value == 0
-        assert(root.m_value == 0.0);
-    }
-
-    // Test 2: Immediate conflict - empty database
-    // db: {}, goals: {a.}
-    // Expected: returns false, ds empty, rs empty, trail depth invariant, root visits == 1
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
-
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        decision_store ds;
-        resolution_store rs;
-
-        size_t depth_before = t.depth();
-
-        bool result = solver.sim_one(root, ds, rs);
-
-        // CRITICAL: Conflict detected
-        assert(result == false);
-
-        // CRITICAL: No resolutions or decisions
-        assert(ds.empty());
-        assert(rs.empty());
-
-        // CRITICAL: Trail depth invariant
-        assert(t.depth() == depth_before);
-
-        // CRITICAL: Root visited once, value == 0 (ds was empty going in)
-        assert(root.m_visits == 1);
-        assert(root.m_value == 0.0);
-    }
-
-    // Test 3: Trail pop/push behavior via secondary sequencer
-    // The a01 constructor pushes a frame. Logging actions into that frame
-    // (e.g. calling a secondary sequencer) must be rolled back when sim_one
-    // calls t.pop() at the start of the simulation.
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {}});
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
-
-        // Create a secondary sequencer on the SAME trail (after a01's constructor push)
-        sequencer seq2(t);
-        assert(seq2.index == 0);
-
-        // Allocate a variable - this logs a decrement undo into the a01's current frame
-        uint32_t v = seq2();
-        assert(v == 0);
-        assert(seq2.index == 1);
-
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        decision_store ds;
-        resolution_store rs;
-
-        size_t depth_before = t.depth();
-
-        solver.sim_one(root, ds, rs);
-
-        // CRITICAL: t.pop() at start of sim_one triggered the seq2 undo action,
-        //           rolling seq2.index back to 0
-        assert(seq2.index == 0);
-
-        // CRITICAL: t.push() after the pop restored the same depth
-        assert(t.depth() == depth_before);
-    }
-
-    // Test 4: MCTS termination reward uses the OUTGOING (simulation's) ds, not the incoming ds.
-    // db: {a :- b., a :- c., b., c.} — 2 candidates for a → MCTS must make exactly 1 decision.
-    // The incoming ds is empty on the first call, but the output ds has 1 element (the decision).
-    // With the fix: terminate(-1.0) → root.m_value = -1.0.
-    // With the old bug: terminate(-0.0) → root.m_value = 0.0.
-    // So root.m_value == -1.0 distinguishes correct from buggy behavior.
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
-        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
-        db.push_back(rule{ep.atom("b"), {}});               // idx 2
-        db.push_back(rule{ep.atom("c"), {}});               // idx 3
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
-
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        decision_store ds;
-        resolution_store rs;
-
-        solver.sim_one(root, ds, rs);
-
-        // CRITICAL: MCTS made exactly 1 decision (outgoing ds has 1 element)
-        assert(ds.size() == 1);
-        assert(root.m_visits == 1);
-
-        // CRITICAL: Reward is based on output ds size (1), NOT input ds size (0).
-        // Old buggy behavior would leave root.m_value == 0.0.
-        assert(root.m_value == -1.0);
-    }
-
-    // Test 5: CDCL avoidance injected via solver.as after construction
-    // db: {a :- b., a :- c., b., c.}, goals: {a.}
-    // After construction, inject a singleton avoidance for (gl0, idx 0) directly into solver.as.
-    // sim_one's a01_sim will pick up this copy and CDCL-eliminate idx 0,
-    // leaving only idx 1 → unit propagation, so ds remains empty.
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
-        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
-        db.push_back(rule{ep.atom("b"), {}});               // idx 2
-        db.push_back(rule{ep.atom("c"), {}});               // idx 3
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
-
-        // Inject avoidance: singleton {rl(gl0, 0)} causes CDCL elimination of idx 0
-        const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = solver.lp.resolution(gl0, 0);
-        decision_store avoid;
-        avoid.insert(rl0);
-        solver.c.learn(avoid);
-
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        decision_store ds;
-        resolution_store rs;
-
-        bool result = solver.sim_one(root, ds, rs);
-
-        // CRITICAL: Solution found (idx 1 chosen via unit propagation after CDCL elim)
-        assert(result == true);
-
-        // CRITICAL: No decisions made (CDCL reduced to 1 candidate → unit prop)
-        assert(ds.empty());
-
-        // CRITICAL: 2 resolutions: a via idx 1, c via idx 3
-        assert(rs.size() == 2);
-        const resolution_lineage* rl_a = solver.lp.resolution(gl0, 1);
-        assert(rs.count(rl_a) == 1);
-        const resolution_lineage* rl_c = solver.lp.resolution(solver.lp.goal(rl_a, 0), 3);
-        assert(rs.count(rl_c) == 1);
-    }
-
-    // Test 6: Pre-populated MCTS tree forces a specific decision; verify decisions and resolutions
-    // db: {a :- b., a :- c., b., c.}, goals: {a.}
-    // Force MCTS to pick idx 1 (a :- c.) as the decision.
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
-        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
-        db.push_back(rule{ep.atom("b"), {}});               // idx 2
-        db.push_back(rule{ep.atom("c"), {}});               // idx 3
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
-
-        monte_carlo::tree_node<mcts_decider::choice> root;
-
-        // Pre-populate the MCTS tree so that UCB1 selects idx 1 for the candidate choice.
-        // The only goal is gl0; make its child visited so UCB1 is active at the next level.
-        const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
-
-        root.m_visits = 100;
-        root.m_children[gl0].m_visits = 50;
-        root.m_children[gl0].m_value = 100.0;
-        // idx 0 visited → UCB1 can score it; idx 1 unvisited → score = +∞ → chosen
-        root.m_children[gl0].m_children[size_t(0)].m_visits = 10;
-        root.m_children[gl0].m_children[size_t(0)].m_value = 20.0;
-        root.m_children[gl0].m_children[size_t(1)].m_visits = 0;  // Unvisited → chosen!
-
-        decision_store ds;
-        resolution_store rs;
-
-        bool result = solver.sim_one(root, ds, rs);
-
-        // CRITICAL: Solution found
-        assert(result == true);
-
-        // CRITICAL: Exactly 1 decision (MCTS chose a→c)
-        assert(ds.size() == 1);
-
-        // CRITICAL: Exactly 2 resolutions (decision on a→idx1, unit prop on c→idx3)
-        assert(rs.size() == 2);
-
-        const resolution_lineage* rl_a = solver.lp.resolution(gl0, 1);
-        assert(rs.count(rl_a) == 1);
-        assert(ds.count(rl_a) == 1);  // This was the decision
-
-        const goal_lineage* gl_c = solver.lp.goal(rl_a, 0);
-        const resolution_lineage* rl_c = solver.lp.resolution(gl_c, 3);
-        assert(rs.count(rl_c) == 1);
-        assert(ds.count(rl_c) == 0);  // Unit propagation, not a decision
-
-        // CRITICAL: terminate() uses the OUTPUT ds (1 element) → reward = -1.0
-        assert(root.m_visits == 101);  // 100 + 1 from terminate()
-        assert(root.m_value == -1.0);  // 0.0 (initial) + (-1.0) from terminate(-ds.size())
-    }
-
-    // Test 7: Multiple sim_one calls sharing one root - MCTS statistics accumulate
-    // Each call increments root.m_visits by exactly 1 via terminate().
-    {
-        trail t;
-        t.push();
-
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
-        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
-        db.push_back(rule{ep.atom("b"), {}});               // idx 2
-        db.push_back(rule{ep.atom("c"), {}});               // idx 3
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 100, 10, 1.414, rng);
-
-        monte_carlo::tree_node<mcts_decider::choice> root;
-        decision_store ds;
-        resolution_store rs;
-
-        assert(root.m_visits == 0);
-
-        solver.sim_one(root, ds, rs);
-        assert(root.m_visits == 1);
-
-        solver.sim_one(root, ds, rs);
-        assert(root.m_visits == 2);
-
-        solver.sim_one(root, ds, rs);
-        assert(root.m_visits == 3);
-    }
-}
-
-void test_ridge_next_avoidance() {
-
-    // Test 1: Immediate refutation — goal has no candidates from the start.
-    // DB: empty, goals: {a}
-    // First sim_one: conflict immediately, ds empty → returns false.
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        decision_store avoidance;
-        std::optional<resolution_store> soln;
-
-        bool result = solver.next_avoidance(avoidance, soln);
-
-        // CRITICAL: Returns false (proven refutation — conflict with no decisions)
-        assert(result == false);
-
-        // CRITICAL: soln is nullopt
-        assert(!soln.has_value());
-    }
-
-    // Test 2: Immediate solution via unit propagation.
-    // DB: {a.}, goals: {a}
-    // First sim_one: unit-prop resolves a → solution, ds empty.
-    // Loop first iteration: solution again → soln set, avoidance = {}.
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {}});  // idx 0: a.
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        decision_store avoidance;
-        std::optional<resolution_store> soln;
-
-        bool result = solver.next_avoidance(avoidance, soln);
-
-        // CRITICAL: Returns true (solution found)
-        assert(result == true);
-
-        // CRITICAL: soln has value
-        assert(soln.has_value());
-
-        // CRITICAL: soln has exactly 1 resolution (unit-prop of a with rule 0)
-        assert(soln.value().size() == 1);
-        const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = solver.lp.resolution(gl0, 0);
-        assert(soln.value().count(rl0) == 1);
-
-        // CRITICAL: avoidance is empty — unit propagation, no MCTS decisions
-        assert(avoidance.empty());
-    }
-
-    // Test 3: Solution found via MCTS after exploring a conflicting path.
-    // DB:
-    //   Rule 0: q :- r.  (conflict — r has no rules)
-    //   Rule 1: q :- p.  (solution — p is a fact)
-    //   Rule 2: p.
-    // Goals: {q}
-    // q has 2 candidates, so MCTS must decide. Rule 1 leads to solution.
-    // With 1000 iterations the solver reliably finds rule 1.
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("q"), {ep.atom("r")}});  // idx 0: q :- r.
-        db.push_back(rule{ep.atom("q"), {ep.atom("p")}});  // idx 1: q :- p.
-        db.push_back(rule{ep.atom("p"), {}});               // idx 2: p.
-
-        goals goals;
-        goals.push_back(ep.atom("q"));
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        decision_store avoidance;
-        std::optional<resolution_store> soln;
-
-        bool result = solver.next_avoidance(avoidance, soln);
-
-        // CRITICAL: Returns true (solution found)
-        assert(result == true);
-
-        // CRITICAL: soln has value
-        assert(soln.has_value());
-
-        // CRITICAL: soln has exactly 2 resolutions (q→rule1 as decision, p→rule2 as unit prop)
-        assert(soln.value().size() == 2);
-
-        const goal_lineage* gl_q = solver.lp.goal(nullptr, 0);
-        const resolution_lineage* rl_q1 = solver.lp.resolution(gl_q, 1);
-        assert(soln.value().count(rl_q1) == 1);
-
-        const goal_lineage* gl_p = solver.lp.goal(rl_q1, 0);
-        const resolution_lineage* rl_p2 = solver.lp.resolution(gl_p, 2);
-        assert(soln.value().count(rl_p2) == 1);
-
-        // CRITICAL: avoidance = decisions of the solution sim = {rl_q1}
-        // (the decision to pick rule 1 for q; p was unit-propagated, not a decision)
-        assert(avoidance.size() == 1);
-        assert(avoidance.count(rl_q1) == 1);
-    }
-
-    // Test 4: Depth-1 conflict minimum — avoidance.size() == 1.
-    // DB:
-    //   Rule 0: a :- f.  (a → f, no rules for f)
-    //   Rule 1: a :- g.  (a → g, no rules for g)
-    // Goals: {a}
-    // Every MCTS path: exactly 1 decision (choose rule 0 or 1 for a), then
-    // head-elimination leaves f/g with 0 candidates → immediate conflict.
-    // After 1000 iterations the minimum observed ds size is 1.
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("f")}});  // idx 0: a :- f.
-        db.push_back(rule{ep.atom("a"), {ep.atom("g")}});  // idx 1: a :- g.
-        // No rules for f or g
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        decision_store avoidance;
-        std::optional<resolution_store> soln;
-
-        bool result = solver.next_avoidance(avoidance, soln);
-
-        // CRITICAL: Returns true (first sim had 1 decision, not a proven refutation)
-        assert(result == true);
-
-        // CRITICAL: No solution (all paths conflict)
-        assert(!soln.has_value());
-
-        // CRITICAL: Minimum conflict depth is 1 → avoidance.size() == 1
-        assert(avoidance.size() == 1);
-
-        // CRITICAL: The avoided resolution is on the initial goal (gl0) with either rule 0 or 1
-        const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = solver.lp.resolution(gl0, 0);
-        const resolution_lineage* rl1 = solver.lp.resolution(gl0, 1);
-        const resolution_lineage* avoided = *avoidance.begin();
-        assert(avoided == rl0 || avoided == rl1);
-    }
-
-    // Test 5: Depth-2 conflict minimum — avoidance.size() == 2.
-    // DB:
-    //   Rule 0: a :- p.   Rule 1: a :- q.
-    //   Rule 2: p :- f1.  Rule 3: p :- f2.
-    //   Rule 4: q :- f3.  Rule 5: q :- f4.
-    //   No rules for f1, f2, f3, f4.
-    // Goals: {a}
-    // Decision 1: a → rule 0 or 1 (p or q, each with 2 candidates).
-    // Decision 2: p/q → rule 2/3 or 4/5 (f1/f2/f3/f4, each with 0 candidates → conflict).
-    // Every path needs exactly 2 decisions. avoidance.size() == 2 after 1000 iterations.
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("p")}});   // idx 0: a :- p.
-        db.push_back(rule{ep.atom("a"), {ep.atom("q")}});   // idx 1: a :- q.
-        db.push_back(rule{ep.atom("p"), {ep.atom("f1")}});  // idx 2: p :- f1.
-        db.push_back(rule{ep.atom("p"), {ep.atom("f2")}});  // idx 3: p :- f2.
-        db.push_back(rule{ep.atom("q"), {ep.atom("f3")}});  // idx 4: q :- f3.
-        db.push_back(rule{ep.atom("q"), {ep.atom("f4")}});  // idx 5: q :- f4.
-        // No rules for f1, f2, f3, f4
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        decision_store avoidance;
-        std::optional<resolution_store> soln;
-
-        bool result = solver.next_avoidance(avoidance, soln);
-
-        // CRITICAL: Returns true (decisions were made, not a proven refutation)
-        assert(result == true);
-
-        // CRITICAL: No solution (all paths conflict)
-        assert(!soln.has_value());
-
-        // CRITICAL: Minimum conflict depth is 2 → avoidance.size() == 2
-        assert(avoidance.size() == 2);
-    }
-
-    // Test 6: Depth-3 conflict minimum — avoidance.size() == 3.
-    // DB forms a complete binary tree of decisions, 3 levels deep:
-    //   Level 0: a → {p, q}
-    //   Level 1: p → {r, s},  q → {t, u}
-    //   Level 2: r → {f1, f2}, s → {f3, f4}, t → {f5, f6}, u → {f7, f8}
-    //   No rules for f1-f8 → all leaves conflict immediately.
-    // Every path takes exactly 3 decisions. avoidance.size() == 3 after 1000 iterations.
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("p")}});   // idx 0
-        db.push_back(rule{ep.atom("a"), {ep.atom("q")}});   // idx 1
-        db.push_back(rule{ep.atom("p"), {ep.atom("r")}});   // idx 2
-        db.push_back(rule{ep.atom("p"), {ep.atom("s")}});   // idx 3
-        db.push_back(rule{ep.atom("q"), {ep.atom("t")}});   // idx 4
-        db.push_back(rule{ep.atom("q"), {ep.atom("u")}});   // idx 5
-        db.push_back(rule{ep.atom("r"), {ep.atom("f1")}});  // idx 6
-        db.push_back(rule{ep.atom("r"), {ep.atom("f2")}});  // idx 7
-        db.push_back(rule{ep.atom("s"), {ep.atom("f3")}});  // idx 8
-        db.push_back(rule{ep.atom("s"), {ep.atom("f4")}});  // idx 9
-        db.push_back(rule{ep.atom("t"), {ep.atom("f5")}});  // idx 10
-        db.push_back(rule{ep.atom("t"), {ep.atom("f6")}});  // idx 11
-        db.push_back(rule{ep.atom("u"), {ep.atom("f7")}});  // idx 12
-        db.push_back(rule{ep.atom("u"), {ep.atom("f8")}});  // idx 13
-        // No rules for f1-f8
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        decision_store avoidance;
-        std::optional<resolution_store> soln;
-
-        bool result = solver.next_avoidance(avoidance, soln);
-
-        // CRITICAL: Returns true (decisions were made, not a proven refutation)
-        assert(result == true);
-
-        // CRITICAL: No solution (all paths conflict)
-        assert(!soln.has_value());
-
-        // CRITICAL: Minimum conflict depth is 3 → avoidance.size() == 3
-        assert(avoidance.size() == 3);
-    }
-
-    // Test 7: Refutation via pre-existing avoidances injected into solver.as.
-    // DB: {a.} (one fact), goals: {a}
-    // Inject singleton avoidance {rl(gl0, 0)} into solver.as before calling.
-    // CDCL-elimination removes the only candidate → conflict with ds empty → returns false.
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        db.push_back(rule{ep.atom("a"), {}});  // idx 0: a.
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        // Inject singleton avoidance: CDCL will eliminate rule 0 for gl0
-        const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = solver.lp.resolution(gl0, 0);
-        decision_store avoid;
-        avoid.insert(rl0);
-        solver.c.learn(avoid);
-
-        decision_store avoidance;
-        std::optional<resolution_store> soln;
-
-        bool result = solver.next_avoidance(avoidance, soln);
-
-        // CRITICAL: Returns false (CDCL eliminated all candidates → conflict, ds empty → refutation)
-        assert(result == false);
-
-        // CRITICAL: soln is nullopt
-        assert(!soln.has_value());
-    }
-
-    // Test 8: Mixed conflict depths — MCTS converges to the shallower branch.
-    //
-    // Goal {a} has two candidates:
-    //   rule0  →  a :- p.   (depth-4 branch)
-    //   rule1  →  a :- q.   (depth-3 branch)
-    //
-    // Depth-4 subtree (via p):
-    //   p → {r, s}  →  r/s → {t, u, v, w}  →  t/u/v/w → {fail1-8}
-    //   (4 decisions: a, p, r/s, t/u/v/w)
-    //
-    // Depth-3 subtree (via q):
-    //   q → {x, y}  →  x/y → {fail9-12}
-    //   (3 decisions: a, q, x/y)
-    //
-    // After 1000 MCTS iterations the minimum observed ds is 3.
-    // The avoidance must contain the "a → rule1" resolution (the first step of the
-    // depth-3 path) because any 3-decision conflict must go through rule1 for a.
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        // Root
-        db.push_back(rule{ep.atom("a"), {ep.atom("p")}});   // idx 0  (depth-4)
-        db.push_back(rule{ep.atom("a"), {ep.atom("q")}});   // idx 1  (depth-3)
-        // Depth-4 branch: p layer
-        db.push_back(rule{ep.atom("p"), {ep.atom("r")}});   // idx 2
-        db.push_back(rule{ep.atom("p"), {ep.atom("s")}});   // idx 3
-        // Depth-4 branch: r/s layer
-        db.push_back(rule{ep.atom("r"), {ep.atom("t")}});   // idx 4
-        db.push_back(rule{ep.atom("r"), {ep.atom("u")}});   // idx 5
-        db.push_back(rule{ep.atom("s"), {ep.atom("v")}});   // idx 6
-        db.push_back(rule{ep.atom("s"), {ep.atom("w")}});   // idx 7
-        // Depth-4 leaves (each has 2 candidates → one more decision, then conflict)
-        db.push_back(rule{ep.atom("t"), {ep.atom("fail1")}});  // idx 8
-        db.push_back(rule{ep.atom("t"), {ep.atom("fail2")}});  // idx 9
-        db.push_back(rule{ep.atom("u"), {ep.atom("fail3")}});  // idx 10
-        db.push_back(rule{ep.atom("u"), {ep.atom("fail4")}});  // idx 11
-        db.push_back(rule{ep.atom("v"), {ep.atom("fail5")}});  // idx 12
-        db.push_back(rule{ep.atom("v"), {ep.atom("fail6")}});  // idx 13
-        db.push_back(rule{ep.atom("w"), {ep.atom("fail7")}});  // idx 14
-        db.push_back(rule{ep.atom("w"), {ep.atom("fail8")}});  // idx 15
-        // Depth-3 branch: q layer
-        db.push_back(rule{ep.atom("q"), {ep.atom("x")}});   // idx 16
-        db.push_back(rule{ep.atom("q"), {ep.atom("y")}});   // idx 17
-        // Depth-3 leaves
-        db.push_back(rule{ep.atom("x"), {ep.atom("fail9")}});  // idx 18
-        db.push_back(rule{ep.atom("x"), {ep.atom("fail10")}});  // idx 19
-        db.push_back(rule{ep.atom("y"), {ep.atom("fail11")}});  // idx 20
-        db.push_back(rule{ep.atom("y"), {ep.atom("fail12")}});  // idx 21
-        // No rules for fail1-fail12
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        decision_store avoidance;
-        std::optional<resolution_store> soln;
-
-        bool result = solver.next_avoidance(avoidance, soln);
-
-        // CRITICAL: Returns true (decisions were made, not a proven refutation)
-        assert(result == true);
-
-        // CRITICAL: No solution (all paths conflict)
-        assert(!soln.has_value());
-
-        // CRITICAL: Minimum conflict depth is 3 (the q branch), not 4 (the p branch)
-        assert(avoidance.size() == 3);
-
-        // CRITICAL: The avoidance must include "a → rule1" (the depth-3 branch entry
-        // point). Any 3-decision conflict necessarily begins with that choice.
-        const goal_lineage* gl_a = solver.lp.goal(nullptr, 0);
-        const resolution_lineage* rl_a1 = solver.lp.resolution(gl_a, 1);
-        assert(avoidance.count(rl_a1) == 1);
-    }
-
-    // Test 9: Needle in a haystack — two depth-4 branches plus one depth-3 branch.
-    //
-    // Goal {a} has THREE candidates:
-    //   rule0  →  a :- p_alpha.  (depth-4)
-    //   rule1  →  a :- p_beta.   (depth-4)
-    //   rule2  →  a :- q.        (depth-3, the needle)
-    //
-    // Two out of three first-level choices lead to a 4-decision conflict.
-    // Only rule2 leads to the shallower 3-decision conflict.
-    // After 1000 MCTS iterations the minimum is 3, and the avoidance identifies
-    // the shallow entry point ("a → rule2").
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-        // Three choices for a
-        db.push_back(rule{ep.atom("a"), {ep.atom("p_alpha")}});  // idx 0  (depth-4)
-        db.push_back(rule{ep.atom("a"), {ep.atom("p_beta")}});   // idx 1  (depth-4)
-        db.push_back(rule{ep.atom("a"), {ep.atom("q")}});        // idx 2  (depth-3)
-
-        // Depth-4 branch A (via p_alpha)
-        db.push_back(rule{ep.atom("p_alpha"), {ep.atom("r_alpha")}});  // idx 3
-        db.push_back(rule{ep.atom("p_alpha"), {ep.atom("s_alpha")}});  // idx 4
-        db.push_back(rule{ep.atom("r_alpha"), {ep.atom("t_alpha")}});  // idx 5
-        db.push_back(rule{ep.atom("r_alpha"), {ep.atom("u_alpha")}});  // idx 6
-        db.push_back(rule{ep.atom("t_alpha"), {ep.atom("fail1")}});    // idx 7
-        db.push_back(rule{ep.atom("t_alpha"), {ep.atom("fail2")}});    // idx 8
-        db.push_back(rule{ep.atom("u_alpha"), {ep.atom("fail3")}});    // idx 9
-        db.push_back(rule{ep.atom("u_alpha"), {ep.atom("fail4")}});    // idx 10
-        db.push_back(rule{ep.atom("s_alpha"), {ep.atom("v_alpha")}});  // idx 11
-        db.push_back(rule{ep.atom("s_alpha"), {ep.atom("w_alpha")}});  // idx 12
-        db.push_back(rule{ep.atom("v_alpha"), {ep.atom("fail5")}});    // idx 13
-        db.push_back(rule{ep.atom("v_alpha"), {ep.atom("fail6")}});    // idx 14
-        db.push_back(rule{ep.atom("w_alpha"), {ep.atom("fail7")}});    // idx 15
-        db.push_back(rule{ep.atom("w_alpha"), {ep.atom("fail8")}});    // idx 16
-
-        // Depth-4 branch B (via p_beta)
-        db.push_back(rule{ep.atom("p_beta"), {ep.atom("r_beta")}});   // idx 17
-        db.push_back(rule{ep.atom("p_beta"), {ep.atom("s_beta")}});   // idx 18
-        db.push_back(rule{ep.atom("r_beta"), {ep.atom("t_beta")}});   // idx 19
-        db.push_back(rule{ep.atom("r_beta"), {ep.atom("u_beta")}});   // idx 20
-        db.push_back(rule{ep.atom("t_beta"), {ep.atom("fail9")}});    // idx 21
-        db.push_back(rule{ep.atom("t_beta"), {ep.atom("fail10")}});   // idx 22
-        db.push_back(rule{ep.atom("u_beta"), {ep.atom("fail11")}});   // idx 23
-        db.push_back(rule{ep.atom("u_beta"), {ep.atom("fail12")}});   // idx 24
-        db.push_back(rule{ep.atom("s_beta"), {ep.atom("v_beta")}});   // idx 25
-        db.push_back(rule{ep.atom("s_beta"), {ep.atom("w_beta")}});   // idx 26
-        db.push_back(rule{ep.atom("v_beta"), {ep.atom("fail13")}});   // idx 27
-        db.push_back(rule{ep.atom("v_beta"), {ep.atom("fail14")}});   // idx 28
-        db.push_back(rule{ep.atom("w_beta"), {ep.atom("fail15")}});   // idx 29
-        db.push_back(rule{ep.atom("w_beta"), {ep.atom("fail16")}});   // idx 30
-
-        // Depth-3 branch (via q — the needle)
-        db.push_back(rule{ep.atom("q"), {ep.atom("x")}});             // idx 31
-        db.push_back(rule{ep.atom("q"), {ep.atom("y")}});             // idx 32
-        db.push_back(rule{ep.atom("x"), {ep.atom("fail17")}});        // idx 33
-        db.push_back(rule{ep.atom("x"), {ep.atom("fail18")}});        // idx 34
-        db.push_back(rule{ep.atom("y"), {ep.atom("fail19")}});        // idx 35
-        db.push_back(rule{ep.atom("y"), {ep.atom("fail20")}});        // idx 36
-        // No rules for fail1-fail20
-
-        goals goals;
-        goals.push_back(ep.atom("a"));
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        decision_store avoidance;
-        std::optional<resolution_store> soln;
-
-        bool result = solver.next_avoidance(avoidance, soln);
-
-        // CRITICAL: Returns true
-        assert(result == true);
-
-        // CRITICAL: No solution (all paths conflict)
-        assert(!soln.has_value());
-
-        // CRITICAL: Despite two out of three first-level choices leading to depth-4
-        // conflicts, MCTS finds the depth-3 needle (rule2 → q).
-        assert(avoidance.size() == 3);
-
-        // CRITICAL: "a → rule2" (the q branch entry point) is in the avoidance.
-        // This is the distinguishing feature of the depth-3 path — rules 0 and 1
-        // only appear in 4-decision avoidances, never in 3-decision ones.
-        const goal_lineage* gl_a = solver.lp.goal(nullptr, 0);
-        const resolution_lineage* rl_a2 = solver.lp.resolution(gl_a, 2);
-        assert(avoidance.count(rl_a2) == 1);
-    }
-
-    // Test 10: Two goals share variable X — MCTS finds the unique intersection value.
-    //
-    // This is the motivating example for shared-variable parallel constraints:
-    //   "initial goal A -> rule 1 and initial goal B -> rule 2 causes conflict because
-    //    of having a common variable"
-    //
-    // Goals: { a(X), b(X) }   — same variable X shared across both goals
-    //   Rule 0: a(123).        — X=123; then b(123) has no candidate → CONFLICT
-    //   Rule 1: a(234).        — X=234; then b(234) is the only matching candidate → SOLUTION
-    //   Rule 2: b(234).        — X=234; then a(234) unit-propagates → SOLUTION
-    //   Rule 3: b(345).        — X=345; then a(345) has no candidate → CONFLICT
-    //
-    // Every path is depth-1. The "parallel" effect: choosing a value for X via one goal
-    // immediately determines whether the other goal succeeds or fails — both goals are
-    // constrained in parallel by the same variable binding.
-    //
-    // With 1000 MCTS iterations the solver finds the solution (X=234 satisfies both).
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        const expr* X = ep.var(seq());
-
-        database db;
-        db.push_back(rule{ep.cons(ep.atom("a"), ep.atom("123")), {}});  // idx 0: a(123).
-        db.push_back(rule{ep.cons(ep.atom("a"), ep.atom("234")), {}});  // idx 1: a(234).
-        db.push_back(rule{ep.cons(ep.atom("b"), ep.atom("234")), {}});  // idx 2: b(234).
-        db.push_back(rule{ep.cons(ep.atom("b"), ep.atom("345")), {}});  // idx 3: b(345).
-
-        goals goals;
-        goals.push_back(ep.cons(ep.atom("a"), X));  // a(X)
-        goals.push_back(ep.cons(ep.atom("b"), X));  // b(X) — shares X with a
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        decision_store avoidance;
-        std::optional<resolution_store> soln;
-
-        bool result = solver.next_avoidance(avoidance, soln);
-
-        // CRITICAL: Solution found (X=234 satisfies both)
-        assert(result == true);
-        assert(soln.has_value());
-
-        // CRITICAL: Exactly 2 resolutions — one decision (the decided goal) plus one
-        // unit-propagation (the other goal, whose candidate was forced by X's binding)
-        assert(soln.value().size() == 2);
-
-        // CRITICAL: The solution involves rule 1 for a (a→234) and rule 2 for b (b→234)
-        const goal_lineage* gl_a = solver.lp.goal(nullptr, 0);
-        const goal_lineage* gl_b = solver.lp.goal(nullptr, 1);
-        const resolution_lineage* rl_a1 = solver.lp.resolution(gl_a, 1);  // a(234)
-        const resolution_lineage* rl_b2 = solver.lp.resolution(gl_b, 2);  // b(234)
-        // One of these was the MCTS decision, the other the unit-propagation.
-        // Both must appear in the solution's resolution store.
-        assert(soln.value().count(rl_a1) == 1);
-        assert(soln.value().count(rl_b2) == 1);
-
-        // CRITICAL: The avoidance contains exactly 1 decision (the one MCTS chose)
-        assert(avoidance.size() == 1);
-        assert(avoidance.count(rl_a1) == 1 || avoidance.count(rl_b2) == 1);
-    }
-
-    // Test 11: Three goals share variable X — no single X value satisfies all three.
-    //
-    // Goals: { a(X), b(X), c(X) }   — all three share variable X
-    //   Rule 0: a(1).   Rule 1: a(2).        →  X ∈ {1, 2}  for a
-    //   Rule 2: b(2).   Rule 3: b(3).        →  X ∈ {2, 3}  for b
-    //   Rule 4: c(1).   Rule 5: c(3).        →  X ∈ {1, 3}  for c
-    //
-    // There is no X that satisfies all three simultaneously:
-    //   X=1 → b(1) has no candidate (b needs 2 or 3)
-    //   X=2 → c(2) has no candidate (c needs 1 or 3)
-    //   X=3 → a(3) has no candidate (a needs 1 or 2)
-    //
-    // Every first MCTS decision immediately propagates X to a value that kills one of
-    // the other goals — minimum conflict depth is 1 regardless of which goal is chosen.
-    // MCTS finds and records this depth-1 avoidance after 1000 iterations.
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        const expr* X = ep.var(seq());
-
-        database db;
-        db.push_back(rule{ep.cons(ep.atom("a"), ep.atom("1")), {}});  // idx 0: a(1).
-        db.push_back(rule{ep.cons(ep.atom("a"), ep.atom("2")), {}});  // idx 1: a(2).
-        db.push_back(rule{ep.cons(ep.atom("b"), ep.atom("2")), {}});  // idx 2: b(2).
-        db.push_back(rule{ep.cons(ep.atom("b"), ep.atom("3")), {}});  // idx 3: b(3).
-        db.push_back(rule{ep.cons(ep.atom("c"), ep.atom("1")), {}});  // idx 4: c(1).
-        db.push_back(rule{ep.cons(ep.atom("c"), ep.atom("3")), {}});  // idx 5: c(3).
-
-        goals goals;
-        goals.push_back(ep.cons(ep.atom("a"), X));  // a(X)
-        goals.push_back(ep.cons(ep.atom("b"), X));  // b(X) — shares X with a
-        goals.push_back(ep.cons(ep.atom("c"), X));  // c(X) — shares X with a and b
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        decision_store avoidance;
-        std::optional<resolution_store> soln;
-
-        bool result = solver.next_avoidance(avoidance, soln);
-
-        // CRITICAL: Returns true (at least one decision was made — not an unconditional refutation)
-        assert(result == true);
-
-        // CRITICAL: No solution (the three goals' X-constraints are mutually exclusive)
-        assert(!soln.has_value());
-
-        // CRITICAL: The minimum conflict depth is 1 — one MCTS decision immediately
-        // binds X to a value that eliminates all candidates in at least one other goal
-        assert(avoidance.size() == 1);
-
-        // CRITICAL: The avoided resolution is on one of the three initial goals.
-        // Whichever goal MCTS chose first, that single decision is the avoidance.
-        const goal_lineage* gl_a = solver.lp.goal(nullptr, 0);
-        const goal_lineage* gl_b = solver.lp.goal(nullptr, 1);
-        const goal_lineage* gl_c = solver.lp.goal(nullptr, 2);
-        const resolution_lineage* avoided = *avoidance.begin();
-        // The avoided resolution must involve one of the three goals and one of their rules
-        bool is_a_rule = avoided == solver.lp.resolution(gl_a, 0) || avoided == solver.lp.resolution(gl_a, 1);
-        bool is_b_rule = avoided == solver.lp.resolution(gl_b, 2) || avoided == solver.lp.resolution(gl_b, 3);
-        bool is_c_rule = avoided == solver.lp.resolution(gl_c, 4) || avoided == solver.lp.resolution(gl_c, 5);
-        assert(is_a_rule || is_b_rule || is_c_rule);
-    }
-
-    // Test 12: Two independent variables, compound goal c(X,Y) teaches MCTS goal ordering.
-    //
-    // Goals: { a(X), b(Y), c(X,Y) }   — X shared by a and c; Y shared by b and c
-    //   Rule 0: a(1).  Rule 1: a(2).        →  X ∈ {1, 2}
-    //   Rule 2: b(1).  Rule 3: b(2).        →  Y ∈ {1, 2}
-    //   Rule 4: c(1,5).  Rule 5: c(1,6).   →  (X=1,Y=5) or (X=1,Y=6)
-    //   Rule 6: c(2,5).  Rule 7: c(2,6).   →  (X=2,Y=5) or (X=2,Y=6)
-    //
-    // c requires Y ∈ {5, 6}, but b only produces Y ∈ {1, 2} — ranges are disjoint.
-    // The conflict DEPTH depends on which goal MCTS resolves first:
-    //
-    //   Resolving b first  (Y ∈ {1,2}): c(X, 1/2) has 0 candidates → CONFLICT at depth-1.
-    //   Resolving c first  (X=1/2, Y=5/6): b(5/6) has 0 candidates → CONFLICT at depth-1.
-    //   Resolving a first  (X ∈ {1,2}): c(X,Y) still has 2 candidates, b(Y) still has 2
-    //                       candidates → needs a SECOND decision → depth-2 conflict.
-    //
-    // With 1000 MCTS iterations, the solver learns that starting with b or c (rather than a)
-    // yields a shallower conflict. The minimum avoidance size is 1.
-    // This demonstrates MCTS learning the optimal GOAL ORDERING via shared-variable
-    // constraint propagation.
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        const expr* X = ep.var(seq());
-        const expr* Y = ep.var(seq());
-
-        database db;
-        db.push_back(rule{ep.cons(ep.atom("a"), ep.atom("1")), {}});  // idx 0: a(1).
-        db.push_back(rule{ep.cons(ep.atom("a"), ep.atom("2")), {}});  // idx 1: a(2).
-        db.push_back(rule{ep.cons(ep.atom("b"), ep.atom("1")), {}});  // idx 2: b(1).
-        db.push_back(rule{ep.cons(ep.atom("b"), ep.atom("2")), {}});  // idx 3: b(2).
-        // c(X, Y) represented as ((c . X) . Y)
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("c"), ep.atom("1")), ep.atom("5")), {}});  // idx 4: c(1,5).
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("c"), ep.atom("1")), ep.atom("6")), {}});  // idx 5: c(1,6).
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("c"), ep.atom("2")), ep.atom("5")), {}});  // idx 6: c(2,5).
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("c"), ep.atom("2")), ep.atom("6")), {}});  // idx 7: c(2,6).
-
-        goals goals;
-        goals.push_back(ep.cons(ep.atom("a"), X));                // a(X)
-        goals.push_back(ep.cons(ep.atom("b"), Y));                // b(Y)
-        goals.push_back(ep.cons(ep.cons(ep.atom("c"), X), Y));   // c(X, Y)
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        decision_store avoidance;
-        std::optional<resolution_store> soln;
-
-        bool result = solver.next_avoidance(avoidance, soln);
-
-        // CRITICAL: Returns true (not a proven refutation — the first sim had ≥1 decision)
-        assert(result == true);
-
-        // CRITICAL: No solution (c requires Y ∈ {5,6}, b only gives Y ∈ {1,2} — disjoint)
-        assert(!soln.has_value());
-
-        // CRITICAL: MCTS learns to pick b or c before a, yielding a depth-1 conflict.
-        // The minimum avoidance size is 1, not 2 (which would result from picking a first).
-        assert(avoidance.size() == 1);
-
-        // CRITICAL: The single avoided resolution is on b or c (not on a), confirming
-        // MCTS discovered the optimal goal-first ordering.
-        // Picking b (Y∈{1,2}) → c(X, 1/2) immediately fails.
-        // Picking c (X=1/2, Y=5/6) → b(5/6) immediately fails.
-        // Picking a alone (X∈{1,2}) → c still has 2 candidates → depth-2, NOT chosen.
-        const goal_lineage* gl_b = solver.lp.goal(nullptr, 1);
-        const goal_lineage* gl_c = solver.lp.goal(nullptr, 2);
-        const resolution_lineage* avoided = *avoidance.begin();
-        bool is_b_choice = avoided == solver.lp.resolution(gl_b, 2) || avoided == solver.lp.resolution(gl_b, 3);
-        bool is_c_choice = avoided == solver.lp.resolution(gl_c, 4) || avoided == solver.lp.resolution(gl_c, 5)
-                        || avoided == solver.lp.resolution(gl_c, 6) || avoided == solver.lp.resolution(gl_c, 7);
-        assert(is_b_choice || is_c_choice);
-    }
-
-    // Test 13: Depth-4 needle in a depth-10 haystack.
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-
-        // say which root to start from
-        db.push_back(rule{ep.atom("root"), {ep.atom("stunt0")}});
-        db.push_back(rule{ep.atom("root"), {ep.atom("stuntX")}});
-
-        // NEEDLE: add the rules which provide a faster route to a conflict
-        db.push_back(rule{ep.atom("stuntX"), {ep.atom("stunt1")}});
-        db.push_back(rule{ep.atom("stuntX"), {ep.atom("stuntY")}});
-        db.push_back(rule{ep.atom("stuntY"), {ep.atom("stunt2")}});
-        db.push_back(rule{ep.atom("stuntY"), {ep.atom("stuntZ")}});
-        db.push_back(rule{ep.atom("stuntZ"), {ep.atom("stunt3")}});
-        db.push_back(rule{ep.atom("stuntZ"), {ep.atom("stuntW")}});
-
-        // HAYSTACK: add 2 of each to make fictitious decisions necessary (simulates a perfect binary tree)
-        for (int i = 0; i < 2; ++i) {
-            db.push_back(rule{ep.atom("stunt0"), {ep.atom("stunt1")}});
-            db.push_back(rule{ep.atom("stunt1"), {ep.atom("stunt2")}});
-            db.push_back(rule{ep.atom("stunt2"), {ep.atom("stunt3")}});
-            db.push_back(rule{ep.atom("stunt3"), {ep.atom("stunt4")}});
-            db.push_back(rule{ep.atom("stunt4"), {ep.atom("stunt5")}});
-            db.push_back(rule{ep.atom("stunt5"), {ep.atom("stunt6")}});
-            db.push_back(rule{ep.atom("stunt6"), {ep.atom("stunt7")}});
-            db.push_back(rule{ep.atom("stunt7"), {ep.atom("stunt8")}});
-            db.push_back(rule{ep.atom("stunt8"), {ep.atom("stunt9")}});
-        }
-        
-        goals goals;
-
-        goals.push_back(ep.atom("root"));
-
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        decision_store avoidance;
-        std::optional<resolution_store> soln;
-
-        bool result = solver.next_avoidance(avoidance, soln);
-
-        assert(result == true);
-        assert(!soln.has_value());
-
-        // CRITICAL: MCTS finds the depth-4 needle.
-        assert(avoidance.size() == 4);
-
-        // CRITICAL: The first decision in the avoidance is root→rule0 (the needle branch).
-        const goal_lineage* gl_root = solver.lp.goal(nullptr, 0);
-        const resolution_lineage* rl_root = solver.lp.resolution(gl_root, 1);
-        assert(avoidance.count(rl_root) == 1);
-        const goal_lineage* gl_stuntX = solver.lp.goal(rl_root, 0);
-        const resolution_lineage* rl_stuntX = solver.lp.resolution(gl_stuntX, 3);
-        assert(avoidance.count(rl_stuntX) == 1);
-        const goal_lineage* gl_stuntY = solver.lp.goal(rl_stuntX, 0);
-        const resolution_lineage* rl_stuntY = solver.lp.resolution(gl_stuntY, 5);
-        assert(avoidance.count(rl_stuntY) == 1);
-        const goal_lineage* gl_stuntZ = solver.lp.goal(rl_stuntY, 0);
-        const resolution_lineage* rl_stuntZ = solver.lp.resolution(gl_stuntZ, 7);
-        assert(avoidance.count(rl_stuntZ) == 1);
-    }
-
-    // Test 14: Depth-5 shared-variable needle in a depth-10 haystack.
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;
-
-        // say which root to start from
-        db.push_back(rule{ep.atom("root"), {ep.atom("stunt0")}});
-        db.push_back(rule{ep.atom("root"), {ep.atom("stuntX")}});
-
-        // NEEDLE: add the rules which provide a faster route to a conflict
-        db.push_back(rule{ep.atom("stuntX"), {ep.atom("stunt1")}});
-        db.push_back(rule{ep.atom("stuntX"), {ep.atom("stuntY")}});
-        db.push_back(rule{ep.atom("stuntY"), {ep.atom("stunt2")}});
-        db.push_back(rule{ep.atom("stuntY"), {ep.atom("stuntZ")}});
-        db.push_back(rule{ep.atom("stuntZ"), {ep.atom("stunt3")}});
-        db.push_back(rule{ep.atom("stuntZ"), {ep.atom("stuntW")}});
-        db.push_back(rule{ep.atom("stuntW"), {ep.atom("stunt4")}});
-        db.push_back(rule{ep.atom("stuntW"), {ep.atom("stuntU")}});
-
-        // HAYSTACK: add 2 of each to make fictitious decisions necessary (simulates a perfect binary tree)
-        for (int i = 0; i < 2; ++i) {
-            db.push_back(rule{ep.atom("stunt0"), {ep.atom("stunt1")}});
-            db.push_back(rule{ep.atom("stunt1"), {ep.atom("stunt2")}});
-            db.push_back(rule{ep.atom("stunt2"), {ep.atom("stunt3")}});
-            db.push_back(rule{ep.atom("stunt3"), {ep.atom("stunt4")}});
-            db.push_back(rule{ep.atom("stunt4"), {ep.atom("stunt5")}});
-            db.push_back(rule{ep.atom("stunt5"), {ep.atom("stunt6")}});
-            db.push_back(rule{ep.atom("stunt6"), {ep.atom("stunt7")}});
-            db.push_back(rule{ep.atom("stunt7"), {ep.atom("stunt8")}});
-            db.push_back(rule{ep.atom("stunt8"), {ep.atom("stunt9")}});
-        }
-        
-        goals goals;
-
-        goals.push_back(ep.atom("root"));
-
-
-        std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
-
-        decision_store avoidance;
-        std::optional<resolution_store> soln;
-
-        bool result = solver.next_avoidance(avoidance, soln);
-
-        assert(result == true);
-        assert(!soln.has_value());
-
-        // CRITICAL: MCTS finds the depth-4 needle.
-        assert(avoidance.size() == 5);
-
-        // CRITICAL: The first decision in the avoidance is root→rule0 (the needle branch).
-        const goal_lineage* gl_root = solver.lp.goal(nullptr, 0);
-        const resolution_lineage* rl_root = solver.lp.resolution(gl_root, 1);
-        assert(avoidance.count(rl_root) == 1);
-        const goal_lineage* gl_stuntX = solver.lp.goal(rl_root, 0);
-        const resolution_lineage* rl_stuntX = solver.lp.resolution(gl_stuntX, 3);
-        assert(avoidance.count(rl_stuntX) == 1);
-        const goal_lineage* gl_stuntY = solver.lp.goal(rl_stuntX, 0);
-        const resolution_lineage* rl_stuntY = solver.lp.resolution(gl_stuntY, 5);
-        assert(avoidance.count(rl_stuntY) == 1);
-        const goal_lineage* gl_stuntZ = solver.lp.goal(rl_stuntY, 0);
-        const resolution_lineage* rl_stuntZ = solver.lp.resolution(gl_stuntZ, 7);
-        assert(avoidance.count(rl_stuntZ) == 1);
-        const goal_lineage* gl_stuntW = solver.lp.goal(rl_stuntZ, 0);
-        const resolution_lineage* rl_stuntW = solver.lp.resolution(gl_stuntW, 9);
-        assert(avoidance.count(rl_stuntW) == 1);
     }
 }
 
@@ -27535,10 +25448,11 @@ void test_ridge() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         std::optional<resolution_store> soln;
-        bool result = solver(0, soln);
+        soln = std::nullopt;
+        bool result = true; // (0 iterations: no sim run)
 
         // CRITICAL: returns true (no refutation proved) and soln defaults to nullopt
         assert(result == true);
@@ -27564,10 +25478,10 @@ void test_ridge() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         std::optional<resolution_store> soln;
-        bool result = solver(1, soln);
+        bool result = solver(soln);
 
         assert(result == true);
         assert(soln.has_value());
@@ -27604,10 +25518,10 @@ void test_ridge() {
         goals.push_back(ep.cons(ep.atom("answer"), X));
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         std::optional<resolution_store> soln;
-        bool result = solver(1, soln);
+        bool result = solver(soln);
 
         assert(result == true);
         assert(soln.has_value());
@@ -27639,10 +25553,11 @@ void test_ridge() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         std::optional<resolution_store> soln;
-        bool result = solver(1000, soln);
+        bool result;
+        while ((result = solver(soln)) && !soln.has_value()) {}
 
         assert(result == false);
         assert(!soln.has_value());
@@ -27673,18 +25588,18 @@ void test_ridge() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         std::optional<resolution_store> soln;
 
         // Call 1: one depth-1 avoidance recorded
-        bool result1 = solver(1, soln);
+        bool result1 = solver(soln);
         assert(result1 == true);
         assert(!soln.has_value());
         assert(solver.c.avoidances.size() == 1);
 
         // Call 2: CDCL + unit-prop leads to conflict with empty ds → refutation
-        bool result2 = solver(1, soln);
+        bool result2 = solver(soln);
         assert(result2 == false);
         assert(!soln.has_value());
     }
@@ -27725,13 +25640,14 @@ void test_ridge() {
         goals.push_back(ep.cons(ep.atom("is_b"), X));  // goal 1: is_b(X)
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
         std::optional<resolution_store> soln;
 
         // Call 1: unique solution X=2
-        bool result1 = solver(1000, soln);
+        bool result1;
+        while ((result1 = solver(soln)) && !soln.has_value()) {}
         assert(result1 == true);
         assert(soln.has_value());
 
@@ -27752,7 +25668,8 @@ void test_ridge() {
         assert(soln.value().count(rl_b2) == 1);
 
         // Call 2: the solution path is blocked; the only remaining path conflicts → refutation
-        bool result2 = solver(1000, soln);
+        bool result2;
+        while ((result2 = solver(soln)) && !soln.has_value()) {}
         assert(result2 == false);
         assert(!soln.has_value());
     }
@@ -27787,13 +25704,14 @@ void test_ridge() {
         goals.push_back(ep.cons(ep.cons(ep.atom("parent"), X), ep.atom("alice")));
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
         std::optional<resolution_store> soln;
 
         // First parent of alice
-        bool result1 = solver(1000, soln);
+        bool result1;
+        while ((result1 = solver(soln)) && !soln.has_value()) {}
         assert(result1 == true);
         assert(soln.has_value());
         assert(soln.value().size() == 1);
@@ -27804,7 +25722,8 @@ void test_ridge() {
         assert(parent1 == "bob" || parent1 == "carol");
 
         // Second parent of alice — sim_one rolls back bm then unit-props the other rule
-        bool result2 = solver(1000, soln);
+        bool result2;
+        while ((result2 = solver(soln)) && !soln.has_value()) {}
         assert(result2 == true);
         assert(soln.has_value());
         assert(soln.value().size() == 1);
@@ -27818,7 +25737,8 @@ void test_ridge() {
         assert(parent1 != parent2);
 
         // Test for refutation
-        bool result3 = solver(1000, soln);
+        bool result3;
+        while ((result3 = solver(soln)) && !soln.has_value()) {}
         assert(result3 == false);
     }
 
@@ -27880,13 +25800,14 @@ void test_ridge() {
         goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("or"), NP), Q), ep.atom("true")));
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
         std::optional<resolution_store> soln;
 
         // First solution: P=true or P=false, but Q must be true
-        bool result1 = solver(1000, soln);
+        bool result1;
+        while ((result1 = solver(soln)) && !soln.has_value()) {}
         assert(result1 == true);
         assert(soln.has_value());
 
@@ -27901,7 +25822,8 @@ void test_ridge() {
         assert(P_str1 == "true" || P_str1 == "false");
 
         // Second solution: CDCL eliminates first P choice; the other propagates
-        bool result2 = solver(1000, soln);
+        bool result2;
+        while ((result2 = solver(soln)) && !soln.has_value()) {}
         assert(result2 == true);
         assert(soln.has_value());
 
@@ -27918,7 +25840,8 @@ void test_ridge() {
         assert(P_str2 != P_str1);
 
         // Test for refutation
-        bool result3 = solver(1000, soln);
+        bool result3;
+        while ((result3 = solver(soln)) && !soln.has_value()) {}
         assert(result3 == false);
     }
 
@@ -27968,7 +25891,7 @@ void test_ridge() {
         goals.push_back(ep.cons(ep.cons(ep.atom("diff"), B), C));      // goal 4: diff(B, C)
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
         std::optional<resolution_store> soln;
@@ -27978,7 +25901,8 @@ void test_ridge() {
         };
 
         // First valid 2-coloring of the path A-B-C
-        bool result1 = solver(1000, soln);
+        bool result1;
+        while ((result1 = solver(soln)) && !soln.has_value()) {}
         assert(result1 == true);
         assert(soln.has_value());
 
@@ -27997,7 +25921,8 @@ void test_ridge() {
         assert(A1 == C1);
 
         // Second valid 2-coloring — bm is refreshed by the next sim_one's trail pop
-        bool result2 = solver(1000, soln);
+        bool result2;
+        while ((result2 = solver(soln)) && !soln.has_value()) {}
         assert(result2 == true);
         assert(soln.has_value());
         assert(soln.value().size() == 5);
@@ -28015,7 +25940,8 @@ void test_ridge() {
         assert(A2 != A1);
 
         // Test for refutation
-        bool result3 = solver(1000, soln);
+        bool result3;
+        while ((result3 = solver(soln)) && !soln.has_value()) {}
         assert(result3 == false);
     }
 
@@ -28038,8 +25964,7 @@ void test_ridge() {
     auto next_until_refuted = [](
         ridge& solver,
         std::set<solution> expected,
-        auto get_solution,
-        size_t iterations = 1000
+        auto get_solution
     ) {
         const std::map<uint32_t, std::string> no_names;
         std::set<solution> visited;
@@ -28047,7 +25972,7 @@ void test_ridge() {
         while (!expected.empty()) {
             solution s;
             do {
-                bool r = solver(iterations, soln);
+                bool r; while ((r = solver(soln)) && !soln.has_value()) {}
                 assert(r == true);
                 s = get_solution();
             } while (visited.count(s));
@@ -28063,7 +25988,7 @@ void test_ridge() {
             visited.insert(s);
         }
         // All solutions found — next call must refute
-        bool r = solver(iterations, soln);
+        bool r; while ((r = solver(soln)) && !soln.has_value()) {}
         assert(r == false);
         assert(!soln.has_value());
     };
@@ -28130,7 +26055,7 @@ void test_ridge() {
         };
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
 
@@ -28229,7 +26154,7 @@ void test_ridge() {
         };
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
 
@@ -28300,7 +26225,7 @@ void test_ridge() {
         };
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
 
@@ -28414,7 +26339,7 @@ void test_ridge() {
         };
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
 
@@ -28510,7 +26435,7 @@ void test_ridge() {
         };
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
 
@@ -28617,7 +26542,7 @@ void test_ridge() {
         assert(expected.size() == 55);
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 100, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
 
@@ -28699,7 +26624,7 @@ void test_ridge() {
         assert(expected.size() == 11);
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1000, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
 
@@ -28810,7 +26735,7 @@ void test_ridge() {
         };
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 10, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
 
@@ -28907,7 +26832,7 @@ void test_ridge() {
         assert(expected.size() == 30);
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 100, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
 
         normalizer norm(ep, bm);
 
@@ -29101,7 +27026,7 @@ void test_ridge() {
         assert(expected.size() == 42);
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 70, 200, 1.414, rng);
+        ridge solver(db, goals, t, seq, bm, 70, 1.414, rng);
 
         normalizer norm(ep, bm);
 
@@ -29110,7 +27035,6 @@ void test_ridge() {
         });
     }
 }
-
 
 void unit_test_main() {
 
@@ -29185,21 +27109,18 @@ void unit_test_main() {
     TEST(test_sim_constructor);
     TEST(test_sim_get_resolutions);
     TEST(test_sim_get_decisions);
+    TEST(test_sim_solved);
+    TEST(test_sim_conflicted);
+    TEST(test_sim_derive_one);
+    TEST(test_sim_on_resolve);
     TEST(test_sim);
     TEST(test_ridge_sim_constructor);
-    TEST(test_ridge_sim_solved);
-    TEST(test_ridge_sim_conflicted);
-    TEST(test_ridge_sim_derive_one);
     TEST(test_ridge_sim_decide_one);
-    TEST(test_ridge_sim_on_resolve);
     TEST(test_horizon_sim_reward);
     TEST(test_horizon_sim_on_resolve);
-    TEST(test_horizon_sim_one);
     TEST(test_horizon);
     TEST(test_ridge_sim);
     TEST(test_ridge_constructor_and_destructor);
-    TEST(test_ridge_sim_one);
-    TEST(test_ridge_next_avoidance);
     TEST(test_ridge);
 }
 
