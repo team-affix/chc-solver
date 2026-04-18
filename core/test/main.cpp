@@ -14495,23 +14495,24 @@ void test_goal_store_expand() {
 }
 
 void test_candidate_store_constructor() {
-    // Test 1: Empty db, empty goals -> size 0, initial_candidates is empty
+    // Test 1: Empty db, empty goals -> size 0, predicate_index is empty
     {
         lineage_pool lp;
         database db;
         goals gs_init = {};
         candidate_store cs(db, gs_init, lp);
         assert(cs.size() == 0);
-        assert(cs.initial_candidates.empty());
+        assert(cs.pi.index.empty());
     }
 
-    // Test 2: Non-empty db (3 rules), empty goals -> size 0, initial_candidates = [0,1,2]
+    // Test 2: Non-empty db (3 pred rules for "a"), empty goals -> size 0,
+    //         predicate_index maps "a" -> {0,1,2}
     {
         trail t;
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14519,20 +14520,19 @@ void test_candidate_store_constructor() {
         goals gs_init = {};
         candidate_store cs(db, gs_init, lp);
         assert(cs.size() == 0);
-        assert(cs.initial_candidates.size() == 3);
-        std::vector<size_t> ic = cs.initial_candidates;
+        std::vector<size_t> ic = cs.pi.at("a");
         std::sort(ic.begin(), ic.end());
         assert(ic == std::vector<size_t>({0, 1, 2}));
         t.pop();
     }
 
-    // Test 3: Single rule, single goal -> size 1, candidate vector = [0]
+    // Test 3: Single pred rule, single matching pred goal -> size 1, candidate vector = [0]
     {
         trail t;
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         goals gs_init = {a};
@@ -14545,13 +14545,13 @@ void test_candidate_store_constructor() {
         t.pop();
     }
 
-    // Test 4: 3 rules, 1 goal -> size 1, candidate vector contains {0,1,2}
+    // Test 4: 3 pred rules for "a", 1 matching goal -> size 1, candidates = {0,1,2}
     {
         trail t;
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14566,13 +14566,13 @@ void test_candidate_store_constructor() {
         t.pop();
     }
 
-    // Test 5: 3 rules, 2 goals -> size 2, both goals hold {0,1,2}
+    // Test 5: 3 pred rules for "a", 2 matching goals -> size 2, both hold {0,1,2}
     {
         trail t;
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14591,13 +14591,13 @@ void test_candidate_store_constructor() {
         t.pop();
     }
 
-    // Test 6: 3 rules, 3 goals -> size 3, all three goals hold {0,1,2}
+    // Test 6: 3 pred rules for "a", 3 matching goals -> size 3, all hold {0,1,2}
     {
         trail t;
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14613,6 +14613,49 @@ void test_candidate_store_constructor() {
         }
         t.pop();
     }
+
+    // Test 7: goal whose predicate name does not match any rule -> gets empty candidates
+    {
+        trail t;
+        expr_pool ep(t);
+        t.push();
+        lineage_pool lp;
+        const expr* a = ep.pred("a", {});
+        const expr* b = ep.pred("b", {});
+        database db;
+        db.push_back({a, {}});
+        goals gs_init = {b};  // "b" not in db
+        candidate_store cs(db, gs_init, lp);
+        assert(cs.size() == 1);
+        assert(cs.at(lp.goal(nullptr, 0)).empty());
+        t.pop();
+    }
+
+    // Test 8: mixed predicates - each goal gets only rules for its own functor
+    {
+        trail t;
+        expr_pool ep(t);
+        t.push();
+        lineage_pool lp;
+        const expr* a = ep.pred("a", {});
+        const expr* b = ep.pred("b", {});
+        database db;
+        db.push_back({a, {}});  // rule 0: "a"
+        db.push_back({a, {}});  // rule 1: "a"
+        db.push_back({b, {}});  // rule 2: "b"
+        goals gs_init = {a, b};
+        candidate_store cs(db, gs_init, lp);
+        assert(cs.size() == 2);
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const goal_lineage* gl1 = lp.goal(nullptr, 1);
+        std::vector<size_t> c0 = cs.at(gl0);
+        std::vector<size_t> c1 = cs.at(gl1);
+        std::sort(c0.begin(), c0.end());
+        std::sort(c1.begin(), c1.end());
+        assert(c0 == std::vector<size_t>({0, 1}));  // only "a" rules
+        assert(c1 == std::vector<size_t>({2}));      // only "b" rule
+        t.pop();
+    }
 }
 
 void test_candidate_store_eliminate() {
@@ -14622,7 +14665,7 @@ void test_candidate_store_eliminate() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14645,7 +14688,7 @@ void test_candidate_store_eliminate() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14664,7 +14707,7 @@ void test_candidate_store_eliminate() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14687,7 +14730,7 @@ void test_candidate_store_eliminate() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14710,7 +14753,7 @@ void test_candidate_store_eliminate() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14730,7 +14773,7 @@ void test_candidate_store_eliminate() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14751,7 +14794,7 @@ void test_candidate_store_eliminate() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14774,7 +14817,7 @@ void test_candidate_store_eliminate() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14797,7 +14840,7 @@ void test_candidate_store_eliminate() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14818,7 +14861,7 @@ void test_candidate_store_eliminate() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14856,7 +14899,7 @@ void test_candidate_store_unit() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14875,7 +14918,7 @@ void test_candidate_store_unit() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14895,7 +14938,7 @@ void test_candidate_store_unit() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14921,7 +14964,7 @@ void test_candidate_store_unit() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14950,7 +14993,7 @@ void test_candidate_store_unit() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -14975,7 +15018,7 @@ void test_candidate_store_unit() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         goals gs_init = {a};
@@ -14994,7 +15037,7 @@ void test_candidate_store_unit() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -15031,7 +15074,7 @@ void test_candidate_store_conflicted() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -15048,7 +15091,7 @@ void test_candidate_store_conflicted() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -15066,7 +15109,7 @@ void test_candidate_store_conflicted() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -15083,7 +15126,7 @@ void test_candidate_store_conflicted() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -15100,7 +15143,7 @@ void test_candidate_store_conflicted() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -15119,7 +15162,7 @@ void test_candidate_store_conflicted() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -15137,7 +15180,7 @@ void test_candidate_store_conflicted() {
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});
         db.push_back({a, {}});
@@ -15152,13 +15195,13 @@ void test_candidate_store_conflicted() {
 }
 
 void test_candidate_store_expand() {
-    // Test 1: resolve with 0-body rule -> parent removed, frontier becomes empty
+    // Test 1: resolve with 0-body pred rule -> parent removed, frontier becomes empty
     {
         trail t;
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
+        const expr* a = ep.pred("a", {});
         database db;
         db.push_back({a, {}});  // rule 0: 0-body
         goals gs_init = {a};
@@ -15170,21 +15213,23 @@ void test_candidate_store_expand() {
         t.pop();
     }
 
-    // Test 2: resolve with 1-body rule -> single child holds initial_candidates
+    // Test 2: resolve with 1-body rule; body literal is pred "b" with 3 matching rules ->
+    //         child gets {0,1,2}
     {
         trail t;
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
-        const expr* b = ep.atom("b");
+        const expr* a = ep.pred("a", {});
+        const expr* b = ep.pred("b", {});
         database db;
-        db.push_back({a, {b}});  // rule 0: 1-body
-        db.push_back({a, {}});
-        db.push_back({a, {}});
+        db.push_back({a, {b}});  // rule 0: a :- b.
+        db.push_back({b, {}});   // rule 1: b.
+        db.push_back({b, {}});   // rule 2: b.
         goals gs_init = {a};
         candidate_store cs(db, gs_init, lp);
-        std::vector<size_t> expected = cs.initial_candidates;
+        // expected candidates for a child "b" goal = {1, 2}
+        std::vector<size_t> expected = {1, 2};
         const goal_lineage* gl = lp.goal(nullptr, 0);
         const resolution_lineage* rl = lp.resolution(gl, 0);
         cs.resolve(rl);
@@ -15196,21 +15241,20 @@ void test_candidate_store_expand() {
         t.pop();
     }
 
-    // Test 3: resolve with 2-body rule -> both children hold initial_candidates
+    // Test 3: resolve with 2-body rule; both body literals are "b" -> both children get "b" rules
     {
         trail t;
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
-        const expr* b = ep.atom("b");
+        const expr* a = ep.pred("a", {});
+        const expr* b = ep.pred("b", {});
         database db;
-        db.push_back({a, {b, b}});  // rule 0: 2-body
-        db.push_back({a, {}});
+        db.push_back({a, {b, b}});  // rule 0: a :- b, b.
+        db.push_back({b, {}});      // rule 1: b.
         goals gs_init = {a};
         candidate_store cs(db, gs_init, lp);
-        std::vector<size_t> expected = cs.initial_candidates;
-        std::sort(expected.begin(), expected.end());
+        std::vector<size_t> expected = {1};  // only rule 1 matches "b"
         const goal_lineage* gl = lp.goal(nullptr, 0);
         const resolution_lineage* rl = lp.resolution(gl, 0);
         cs.resolve(rl);
@@ -15223,94 +15267,93 @@ void test_candidate_store_expand() {
         t.pop();
     }
 
-    // Test 4: resolve with 3-body rule -> all 3 children hold initial_candidates
+    // Test 4: resolve with 3-body rule; body literals are "b", "c", "d" -> each child gets
+    //         only rules matching its own predicate
     {
         trail t;
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
-        const expr* b = ep.atom("b");
+        const expr* a = ep.pred("a", {});
+        const expr* b = ep.pred("b", {});
+        const expr* c = ep.pred("c", {});
+        const expr* d = ep.pred("d", {});
         database db;
-        db.push_back({a, {b, b, b}});  // rule 0: 3-body
-        db.push_back({a, {}});
-        db.push_back({a, {}});
+        db.push_back({a, {b, c, d}});  // rule 0
+        db.push_back({b, {}});          // rule 1
+        db.push_back({c, {}});          // rule 2
+        db.push_back({d, {}});          // rule 3
         goals gs_init = {a};
         candidate_store cs(db, gs_init, lp);
-        std::vector<size_t> expected = cs.initial_candidates;
-        std::sort(expected.begin(), expected.end());
         const goal_lineage* gl = lp.goal(nullptr, 0);
         const resolution_lineage* rl = lp.resolution(gl, 0);
         cs.resolve(rl);
         assert(cs.size() == 3);
-        for (int i = 0; i < 3; ++i) {
-            std::vector<size_t> child_cands = cs.at(lp.goal(rl, i));
-            std::sort(child_cands.begin(), child_cands.end());
-            assert(child_cands == expected);
-        }
+        assert(cs.at(lp.goal(rl, 0)) == std::vector<size_t>({1}));  // b
+        assert(cs.at(lp.goal(rl, 1)) == std::vector<size_t>({2}));  // c
+        assert(cs.at(lp.goal(rl, 2)) == std::vector<size_t>({3}));  // d
         t.pop();
     }
 
-    // Test 5: parent had candidates eliminated -> children still get full initial_candidates
+    // Test 5: parent had candidates eliminated -> children still get the full predicate-filtered
+    //         set for their own functor, not the parent's reduced set
     {
         trail t;
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
-        const expr* b = ep.atom("b");
+        const expr* a = ep.pred("a", {});
+        const expr* b = ep.pred("b", {});
         database db;
-        db.push_back({a, {b}});  // rule 0: 1-body
-        db.push_back({a, {}});
-        db.push_back({a, {}});
+        db.push_back({a, {b}});  // rule 0: a :- b.
+        db.push_back({a, {}});   // rule 1: a.
+        db.push_back({a, {}});   // rule 2: a.
+        db.push_back({b, {}});   // rule 3: b.
+        db.push_back({b, {}});   // rule 4: b.
         goals gs_init = {a};
         candidate_store cs(db, gs_init, lp);
-        std::vector<size_t> full_initial = cs.initial_candidates;
-        std::sort(full_initial.begin(), full_initial.end());
-        // eliminate index 1 and 2 from the parent goal -> parent now has only candidate 0
+        // eliminate rules 1 and 2 from parent (a) -> parent now has only rule 0
         cs.eliminate([](const goal_lineage*, size_t c) { return c == 1 || c == 2; });
         assert(cs.at(lp.goal(nullptr, 0)).size() == 1);
-        // resolve: child should get the FULL initial_candidates, not the parent's reduced set
+        // resolve via rule 0 (a :- b): child "b" gets ALL "b" rules = {3,4}
         const goal_lineage* gl = lp.goal(nullptr, 0);
         const resolution_lineage* rl = lp.resolution(gl, 0);
         cs.resolve(rl);
         assert(cs.size() == 1);
         std::vector<size_t> child_cands = cs.at(lp.goal(rl, 0));
         std::sort(child_cands.begin(), child_cands.end());
-        assert(child_cands == full_initial);
+        assert(child_cands == std::vector<size_t>({3, 4}));
         t.pop();
     }
 
-    // Test 6: children's candidate vectors are independent copies
-    // Modifying one child's vector does not affect the other's
+    // Test 6: two children's candidate vectors are independent copies
     {
         trail t;
         expr_pool ep(t);
         t.push();
         lineage_pool lp;
-        const expr* a = ep.atom("a");
-        const expr* b = ep.atom("b");
+        const expr* a = ep.pred("a", {});
+        const expr* b = ep.pred("b", {});
         database db;
-        db.push_back({a, {b, b}});  // rule 0: 2-body
-        db.push_back({a, {}});
+        db.push_back({a, {b, b}});  // rule 0: a :- b, b.
+        db.push_back({b, {}});      // rule 1: b.
+        db.push_back({b, {}});      // rule 2: b.
         goals gs_init = {a};
         candidate_store cs(db, gs_init, lp);
-        std::vector<size_t> full_initial = cs.initial_candidates;
-        std::sort(full_initial.begin(), full_initial.end());
         const goal_lineage* gl = lp.goal(nullptr, 0);
         const resolution_lineage* rl = lp.resolution(gl, 0);
         cs.resolve(rl);
-        // eliminate a candidate from child 0 only
         const goal_lineage* child0 = lp.goal(rl, 0);
         const goal_lineage* child1 = lp.goal(rl, 1);
+        // eliminate rule 1 from child0 only
         cs.eliminate([child0](const goal_lineage* gl, size_t c) {
-            return gl == child0 && c == 0;
+            return gl == child0 && c == 1;
         });
-        // child0 is reduced; child1 must still have the full initial set
-        assert(cs.at(child0).size() == full_initial.size() - 1);
+        // child0 has only rule 2 left; child1 still has both {1, 2}
+        assert(cs.at(child0) == std::vector<size_t>({2}));
         std::vector<size_t> c1 = cs.at(child1);
         std::sort(c1.begin(), c1.end());
-        assert(c1 == full_initial);
+        assert(c1 == std::vector<size_t>({1, 2}));
         t.pop();
     }
 }
@@ -17508,16 +17551,16 @@ void test_sim_constructor() {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.pred("p", {}), {}});
         goals gs;
-        gs.push_back(ep.atom("p"));
+        gs.push_back(ep.pred("p", {}));
         cdcl c;
         sim_mock s(100, db, gs, t, seq, ep, bm, lp, c);
 
         assert(s.gs.size() == 1);
         assert(s.cs.size() == 1);
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        assert(s.gs.at(gl0) == ep.atom("p"));
+        assert(s.gs.at(gl0) == ep.pred("p", {}));
         assert(s.cs.at(gl0) == std::vector<size_t>({0}));
     }
 
@@ -17629,9 +17672,9 @@ void test_sim_solved() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.pred("p", {}), {}});
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -17651,11 +17694,11 @@ void test_sim_solved() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
-        db.push_back(rule{ep.atom("q"), {}});
+        db.push_back(rule{ep.pred("p", {}), {}});
+        db.push_back(rule{ep.pred("q", {}), {}});
         goals goals;
-        goals.push_back(ep.atom("p"));
-        goals.push_back(ep.atom("q"));
+        goals.push_back(ep.pred("p", {}));
+        goals.push_back(ep.pred("q", {}));
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -17677,9 +17720,9 @@ void test_sim_conflicted() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.pred("p", {}), {}});
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -17703,7 +17746,7 @@ void test_sim_conflicted() {
         lineage_pool lp;
         database db;
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -17724,9 +17767,9 @@ void test_sim_conflicted() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("q"), {}}); // rule for q, goal is p → mismatch
+        db.push_back(rule{ep.pred("q", {}), {}}); // rule for q, goal is p → mismatch
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -17747,9 +17790,9 @@ void test_sim_conflicted() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.pred("p", {}), {}});
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
 
         // Pre-populate cdcl: singleton avoidance {rl} → rl is eliminated
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
@@ -17778,10 +17821,10 @@ void test_sim_conflicted() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.pred("p", {}), {}});
         goals goals;
-        goals.push_back(ep.atom("p")); // gl0: matches rule 0
-        goals.push_back(ep.atom("q")); // gl1: no matching rule
+        goals.push_back(ep.pred("p", {})); // gl0: matches rule 0
+        goals.push_back(ep.pred("q", {})); // gl1: no matching rule
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -17805,7 +17848,7 @@ void test_sim_conflicted() {
         lineage_pool lp;
         database db;
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -17827,10 +17870,10 @@ void test_sim_derive_one() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
-        db.push_back(rule{ep.atom("p"), {}}); // two rules for p → 2 candidates → not unit
+        db.push_back(rule{ep.pred("p", {}), {}});
+        db.push_back(rule{ep.pred("p", {}), {}}); // two rules for p → 2 candidates → not unit
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -17849,9 +17892,9 @@ void test_sim_derive_one() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.pred("p", {}), {}});
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -17884,7 +17927,8 @@ void test_sim_derive_one() {
         assert(sim.derive_one() == nullptr);
     }
 
-    // Test 4: Two rules but only one matches the goal → after conflicted() reduces to 1 → unit
+    // Test 4: Two rules but only one matches the goal → predicate_index immediately
+    //         gives only rule 0 → candidate set is unit → derive_one() returns it directly
     {
         trail t;
         t.push();
@@ -17893,23 +17937,20 @@ void test_sim_derive_one() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}}); // rule 0: p :- (matches)
-        db.push_back(rule{ep.atom("q"), {}}); // rule 1: q :- (doesn't match goal p)
+        db.push_back(rule{ep.pred("p", {}), {}}); // rule 0: p :- (matches goal p)
+        db.push_back(rule{ep.pred("q", {}), {}}); // rule 1: q :- (different predicate)
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
         ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
 
-        // Initially, derive_one() returns nullptr
-        assert(sim.derive_one() == nullptr);
-
-        // Initially 2 candidates; conflicted() eliminates rule 1 (q head ≠ p goal)
-        assert(sim.conflicted() == false);
+        // predicate_index gives only rule 0 for "p" → candidate set is already unit at construction
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         assert(sim.cs.at(gl0).size() == 1);
+        assert(sim.cs.at(gl0)[0] == 0);
 
         const resolution_lineage* expected = lp.resolution(gl0, 0);
         const resolution_lineage* result = sim.derive_one();
@@ -17928,9 +17969,9 @@ void test_sim_on_resolve() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}}); // p :-
+        db.push_back(rule{ep.pred("p", {}), {}}); // p :-
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -17958,9 +17999,9 @@ void test_sim_on_resolve() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {ep.atom("q")}}); // p :- q.
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("q", {})}}); // p :- q.
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -17977,12 +18018,12 @@ void test_sim_on_resolve() {
 
         // Sub-goal lineage: lp.goal(rl, 0)
         const goal_lineage* sub_gl = lp.goal(rl, 0);
-        assert(sim.gs.at(sub_gl) == ep.atom("q"));
+        assert(sim.gs.at(sub_gl) == ep.pred("q", {}));
 
         // cs tracks the same sub-goal
         assert(sim.cs.size() == 1);
-        // Old goal no longer in cs
-        assert(sim.cs.at(sub_gl).size() == 1); // db has 1 rule
+        // Old goal no longer in cs; "q" has no rule in db → 0 candidates
+        assert(sim.cs.at(sub_gl).empty());
     }
 
     // Test 3: c.constrain effect - avoidance reduced from 2 to 1 → remaining rl eliminated
@@ -17994,9 +18035,9 @@ void test_sim_on_resolve() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}}); // p :-
+        db.push_back(rule{ep.pred("p", {}), {}}); // p :-
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
 
         // Set up cdcl: 2-element avoidance {rl0, rl1}; neither eliminated yet
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
@@ -18031,9 +18072,9 @@ void test_sim_on_resolve() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {ep.atom("q"), ep.atom("r")}}); // p :- q, r.
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("q", {}), ep.pred("r", {})}}); // p :- q, r.
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -18052,8 +18093,8 @@ void test_sim_on_resolve() {
 
         const goal_lineage* sub_gl0 = lp.goal(rl, 0);
         const goal_lineage* sub_gl1 = lp.goal(rl, 1);
-        assert(sim.gs.at(sub_gl0) == ep.atom("q"));
-        assert(sim.gs.at(sub_gl1) == ep.atom("r"));
+        assert(sim.gs.at(sub_gl0) == ep.pred("q", {}));
+        assert(sim.gs.at(sub_gl1) == ep.pred("r", {}));
     }
 }
 
@@ -18078,9 +18119,9 @@ void test_sim() {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("q"), {}});  // only rule for q
+        db.push_back(rule{ep.pred("q", {}), {}});  // only rule for q
         goals gs;
-        gs.push_back(ep.atom("p"));            // goal is p: no matching rule
+        gs.push_back(ep.pred("p", {}));            // goal is p: no matching rule
         cdcl c;
         sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
 
@@ -18097,9 +18138,9 @@ void test_sim() {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.pred("p", {}), {}});
         goals gs;
-        gs.push_back(ep.atom("p"));
+        gs.push_back(ep.pred("p", {}));
         cdcl c;
         sim_mock s(0, db, gs, t, seq, ep, bm, lp, c);
 
@@ -18116,9 +18157,9 @@ void test_sim() {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}});  // p :- .
+        db.push_back(rule{ep.pred("p", {}), {}});  // p :- .
         goals gs;
-        gs.push_back(ep.atom("p"));
+        gs.push_back(ep.pred("p", {}));
         cdcl c;
         sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
 
@@ -18137,10 +18178,10 @@ void test_sim() {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {ep.atom("r")}});  // rule 0: p :- r.
-        db.push_back(rule{ep.atom("p"), {}});               // rule 1: p :- .
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("r", {})}});  // rule 0: p :- r.
+        db.push_back(rule{ep.pred("p", {}), {}});               // rule 1: p :- .
         goals gs;
-        gs.push_back(ep.atom("p"));
+        gs.push_back(ep.pred("p", {}));
         cdcl c;
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
@@ -18162,10 +18203,10 @@ void test_sim() {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {ep.atom("q")}});  // rule 0: p :- q.
-        db.push_back(rule{ep.atom("q"), {}});               // rule 1: q :- .
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("q", {})}});  // rule 0: p :- q.
+        db.push_back(rule{ep.pred("q", {}), {}});               // rule 1: q :- .
         goals gs;
-        gs.push_back(ep.atom("p"));
+        gs.push_back(ep.pred("p", {}));
         cdcl c;
         sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
 
@@ -18182,11 +18223,11 @@ void test_sim() {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {ep.atom("q")}});  // rule 0: p :- q.
-        db.push_back(rule{ep.atom("q"), {ep.atom("r")}});  // rule 1: q :- r.
-        db.push_back(rule{ep.atom("r"), {}});               // rule 2: r :- .
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("q", {})}});  // rule 0: p :- q.
+        db.push_back(rule{ep.pred("q", {}), {ep.pred("r", {})}});  // rule 1: q :- r.
+        db.push_back(rule{ep.pred("r", {}), {}});               // rule 2: r :- .
         goals gs;
-        gs.push_back(ep.atom("p"));
+        gs.push_back(ep.pred("p", {}));
         cdcl c;
         sim_mock s(2, db, gs, t, seq, ep, bm, lp, c);
 
@@ -18206,11 +18247,11 @@ void test_sim() {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {ep.atom("r")}});  // rule 0: p :- r.
-        db.push_back(rule{ep.atom("p"), {ep.atom("q")}});  // rule 1: p :- q.
-        db.push_back(rule{ep.atom("q"), {}});               // rule 2: q :- .
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("r", {})}});  // rule 0: p :- r.
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("q", {})}});  // rule 1: p :- q.
+        db.push_back(rule{ep.pred("q", {}), {}});               // rule 2: q :- .
         goals gs;
-        gs.push_back(ep.atom("p"));
+        gs.push_back(ep.pred("p", {}));
         cdcl c;
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
@@ -18234,9 +18275,9 @@ void test_sim() {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.pred("p", {}), {}});
         goals gs;
-        gs.push_back(ep.atom("p"));
+        gs.push_back(ep.pred("p", {}));
         cdcl c;
         sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
 
@@ -18317,10 +18358,10 @@ void test_ridge_sim_constructor() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.pred("p", {}), {}});
         
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         
         cdcl c;
         
@@ -18337,7 +18378,7 @@ void test_ridge_sim_constructor() {
             const goal_lineage* gl = lp.goal(nullptr, 0);
             assert(gl->parent == nullptr);
             assert(gl->idx == 0);
-            assert(simulation.gs.at(gl) == ep.atom("p"));
+            assert(simulation.gs.at(gl) == ep.pred("p", {}));
             
             // CRITICAL: Candidate added to candidate_store (1 goal * 1 db rule = 1 candidate)
             assert(simulation.cs.size() == 1);
@@ -18367,14 +18408,14 @@ void test_ridge_sim_constructor() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
-        db.push_back(rule{ep.atom("q"), {}});
-        db.push_back(rule{ep.atom("r"), {}});
+        db.push_back(rule{ep.pred("p", {}), {}});
+        db.push_back(rule{ep.pred("q", {}), {}});
+        db.push_back(rule{ep.pred("r", {}), {}});
         
         goals goals;
-        goals.push_back(ep.atom("p"));
-        goals.push_back(ep.atom("q"));
-        goals.push_back(ep.atom("r"));
+        goals.push_back(ep.pred("p", {}));
+        goals.push_back(ep.pred("q", {}));
+        goals.push_back(ep.pred("r", {}));
         
         cdcl c;
         
@@ -18396,13 +18437,13 @@ void test_ridge_sim_constructor() {
         for (const auto& [gl, ge] : simulation.gs) {
             if (gl->idx == 0) {
                 gl0 = gl;
-                assert(ge == ep.atom("p"));
+                assert(ge == ep.pred("p", {}));
             } else if (gl->idx == 1) {
                 gl1 = gl;
-                assert(ge == ep.atom("q"));
+                assert(ge == ep.pred("q", {}));
             } else if (gl->idx == 2) {
                 gl2 = gl;
-                assert(ge == ep.atom("r"));
+                assert(ge == ep.pred("r", {}));
             }
         }
         
@@ -18415,16 +18456,16 @@ void test_ridge_sim_constructor() {
         assert(gl1->parent == nullptr);
         assert(gl2->parent == nullptr);
         
-        // CRITICAL: Three goals, each with all 3 db rules as candidates
+        // CRITICAL: Three goals, each with only the rule for its own predicate
         assert(simulation.cs.size() == 3);
         
-        assert(simulation.cs.at(gl0).size() == 3);
-        assert(simulation.cs.at(gl1).size() == 3);
-        assert(simulation.cs.at(gl2).size() == 3);
+        assert(simulation.cs.at(gl0).size() == 1);  // only rule 0 (p)
+        assert(simulation.cs.at(gl1).size() == 1);  // only rule 1 (q)
+        assert(simulation.cs.at(gl2).size() == 1);  // only rule 2 (r)
         
-        assert(std::set<size_t>(simulation.cs.at(gl0).begin(), simulation.cs.at(gl0).end()) == std::set<size_t>({0, 1, 2}));
-        assert(std::set<size_t>(simulation.cs.at(gl1).begin(), simulation.cs.at(gl1).end()) == std::set<size_t>({0, 1, 2}));
-        assert(std::set<size_t>(simulation.cs.at(gl2).begin(), simulation.cs.at(gl2).end()) == std::set<size_t>({0, 1, 2}));
+        assert(simulation.cs.at(gl0)[0] == 0);
+        assert(simulation.cs.at(gl1)[0] == 1);
+        assert(simulation.cs.at(gl2)[0] == 2);
         
         // Max resolutions
         assert(simulation.max_resolutions == 200);
@@ -18450,13 +18491,13 @@ void test_ridge_sim_constructor() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.pred("p", {}), {}});
         // No rule for "q" or "r"
         
         goals goals;
-        goals.push_back(ep.atom("p"));
-        goals.push_back(ep.atom("q"));
-        goals.push_back(ep.atom("r"));
+        goals.push_back(ep.pred("p", {}));
+        goals.push_back(ep.pred("q", {}));
+        goals.push_back(ep.pred("r", {}));
         
         cdcl c;
         
@@ -18469,8 +18510,7 @@ void test_ridge_sim_constructor() {
         // CRITICAL: All goals added to goal_store
         assert(simulation.gs.size() == 3);
         
-        // CRITICAL: goal_adder adds ALL db rules to ALL goals (trivially, before elimination)
-        // 3 goals * 1 db rule = 3 total candidates
+        // predicate_index: "p" → {0}, "q" → {}, "r" → {}
         assert(simulation.cs.size() == 3);
         
         const goal_lineage* gl_p = nullptr;
@@ -18484,17 +18524,17 @@ void test_ridge_sim_constructor() {
         }
         
         assert(simulation.cs.at(gl_p) == std::vector<size_t>({0}));
-        assert(simulation.cs.at(gl_q) == std::vector<size_t>({0}));
-        assert(simulation.cs.at(gl_r) == std::vector<size_t>({0}));
+        assert(simulation.cs.at(gl_q).empty());   // no rule for "q"
+        assert(simulation.cs.at(gl_r).empty());   // no rule for "r"
         
         // CRITICAL: Verify resolution and decision stores empty
         assert(simulation.rs.size() == 0);
         assert(simulation.ds.size() == 0);
         
         // CRITICAL: Verify goal expressions are correct
-        assert(simulation.gs.at(gl_p) == ep.atom("p"));
-        assert(simulation.gs.at(gl_q) == ep.atom("q"));
-        assert(simulation.gs.at(gl_r) == ep.atom("r"));
+        assert(simulation.gs.at(gl_p) == ep.pred("p", {}));
+        assert(simulation.gs.at(gl_q) == ep.pred("q", {}));
+        assert(simulation.gs.at(gl_r) == ep.pred("r", {}));
         
         // CRITICAL: Verify lineages from correct pool
         assert(lp.goal_lineages.count(*gl_p) == 1);
@@ -18513,12 +18553,12 @@ void test_ridge_sim_constructor() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
-        db.push_back(rule{ep.atom("p"), {ep.atom("q")}});
-        db.push_back(rule{ep.atom("p"), {ep.atom("r")}});
+        db.push_back(rule{ep.pred("p", {}), {}});
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("q", {})}});
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("r", {})}});
         
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         
         cdcl c;
         
@@ -18540,7 +18580,7 @@ void test_ridge_sim_constructor() {
         assert(simulation.ds.size() == 0);
         
         // CRITICAL: Verify goal expression content
-        assert(simulation.gs.at(gl) == ep.atom("p"));
+        assert(simulation.gs.at(gl) == ep.pred("p", {}));
         
         // CRITICAL: Verify lineage from correct pool
         assert(lp.goal_lineages.count(*gl) == 1);
@@ -18602,18 +18642,18 @@ void test_ridge_sim_constructor() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
-        db.push_back(rule{ep.atom("p"), {ep.atom("x")}});
-        db.push_back(rule{ep.atom("q"), {}});
-        db.push_back(rule{ep.atom("q"), {ep.atom("y")}});
-        db.push_back(rule{ep.atom("q"), {ep.atom("z")}});
-        db.push_back(rule{ep.atom("r"), {ep.atom("w")}});
+        db.push_back(rule{ep.pred("p", {}), {}});
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("x", {})}});
+        db.push_back(rule{ep.pred("q", {}), {}});
+        db.push_back(rule{ep.pred("q", {}), {ep.pred("y", {})}});
+        db.push_back(rule{ep.pred("q", {}), {ep.pred("z", {})}});
+        db.push_back(rule{ep.pred("r", {}), {ep.pred("w", {})}});
         
         goals goals;
-        goals.push_back(ep.atom("p"));
-        goals.push_back(ep.atom("q"));
-        goals.push_back(ep.atom("r"));
-        goals.push_back(ep.atom("s"));  // No matching rule
+        goals.push_back(ep.pred("p", {}));
+        goals.push_back(ep.pred("q", {}));
+        goals.push_back(ep.pred("r", {}));
+        goals.push_back(ep.pred("s", {}));  // No matching rule
         
         cdcl c;
         
@@ -18635,16 +18675,16 @@ void test_ridge_sim_constructor() {
         for (const auto& [gl, ge] : simulation.gs) {
             if (gl->idx == 0) {
                 gl0 = gl;
-                assert(ge == ep.atom("p"));
+                assert(ge == ep.pred("p", {}));
             } else if (gl->idx == 1) {
                 gl1 = gl;
-                assert(ge == ep.atom("q"));
+                assert(ge == ep.pred("q", {}));
             } else if (gl->idx == 2) {
                 gl2 = gl;
-                assert(ge == ep.atom("r"));
+                assert(ge == ep.pred("r", {}));
             } else if (gl->idx == 3) {
                 gl3 = gl;
-                assert(ge == ep.atom("s"));
+                assert(ge == ep.pred("s", {}));
             }
         }
         
@@ -18652,13 +18692,18 @@ void test_ridge_sim_constructor() {
         
         assert(simulation.cs.size() == 4);
         
-        assert(simulation.cs.at(gl0).size() == 6);
-        assert(simulation.cs.at(gl1).size() == 6);
-        assert(simulation.cs.at(gl2).size() == 6);
-        assert(simulation.cs.at(gl3).size() == 6);
+        // predicate_index: "p"→{0,1}, "q"→{2,3,4}, "r"→{5}, "s"→{}
+        assert(simulation.cs.at(gl0).size() == 2);
+        assert(simulation.cs.at(gl1).size() == 3);
+        assert(simulation.cs.at(gl2).size() == 1);
+        assert(simulation.cs.at(gl3).empty());    // no rule for "s"
         
-        for (const goal_lineage* gl : {gl0, gl1, gl2, gl3}) {
-            assert(std::set<size_t>(simulation.cs.at(gl).begin(), simulation.cs.at(gl).end()) == std::set<size_t>({0, 1, 2, 3, 4, 5}));
+        assert(std::set<size_t>(simulation.cs.at(gl0).begin(), simulation.cs.at(gl0).end()) == std::set<size_t>({0, 1}));
+        assert(std::set<size_t>(simulation.cs.at(gl1).begin(), simulation.cs.at(gl1).end()) == std::set<size_t>({2, 3, 4}));
+        assert(std::set<size_t>(simulation.cs.at(gl2).begin(), simulation.cs.at(gl2).end()) == std::set<size_t>({5}));
+        for (const goal_lineage* gl : {gl0, gl1, gl2}) {
+            // verify these are indeed the correct candidate sets (not all rules)
+            assert(true);
         }
         
         // Max resolutions
@@ -18680,16 +18725,16 @@ void test_ridge_sim_constructor() {
         assert(gl3->parent == nullptr && gl3->idx == 3);
         
         // CRITICAL: Verify goal expressions match exactly
-        assert(simulation.gs.at(gl0) == ep.atom("p"));
-        assert(simulation.gs.at(gl1) == ep.atom("q"));
-        assert(simulation.gs.at(gl2) == ep.atom("r"));
-        assert(simulation.gs.at(gl3) == ep.atom("s"));
+        assert(simulation.gs.at(gl0) == ep.pred("p", {}));
+        assert(simulation.gs.at(gl1) == ep.pred("q", {}));
+        assert(simulation.gs.at(gl2) == ep.pred("r", {}));
+        assert(simulation.gs.at(gl3) == ep.pred("s", {}));
         
         // CRITICAL: Verify database reference holds correct content
         assert(simulation.db.size() == 6);
-        assert(simulation.db[0].head == ep.atom("p"));
-        assert(simulation.db[2].head == ep.atom("q"));
-        assert(simulation.db[5].head == ep.atom("r"));
+        assert(simulation.db[0].head == ep.pred("p", {}));
+        assert(simulation.db[2].head == ep.pred("q", {}));
+        assert(simulation.db[5].head == ep.pred("r", {}));
     }
     
     // Test 9: Pre-populated avoidance store is copied
@@ -18753,7 +18798,7 @@ void test_ridge_sim_constructor() {
         
         database db;
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         
         cdcl c;
         
@@ -18886,13 +18931,13 @@ void test_ridge_sim_constructor() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("x"), {}});
-        db.push_back(rule{ep.atom("y"), {}});
+        db.push_back(rule{ep.pred("x", {}), {}});
+        db.push_back(rule{ep.pred("y", {}), {}});
         
-        // Add 5 goals
+        // Add 5 goals (none match any db rule predicate)
         goals goals;
         for (int i = 0; i < 5; i++) {
-            goals.push_back(ep.atom("goal" + std::to_string(i)));
+            goals.push_back(ep.pred("goal" + std::to_string(i), {}));
         }
         
         cdcl c;
@@ -18916,7 +18961,7 @@ void test_ridge_sim_constructor() {
         assert(simulation.rs.size() == 0);
         
         for (const auto& [gl, ge] : simulation.gs) {
-            assert(simulation.cs.at(gl).size() == 2);
+            assert(simulation.cs.at(gl).empty()); // no matching pred rule
             assert(gl->parent == nullptr);
             assert(gl->idx >= 0 && gl->idx < 5);
         }
@@ -18935,10 +18980,10 @@ void test_ridge_sim_constructor() {
         database db;
         
         goals goals;
-        const expr* goal_a = ep.atom("alpha");
-        const expr* goal_b = ep.atom("beta");
-        const expr* goal_c = ep.atom("gamma");
-        const expr* goal_d = ep.atom("delta");
+        const expr* goal_a = ep.pred("alpha", {});
+        const expr* goal_b = ep.pred("beta", {});
+        const expr* goal_c = ep.pred("gamma", {});
+        const expr* goal_d = ep.pred("delta", {});
         
         goals.push_back(goal_a);
         goals.push_back(goal_b);
@@ -18995,10 +19040,10 @@ void test_ridge_sim_decide_one() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}}); // rule 0
-        db.push_back(rule{ep.atom("p"), {}}); // rule 1
+        db.push_back(rule{ep.pred("p", {}), {}}); // rule 0
+        db.push_back(rule{ep.pred("p", {}), {}}); // rule 1
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         cdcl c;
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
@@ -19034,11 +19079,11 @@ void test_ridge_sim_decide_one() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}}); // rule 0
-        db.push_back(rule{ep.atom("q"), {}}); // rule 1
+        db.push_back(rule{ep.pred("p", {}), {}}); // rule 0
+        db.push_back(rule{ep.pred("q", {}), {}}); // rule 1
         goals goals;
-        goals.push_back(ep.atom("p")); // gl0
-        goals.push_back(ep.atom("q")); // gl1
+        goals.push_back(ep.pred("p", {})); // gl0
+        goals.push_back(ep.pred("q", {})); // gl1
         cdcl c;
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
@@ -19077,9 +19122,9 @@ void test_ridge_sim_decide_one() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.pred("p", {}), {}});
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         cdcl c;
 
         monte_carlo::tree_node<mcts_decider::choice> root;
@@ -19130,9 +19175,9 @@ void test_horizon_sim_reward() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
+        db.push_back(rule{ep.pred("p", {}), {}});
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -19151,11 +19196,11 @@ void test_horizon_sim_reward() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
-        db.push_back(rule{ep.atom("q"), {}});
+        db.push_back(rule{ep.pred("p", {}), {}});
+        db.push_back(rule{ep.pred("q", {}), {}});
         goals goals;
-        goals.push_back(ep.atom("p"));
-        goals.push_back(ep.atom("q"));
+        goals.push_back(ep.pred("p", {}));
+        goals.push_back(ep.pred("q", {}));
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -19207,9 +19252,9 @@ void test_horizon_sim_on_resolve() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}}); // p :-
+        db.push_back(rule{ep.pred("p", {}), {}}); // p :-
         goals goals;
-        goals.push_back(ep.atom("p")); // weight = 1/1 = 1.0
+        goals.push_back(ep.pred("p", {})); // weight = 1/1 = 1.0
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -19239,9 +19284,9 @@ void test_horizon_sim_on_resolve() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {ep.atom("q")}}); // p :- q.
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("q", {})}}); // p :- q.
         goals goals;
-        goals.push_back(ep.atom("p")); // weight = 1.0
+        goals.push_back(ep.pred("p", {})); // weight = 1.0
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -19260,7 +19305,7 @@ void test_horizon_sim_on_resolve() {
         assert(near(sim.ws.members.at(sub_gl), 1.0));
         // base class: gs gained sub-goal q
         assert(sim.gs.size() == 1);
-        assert(sim.gs.at(sub_gl) == ep.atom("q"));
+        assert(sim.gs.at(sub_gl) == ep.pred("q", {}));
     }
 
     // Test 3: Two goals, resolve one with fact → reward() == 0.5 (half of total weight)
@@ -19272,11 +19317,11 @@ void test_horizon_sim_on_resolve() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
-        db.push_back(rule{ep.atom("q"), {}});
+        db.push_back(rule{ep.pred("p", {}), {}});
+        db.push_back(rule{ep.pred("q", {}), {}});
         goals goals;
-        goals.push_back(ep.atom("p")); // weight = 0.5
-        goals.push_back(ep.atom("q")); // weight = 0.5
+        goals.push_back(ep.pred("p", {})); // weight = 0.5
+        goals.push_back(ep.pred("q", {})); // weight = 0.5
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -19302,11 +19347,11 @@ void test_horizon_sim_on_resolve() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
-        db.push_back(rule{ep.atom("q"), {}});
+        db.push_back(rule{ep.pred("p", {}), {}});
+        db.push_back(rule{ep.pred("q", {}), {}});
         goals goals;
-        goals.push_back(ep.atom("p")); // weight = 0.5
-        goals.push_back(ep.atom("q")); // weight = 0.5
+        goals.push_back(ep.pred("p", {})); // weight = 0.5
+        goals.push_back(ep.pred("q", {})); // weight = 0.5
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -19333,9 +19378,9 @@ void test_horizon_sim_on_resolve() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {ep.atom("q"), ep.atom("r")}}); // p :- q, r.
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("q", {}), ep.pred("r", {})}}); // p :- q, r.
         goals goals;
-        goals.push_back(ep.atom("p")); // weight = 1.0
+        goals.push_back(ep.pred("p", {})); // weight = 1.0
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -19367,10 +19412,10 @@ void test_horizon_sim_on_resolve() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {ep.atom("q")}}); // rule 0: p :- q.
-        db.push_back(rule{ep.atom("q"), {}});              // rule 1: q :-
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("q", {})}}); // rule 0: p :- q.
+        db.push_back(rule{ep.pred("q", {}), {}});              // rule 1: q :-
         goals goals;
-        goals.push_back(ep.atom("p")); // weight = 1.0
+        goals.push_back(ep.pred("p", {})); // weight = 1.0
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -19403,10 +19448,10 @@ void test_horizon_sim_on_resolve() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {ep.atom("q"), ep.atom("r")}}); // rule 0: p :- q, r.
-        db.push_back(rule{ep.atom("q"), {}});                            // rule 1: q :-
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("q", {}), ep.pred("r", {})}}); // rule 0: p :- q, r.
+        db.push_back(rule{ep.pred("q", {}), {}});                            // rule 1: q :-
         goals goals;
-        goals.push_back(ep.atom("p")); // weight = 1.0
+        goals.push_back(ep.pred("p", {})); // weight = 1.0
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -19443,11 +19488,11 @@ void test_horizon_sim_on_resolve() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {ep.atom("q")}}); // rule 0: p :- q.
-        db.push_back(rule{ep.atom("q"), {ep.atom("r")}}); // rule 1: q :- r.
-        db.push_back(rule{ep.atom("r"), {}});              // rule 2: r :-
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("q", {})}}); // rule 0: p :- q.
+        db.push_back(rule{ep.pred("q", {}), {ep.pred("r", {})}}); // rule 1: q :- r.
+        db.push_back(rule{ep.pred("r", {}), {}});              // rule 2: r :-
         goals goals;
-        goals.push_back(ep.atom("p")); // weight = 1.0
+        goals.push_back(ep.pred("p", {})); // weight = 1.0
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -19485,12 +19530,12 @@ void test_horizon_sim_on_resolve() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("x"), ep.atom("y")}}); // rule 0: a :- x, y.
-        db.push_back(rule{ep.atom("x"), {}});                            // rule 1: x :-
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("x", {}), ep.pred("y", {})}}); // rule 0: a :- x, y.
+        db.push_back(rule{ep.pred("x", {}), {}});                            // rule 1: x :-
         goals goals;
-        goals.push_back(ep.atom("a")); // weight = 1/3
-        goals.push_back(ep.atom("b")); // weight = 1/3
-        goals.push_back(ep.atom("c")); // weight = 1/3
+        goals.push_back(ep.pred("a", {})); // weight = 1/3
+        goals.push_back(ep.pred("b", {})); // weight = 1/3
+        goals.push_back(ep.pred("c", {})); // weight = 1/3
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -19523,12 +19568,12 @@ void test_horizon_sim_on_resolve() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {ep.atom("q"), ep.atom("r"), ep.atom("s")}}); // rule 0: p :- q, r, s.
-        db.push_back(rule{ep.atom("q"), {}}); // rule 1: q :-
-        db.push_back(rule{ep.atom("r"), {}}); // rule 2: r :-
-        db.push_back(rule{ep.atom("s"), {}}); // rule 3: s :-
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("q", {}), ep.pred("r", {}), ep.pred("s", {})}}); // rule 0: p :- q, r, s.
+        db.push_back(rule{ep.pred("q", {}), {}}); // rule 1: q :-
+        db.push_back(rule{ep.pred("r", {}), {}}); // rule 2: r :-
+        db.push_back(rule{ep.pred("s", {}), {}}); // rule 3: s :-
         goals goals;
-        goals.push_back(ep.atom("p")); // weight = 1.0
+        goals.push_back(ep.pred("p", {})); // weight = 1.0
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -19567,14 +19612,14 @@ void test_horizon_sim_on_resolve() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});              // rule 0: a :- c.
-        db.push_back(rule{ep.atom("c"), {}});                           // rule 1: c :-
-        db.push_back(rule{ep.atom("b"), {ep.atom("d"), ep.atom("e")}}); // rule 2: b :- d, e.
-        db.push_back(rule{ep.atom("d"), {}});                           // rule 3: d :-
-        db.push_back(rule{ep.atom("e"), {}});                           // rule 4: e :-
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("c", {})}});              // rule 0: a :- c.
+        db.push_back(rule{ep.pred("c", {}), {}});                           // rule 1: c :-
+        db.push_back(rule{ep.pred("b", {}), {ep.pred("d", {}), ep.pred("e", {})}}); // rule 2: b :- d, e.
+        db.push_back(rule{ep.pred("d", {}), {}});                           // rule 3: d :-
+        db.push_back(rule{ep.pred("e", {}), {}});                           // rule 4: e :-
         goals goals;
-        goals.push_back(ep.atom("a")); // gl0, weight = 0.5
-        goals.push_back(ep.atom("b")); // gl1, weight = 0.5
+        goals.push_back(ep.pred("a", {})); // gl0, weight = 0.5
+        goals.push_back(ep.pred("b", {})); // gl1, weight = 0.5
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -19623,11 +19668,11 @@ void test_horizon_sim_on_resolve() {
         sequencer seq(t);
         lineage_pool lp;
         database db;
-        db.push_back(rule{ep.atom("p"), {ep.atom("q"), ep.atom("r")}}); // rule 0: p :- q, r.
-        db.push_back(rule{ep.atom("q"), {ep.atom("s"), ep.atom("t")}}); // rule 1: q :- s, t.
-        db.push_back(rule{ep.atom("s"), {}});                            // rule 2: s :-
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("q", {}), ep.pred("r", {})}}); // rule 0: p :- q, r.
+        db.push_back(rule{ep.pred("q", {}), {ep.pred("s", {}), ep.pred("t", {})}}); // rule 1: q :- s, t.
+        db.push_back(rule{ep.pred("s", {}), {}});                            // rule 2: s :-
         goals goals;
-        goals.push_back(ep.atom("p")); // weight = 1.0
+        goals.push_back(ep.pred("p", {})); // weight = 1.0
         cdcl c;
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -19672,10 +19717,10 @@ void test_horizon() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.atom("a"), {}});
+        db.push_back(rule{ep.pred("a", {}), {}});
 
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
 
         std::mt19937 rng(42);
         horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -19703,10 +19748,10 @@ void test_horizon() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.atom("a"), {}});  // idx 0: a.
+        db.push_back(rule{ep.pred("a", {}), {}});  // idx 0: a.
 
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
 
         std::mt19937 rng(42);
         horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -19745,11 +19790,11 @@ void test_horizon() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("answer"), ep.atom("42")), {}});  // idx 0
+        db.push_back(rule{ep.pred("answer", {ep.atom("42")}), {}});  // idx 0
 
         const expr* X = ep.var(seq());
         goals goals;
-        goals.push_back(ep.cons(ep.atom("answer"), X));
+        goals.push_back(ep.pred("answer", {X}));
 
         std::mt19937 rng(42);
         horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -19781,7 +19826,7 @@ void test_horizon() {
         database db;  // intentionally empty
 
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
 
         std::mt19937 rng(42);
         horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -19811,11 +19856,11 @@ void test_horizon() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0: a :- b.
-        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1: a :- c.
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("b", {})}});  // idx 0: a :- b.
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("c", {})}});  // idx 1: a :- c.
 
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
 
         std::mt19937 rng(42);
         horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -19852,15 +19897,15 @@ void test_horizon() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("is_a"), ep.atom("1")), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("is_a"), ep.atom("2")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("is_b"), ep.atom("2")), {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.atom("is_b"), ep.atom("3")), {}});  // idx 3
+        db.push_back(rule{ep.pred("is_a", {ep.atom("1")})});  // idx 0
+        db.push_back(rule{ep.pred("is_a", {ep.atom("2")})});  // idx 1
+        db.push_back(rule{ep.pred("is_b", {ep.atom("2")})});  // idx 2
+        db.push_back(rule{ep.pred("is_b", {ep.atom("3")})});  // idx 3
 
         const expr* X = ep.var(seq());
         goals goals;
-        goals.push_back(ep.cons(ep.atom("is_a"), X));  // goal 0: is_a(X)
-        goals.push_back(ep.cons(ep.atom("is_b"), X));  // goal 1: is_b(X)
+        goals.push_back(ep.pred("is_a", {X}));  // goal 0: is_a(X)
+        goals.push_back(ep.pred("is_b", {X}));  // goal 1: is_b(X)
 
         std::mt19937 rng(42);
         horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -19911,13 +19956,13 @@ void test_horizon() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("parent"), ep.atom("bob")),   ep.atom("alice")), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("parent"), ep.atom("carol")), ep.atom("alice")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("parent"), ep.atom("dave")),  ep.atom("bob")),  {}});   // idx 2
+        db.push_back(rule{ep.pred("parent", {ep.atom("bob"),   ep.atom("alice")})});  // idx 0
+        db.push_back(rule{ep.pred("parent", {ep.atom("carol"), ep.atom("alice")})});  // idx 1
+        db.push_back(rule{ep.pred("parent", {ep.atom("dave"),  ep.atom("bob")}), {}});   // idx 2
 
         const expr* X = ep.var(seq());
         goals goals;
-        goals.push_back(ep.cons(ep.cons(ep.atom("parent"), X), ep.atom("alice")));
+        goals.push_back(ep.pred("parent", {X, ep.atom("alice")}));
 
         std::mt19937 rng(42);
         horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -19975,21 +20020,21 @@ void test_horizon() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("red")),  {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("blue")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("red")),  ep.atom("blue")), {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("blue")), ep.atom("red")),  {}});  // idx 3
+        db.push_back(rule{ep.pred("color", {ep.atom("red")}), {}});  // idx 0
+        db.push_back(rule{ep.pred("color", {ep.atom("blue")})});  // idx 1
+        db.push_back(rule{ep.pred("diff", {ep.atom("red"),  ep.atom("blue")})});  // idx 2
+        db.push_back(rule{ep.pred("diff", {ep.atom("blue"), ep.atom("red")}), {}});  // idx 3
 
         const expr* A = ep.var(seq());
         const expr* B = ep.var(seq());
         const expr* C = ep.var(seq());
 
         goals goals;
-        goals.push_back(ep.cons(ep.atom("color"), A));             // goal 0: color(A)
-        goals.push_back(ep.cons(ep.atom("color"), B));             // goal 1: color(B)
-        goals.push_back(ep.cons(ep.atom("color"), C));             // goal 2: color(C)
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), A), B));  // goal 3: diff(A, B)
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), B), C));  // goal 4: diff(B, C)
+        goals.push_back(ep.pred("color", {A}));     // goal 0: color(A)
+        goals.push_back(ep.pred("color", {B}));     // goal 1: color(B)
+        goals.push_back(ep.pred("color", {C}));     // goal 2: color(C)
+        goals.push_back(ep.pred("diff", {A, B}));   // goal 3: diff(A, B)
+        goals.push_back(ep.pred("diff", {B, C}));   // goal 4: diff(B, C)
 
         std::mt19937 rng(42);
         horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -20070,9 +20115,9 @@ void test_horizon() {
 
         // Facts: parent(alice,carol), parent(bob,carol), parent(carol,dave)
         database db;
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("parent"), ep.atom("alice")), ep.atom("carol")), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("parent"), ep.atom("bob")),   ep.atom("carol")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("parent"), ep.atom("carol")), ep.atom("dave")),  {}});  // idx 2
+        db.push_back(rule{ep.pred("parent", {ep.atom("alice"), ep.atom("carol")})});  // idx 0
+        db.push_back(rule{ep.pred("parent", {ep.atom("bob"),   ep.atom("carol")})});  // idx 1
+        db.push_back(rule{ep.pred("parent", {ep.atom("carol"), ep.atom("dave")}), {}});  // idx 2
 
         // grandparent(X, Z) :- parent(X, Y), parent(Y, Z).
         {
@@ -20080,15 +20125,15 @@ void test_horizon() {
             const expr* Y = ep.var(seq());
             const expr* Z = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.atom("grandparent"), X), Z),
-                {ep.cons(ep.cons(ep.atom("parent"), X), Y),
-                 ep.cons(ep.cons(ep.atom("parent"), Y), Z)}
+                ep.pred("grandparent", {X, Z}),
+                {ep.pred("parent", {X, Y}),
+                 ep.pred("parent", {Y, Z})}
             });  // idx 3
         }
 
         const expr* G = ep.var(seq());
         goals goals;
-        goals.push_back(ep.cons(ep.cons(ep.atom("grandparent"), G), ep.atom("dave")));
+        goals.push_back(ep.pred("grandparent", {G, ep.atom("dave")}));
 
         std::mt19937 rng(42);
         horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -20227,27 +20272,27 @@ void test_horizon() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("red")),   {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("green")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("blue")),  {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("red")),   ep.atom("green")), {}});  // idx 3
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("red")),   ep.atom("blue")),  {}});  // idx 4
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("green")), ep.atom("red")),   {}});  // idx 5
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("green")), ep.atom("blue")),  {}});  // idx 6
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("blue")),  ep.atom("red")),   {}});  // idx 7
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("blue")),  ep.atom("green")), {}});  // idx 8
+        db.push_back(rule{ep.pred("color", {ep.atom("red")}),   {}});  // idx 0
+        db.push_back(rule{ep.pred("color", {ep.atom("green")}), {}});  // idx 1
+        db.push_back(rule{ep.pred("color", {ep.atom("blue")}),  {}});  // idx 2
+        db.push_back(rule{ep.pred("diff", {ep.atom("red"),   ep.atom("green")}), {}});  // idx 3
+        db.push_back(rule{ep.pred("diff", {ep.atom("red"),   ep.atom("blue")}),  {}});  // idx 4
+        db.push_back(rule{ep.pred("diff", {ep.atom("green"), ep.atom("red")}),   {}});  // idx 5
+        db.push_back(rule{ep.pred("diff", {ep.atom("green"), ep.atom("blue")}),  {}});  // idx 6
+        db.push_back(rule{ep.pred("diff", {ep.atom("blue"),  ep.atom("red")}),   {}});  // idx 7
+        db.push_back(rule{ep.pred("diff", {ep.atom("blue"),  ep.atom("green")}), {}});  // idx 8
 
         const expr* A = ep.var(seq());
         const expr* B = ep.var(seq());
         const expr* C = ep.var(seq());
 
         goals goals;
-        goals.push_back(ep.cons(ep.atom("color"), A));
-        goals.push_back(ep.cons(ep.atom("color"), B));
-        goals.push_back(ep.cons(ep.atom("color"), C));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), A), B));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), A), C));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), B), C));
+        goals.push_back(ep.pred("color", {A}));
+        goals.push_back(ep.pred("color", {B}));
+        goals.push_back(ep.pred("color", {C}));
+        goals.push_back(ep.pred("diff", {A, B}));
+        goals.push_back(ep.pred("diff", {A, C}));
+        goals.push_back(ep.pred("diff", {B, C}));
 
         const expr* red   = ep.atom("red");
         const expr* green = ep.atom("green");
@@ -20294,39 +20339,39 @@ void test_horizon() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("true")),  {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("false")), {}});  // idx 1
+        db.push_back(rule{ep.pred("bool", {ep.atom("true")}),  {}});  // idx 0
+        db.push_back(rule{ep.pred("bool", {ep.atom("false")}), {}});  // idx 1
 
         // or(true, X, true) :- bool(X).
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("or"), ep.atom("true")), X), ep.atom("true")),
-                {ep.cons(ep.atom("bool"), X)}
+                ep.pred("or", {ep.atom("true"), X, ep.atom("true")}),
+                {ep.pred("bool", {X})}
             });  // idx 2
         }
         // or(false, X, X) :- bool(X).
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("or"), ep.atom("false")), X), X),
-                {ep.cons(ep.atom("bool"), X)}
+                ep.pred("or", {ep.atom("false"), X, X}),
+                {ep.pred("bool", {X})}
             });  // idx 3
         }
         // and(true, X, X) :- bool(X).
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("and"), ep.atom("true")), X), X),
-                {ep.cons(ep.atom("bool"), X)}
+                ep.pred("and", {ep.atom("true"), X, X}),
+                {ep.pred("bool", {X})}
             });  // idx 4
         }
         // and(false, X, false) :- bool(X).
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("and"), ep.atom("false")), X), ep.atom("false")),
-                {ep.cons(ep.atom("bool"), X)}
+                ep.pred("and", {ep.atom("false"), X, ep.atom("false")}),
+                {ep.pred("bool", {X})}
             });  // idx 5
         }
 
@@ -20336,11 +20381,11 @@ void test_horizon() {
         const expr* QR = ep.var(seq());
 
         goals goals;
-        goals.push_back(ep.cons(ep.atom("bool"), P));
-        goals.push_back(ep.cons(ep.atom("bool"), Q));
-        goals.push_back(ep.cons(ep.atom("bool"), R));
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("or"),  Q), R),  QR));
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("and"), P), QR), ep.atom("true")));
+        goals.push_back(ep.pred("bool", {P}));
+        goals.push_back(ep.pred("bool", {Q}));
+        goals.push_back(ep.pred("bool", {R}));
+        goals.push_back(ep.pred("or", {Q, R, QR}));
+        goals.push_back(ep.pred("and", {P, QR, ep.atom("true")}));
 
         const expr* T_ = ep.atom("true");
         const expr* F_ = ep.atom("false");
@@ -20387,28 +20432,28 @@ void test_horizon() {
         };
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("nat"), ep.atom("zero")), {}});  // idx 0
+        db.push_back(rule{ep.pred("nat", {ep.atom("zero")}), {}});  // idx 0
 
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.atom("nat"), ep.cons(ep.atom("suc"), X)),
-                {ep.cons(ep.atom("nat"), X)}
+                ep.pred("nat", {ep.cons(ep.atom("suc"), X)}),
+                {ep.pred("nat", {X})}
             });  // idx 1
         }
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.atom("lt"), ep.atom("zero")), ep.cons(ep.atom("suc"), X)),
-                {ep.cons(ep.atom("nat"), X)}
+                ep.pred("lt", {ep.atom("zero"), ep.cons(ep.atom("suc"), X)}),
+                {ep.pred("nat", {X})}
             });  // idx 2
         }
         {
             const expr* X = ep.var(seq());
             const expr* Y = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.atom("lt"), ep.cons(ep.atom("suc"), X)), ep.cons(ep.atom("suc"), Y)),
-                {ep.cons(ep.cons(ep.atom("lt"), X), Y)}
+                ep.pred("lt", {ep.cons(ep.atom("suc"), X), ep.cons(ep.atom("suc"), Y)}),
+                {ep.pred("lt", {X, Y})}
             });  // idx 3
         }
 
@@ -20416,7 +20461,7 @@ void test_horizon() {
         const expr* five = peano(5);
 
         goals goals;
-        goals.push_back(ep.cons(ep.cons(ep.atom("lt"), N), five));
+        goals.push_back(ep.pred("lt", {N, five}));
 
         std::set<solution> expected = {
             {peano(0)}, {peano(1)}, {peano(2)}, {peano(3)}, {peano(4)},
@@ -20463,9 +20508,9 @@ void test_horizon() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("parent"), ep.atom("tom")), ep.atom("alice")), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("parent"), ep.atom("tom")), ep.atom("bob")),   {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("parent"), ep.atom("sue")), ep.atom("carol")), {}});  // idx 2
+        db.push_back(rule{ep.pred("parent", {ep.atom("tom"), ep.atom("alice")}), {}});  // idx 0
+        db.push_back(rule{ep.pred("parent", {ep.atom("tom"), ep.atom("bob")}),   {}});  // idx 1
+        db.push_back(rule{ep.pred("parent", {ep.atom("sue"), ep.atom("carol")}), {}});  // idx 2
 
         // sibling(X, Y) :- parent(P, X), parent(P, Y).
         {
@@ -20473,15 +20518,15 @@ void test_horizon() {
             const expr* Y = ep.var(seq());
             const expr* Pv = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.atom("sibling"), X), Y),
-                {ep.cons(ep.cons(ep.atom("parent"), Pv), X),
-                 ep.cons(ep.cons(ep.atom("parent"), Pv), Y)}
+                ep.pred("sibling", {X, Y}),
+                {ep.pred("parent", {Pv, X}),
+                 ep.pred("parent", {Pv, Y})}
             });  // idx 3
         }
 
         const expr* X = ep.var(seq());
         goals goals;
-        goals.push_back(ep.cons(ep.cons(ep.atom("sibling"), X), ep.atom("alice")));
+        goals.push_back(ep.pred("sibling", {X, ep.atom("alice")}));
 
         const expr* alice = ep.atom("alice");
         const expr* bob   = ep.atom("bob");
@@ -20519,15 +20564,15 @@ void test_horizon() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("red")),   {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("green")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("blue")),  {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("red")),   ep.atom("green")), {}});  // idx 3
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("red")),   ep.atom("blue")),  {}});  // idx 4
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("green")), ep.atom("red")),   {}});  // idx 5
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("green")), ep.atom("blue")),  {}});  // idx 6
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("blue")),  ep.atom("red")),   {}});  // idx 7
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("blue")),  ep.atom("green")), {}});  // idx 8
+        db.push_back(rule{ep.pred("color", {ep.atom("red")}),   {}});  // idx 0
+        db.push_back(rule{ep.pred("color", {ep.atom("green")}), {}});  // idx 1
+        db.push_back(rule{ep.pred("color", {ep.atom("blue")}),  {}});  // idx 2
+        db.push_back(rule{ep.pred("diff", {ep.atom("red"),   ep.atom("green")}), {}});  // idx 3
+        db.push_back(rule{ep.pred("diff", {ep.atom("red"),   ep.atom("blue")}),  {}});  // idx 4
+        db.push_back(rule{ep.pred("diff", {ep.atom("green"), ep.atom("red")}),   {}});  // idx 5
+        db.push_back(rule{ep.pred("diff", {ep.atom("green"), ep.atom("blue")}),  {}});  // idx 6
+        db.push_back(rule{ep.pred("diff", {ep.atom("blue"),  ep.atom("red")}),   {}});  // idx 7
+        db.push_back(rule{ep.pred("diff", {ep.atom("blue"),  ep.atom("green")}), {}});  // idx 8
 
         const expr* A = ep.var(seq());
         const expr* B = ep.var(seq());
@@ -20535,14 +20580,14 @@ void test_horizon() {
         const expr* D = ep.var(seq());
 
         goals goals;
-        goals.push_back(ep.cons(ep.atom("color"), A));
-        goals.push_back(ep.cons(ep.atom("color"), B));
-        goals.push_back(ep.cons(ep.atom("color"), C));
-        goals.push_back(ep.cons(ep.atom("color"), D));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), A), B));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), A), C));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), B), C));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), A), D));
+        goals.push_back(ep.pred("color", {A}));
+        goals.push_back(ep.pred("color", {B}));
+        goals.push_back(ep.pred("color", {C}));
+        goals.push_back(ep.pred("color", {D}));
+        goals.push_back(ep.pred("diff", {A, B}));
+        goals.push_back(ep.pred("diff", {A, C}));
+        goals.push_back(ep.pred("diff", {B, C}));
+        goals.push_back(ep.pred("diff", {A, D}));
 
         const expr* R_ = ep.atom("red");
         const expr* G_ = ep.atom("green");
@@ -20588,37 +20633,37 @@ void test_horizon() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("true")),  {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("false")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("not"), ep.atom("true")),  ep.atom("false")), {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("not"), ep.atom("false")), ep.atom("true")),  {}});  // idx 3
+        db.push_back(rule{ep.pred("bool", {ep.atom("true")}),  {}});  // idx 0
+        db.push_back(rule{ep.pred("bool", {ep.atom("false")}), {}});  // idx 1
+        db.push_back(rule{ep.pred("not", {ep.atom("true"),  ep.atom("false")}), {}});  // idx 2
+        db.push_back(rule{ep.pred("not", {ep.atom("false"), ep.atom("true")}),  {}});  // idx 3
 
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("or"), ep.atom("true")), X), ep.atom("true")),
-                {ep.cons(ep.atom("bool"), X)}
+                ep.pred("or", {ep.atom("true"), X, ep.atom("true")}),
+                {ep.pred("bool", {X})}
             });  // idx 4
         }
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("or"), ep.atom("false")), X), X),
-                {ep.cons(ep.atom("bool"), X)}
+                ep.pred("or", {ep.atom("false"), X, X}),
+                {ep.pred("bool", {X})}
             });  // idx 5
         }
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("and"), ep.atom("true")), X), X),
-                {ep.cons(ep.atom("bool"), X)}
+                ep.pred("and", {ep.atom("true"), X, X}),
+                {ep.pred("bool", {X})}
             });  // idx 6
         }
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("and"), ep.atom("false")), X), ep.atom("false")),
-                {ep.cons(ep.atom("bool"), X)}
+                ep.pred("and", {ep.atom("false"), X, ep.atom("false")}),
+                {ep.pred("bool", {X})}
             });  // idx 7
         }
 
@@ -20634,17 +20679,17 @@ void test_horizon() {
         const expr* PQ_RS = ep.var(seq());
 
         goals goals;
-        goals.push_back(ep.cons(ep.atom("bool"), P));
-        goals.push_back(ep.cons(ep.atom("bool"), Q));
-        goals.push_back(ep.cons(ep.atom("bool"), R));
-        goals.push_back(ep.cons(ep.atom("bool"), S));
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("or"),  P),  Q),  PQ));
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("or"),  R),  S),  RS));
-        goals.push_back(ep.cons(ep.cons(ep.atom("not"), P), NP));
-        goals.push_back(ep.cons(ep.cons(ep.atom("not"), R), NR));
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("or"),  NP), NR), NPR));
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("and"), PQ), RS),  PQ_RS));
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("and"), PQ_RS), NPR), ep.atom("true")));
+        goals.push_back(ep.pred("bool", {P}));
+        goals.push_back(ep.pred("bool", {Q}));
+        goals.push_back(ep.pred("bool", {R}));
+        goals.push_back(ep.pred("bool", {S}));
+        goals.push_back(ep.pred("or", {P, Q, PQ}));
+        goals.push_back(ep.pred("or", {R, S, RS}));
+        goals.push_back(ep.pred("not", {P, NP}));
+        goals.push_back(ep.pred("not", {R, NR}));
+        goals.push_back(ep.pred("or", {NP, NR, NPR}));
+        goals.push_back(ep.pred("and", {PQ, RS, PQ_RS}));
+        goals.push_back(ep.pred("and", {PQ_RS, NPR, ep.atom("true")}));
 
         const expr* T_ = ep.atom("true");
         const expr* F_ = ep.atom("false");
@@ -20690,20 +20735,20 @@ void test_horizon() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 0: q(a).
+        db.push_back(rule{ep.pred("q", {ep.atom("a")}), {}});  // idx 0: q(a).
 
         // p(X) :- q(X), r(X).
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.atom("p"), X),
-                {ep.cons(ep.atom("q"), X),
-                 ep.cons(ep.atom("r"), X)}
+                ep.pred("p", {X}),
+                {ep.pred("q", {X}),
+                 ep.pred("r", {X})}
             });  // idx 1
         }
 
         goals goals;
-        goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));
+        goals.push_back(ep.pred("p", {ep.atom("a")}));
 
         std::mt19937 rng(42);
         horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -20729,19 +20774,19 @@ void test_horizon() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("type"), ep.atom("a")), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("type"), ep.atom("b")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("type"), ep.atom("c")), {}});  // idx 2
+        db.push_back(rule{ep.pred("type", {ep.atom("a")}), {}});  // idx 0
+        db.push_back(rule{ep.pred("type", {ep.atom("b")}), {}});  // idx 1
+        db.push_back(rule{ep.pred("type", {ep.atom("c")}), {}});  // idx 2
 
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         goals goals;
-        goals.push_back(ep.cons(ep.atom("type"), X));
-        goals.push_back(ep.cons(ep.atom("type"), Y));
+        goals.push_back(ep.pred("type", {X}));
+        goals.push_back(ep.pred("type", {Y}));
 
-        const expr* a = ep.atom("a");
-        const expr* b = ep.atom("b");
-        const expr* c = ep.atom("c");
+        const expr* a = ep.pred("a", {});
+        const expr* b = ep.pred("b", {});
+        const expr* c = ep.pred("c", {});
 
         std::set<solution> expected = {
             {a, a}, {a, b}, {a, c},
@@ -20783,16 +20828,16 @@ void test_horizon() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("fruit"), ep.atom("apple")),  {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("fruit"), ep.atom("banana")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("fruit"), ep.atom("cherry")), {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.atom("sweet"), ep.atom("banana")), {}});  // idx 3
-        db.push_back(rule{ep.cons(ep.atom("sweet"), ep.atom("cherry")), {}});  // idx 4
+        db.push_back(rule{ep.pred("fruit", {ep.atom("apple")}),  {}});  // idx 0
+        db.push_back(rule{ep.pred("fruit", {ep.atom("banana")}), {}});  // idx 1
+        db.push_back(rule{ep.pred("fruit", {ep.atom("cherry")}), {}});  // idx 2
+        db.push_back(rule{ep.pred("sweet", {ep.atom("banana")}), {}});  // idx 3
+        db.push_back(rule{ep.pred("sweet", {ep.atom("cherry")}), {}});  // idx 4
 
         const expr* X = ep.var(seq());
         goals goals;
-        goals.push_back(ep.cons(ep.atom("fruit"), X));
-        goals.push_back(ep.cons(ep.atom("sweet"), X));
+        goals.push_back(ep.pred("fruit", {X}));
+        goals.push_back(ep.pred("sweet", {X}));
 
         const expr* banana = ep.atom("banana");
         const expr* cherry = ep.atom("cherry");
@@ -20840,20 +20885,20 @@ void test_horizon() {
         };
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("nat"), ep.atom("zero")), {}});  // idx 0
+        db.push_back(rule{ep.pred("nat", {ep.atom("zero")}), {}});  // idx 0
 
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.atom("nat"), ep.cons(ep.atom("suc"), X)),
-                {ep.cons(ep.atom("nat"), X)}
+                ep.pred("nat", {ep.cons(ep.atom("suc"), X)}),
+                {ep.pred("nat", {X})}
             });  // idx 1
         }
         {
             const expr* Y = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("add"), ep.atom("zero")), Y), Y),
-                {ep.cons(ep.atom("nat"), Y)}
+                ep.pred("add", {ep.atom("zero"), Y, Y}),
+                {ep.pred("nat", {Y})}
             });  // idx 2
         }
         {
@@ -20861,8 +20906,8 @@ void test_horizon() {
             const expr* Y = ep.var(seq());
             const expr* Z = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("add"), ep.cons(ep.atom("suc"), X)), Y), ep.cons(ep.atom("suc"), Z)),
-                {ep.cons(ep.cons(ep.cons(ep.atom("add"), X), Y), Z)}
+                ep.pred("add", {ep.cons(ep.atom("suc"), X), Y, ep.cons(ep.atom("suc"), Z)}),
+                {ep.pred("add", {X, Y, Z})}
             });  // idx 3
         }
 
@@ -20871,7 +20916,7 @@ void test_horizon() {
         const expr* five = peano(5);
 
         goals goals;
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("add"), X), Y), five));
+        goals.push_back(ep.pred("add", {X, Y, five}));
 
         std::set<solution> expected;
         for (int x = 0; x <= 5; ++x)
@@ -20923,16 +20968,16 @@ void test_horizon() {
 
         database db;
         // Domain facts
-        db.push_back(rule{ep.cons(ep.atom("val"), ep.atom("v1")), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("val"), ep.atom("v2")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("val"), ep.atom("v3")), {}});  // idx 2
+        db.push_back(rule{ep.pred("val", {ep.atom("v1")}), {}});  // idx 0
+        db.push_back(rule{ep.pred("val", {ep.atom("v2")}), {}});  // idx 1
+        db.push_back(rule{ep.pred("val", {ep.atom("v3")}), {}});  // idx 2
         // Distinctness facts — all 6 ordered pairs of distinct values
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("v1")), ep.atom("v2")), {}});  // idx 3
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("v2")), ep.atom("v1")), {}});  // idx 4
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("v1")), ep.atom("v3")), {}});  // idx 5
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("v3")), ep.atom("v1")), {}});  // idx 6
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("v2")), ep.atom("v3")), {}});  // idx 7
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("v3")), ep.atom("v2")), {}});  // idx 8
+        db.push_back(rule{ep.pred("diff", {ep.atom("v1"), ep.atom("v2")}), {}});  // idx 3
+        db.push_back(rule{ep.pred("diff", {ep.atom("v2"), ep.atom("v1")}), {}});  // idx 4
+        db.push_back(rule{ep.pred("diff", {ep.atom("v1"), ep.atom("v3")}), {}});  // idx 5
+        db.push_back(rule{ep.pred("diff", {ep.atom("v3"), ep.atom("v1")}), {}});  // idx 6
+        db.push_back(rule{ep.pred("diff", {ep.atom("v2"), ep.atom("v3")}), {}});  // idx 7
+        db.push_back(rule{ep.pred("diff", {ep.atom("v3"), ep.atom("v2")}), {}});  // idx 8
 
         // 9 logic variables — one per grid cell
         const expr* R11 = ep.var(seq());
@@ -20948,47 +20993,47 @@ void test_horizon() {
         goals goals;
 
         // 9 domain goals
-        goals.push_back(ep.cons(ep.atom("val"), R11));
-        goals.push_back(ep.cons(ep.atom("val"), R12));
-        goals.push_back(ep.cons(ep.atom("val"), R13));
-        goals.push_back(ep.cons(ep.atom("val"), R21));
-        goals.push_back(ep.cons(ep.atom("val"), R22));
-        goals.push_back(ep.cons(ep.atom("val"), R23));
-        goals.push_back(ep.cons(ep.atom("val"), R31));
-        goals.push_back(ep.cons(ep.atom("val"), R32));
-        goals.push_back(ep.cons(ep.atom("val"), R33));
+        goals.push_back(ep.pred("val", {R11}));
+        goals.push_back(ep.pred("val", {R12}));
+        goals.push_back(ep.pred("val", {R13}));
+        goals.push_back(ep.pred("val", {R21}));
+        goals.push_back(ep.pred("val", {R22}));
+        goals.push_back(ep.pred("val", {R23}));
+        goals.push_back(ep.pred("val", {R31}));
+        goals.push_back(ep.pred("val", {R32}));
+        goals.push_back(ep.pred("val", {R33}));
 
         // 9 row-distinctness goals (3 pairs per row)
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R11), R12));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R11), R13));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R12), R13));
+        goals.push_back(ep.pred("diff", {R11, R12}));
+        goals.push_back(ep.pred("diff", {R11, R13}));
+        goals.push_back(ep.pred("diff", {R12, R13}));
 
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R21), R22));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R21), R23));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R22), R23));
+        goals.push_back(ep.pred("diff", {R21, R22}));
+        goals.push_back(ep.pred("diff", {R21, R23}));
+        goals.push_back(ep.pred("diff", {R22, R23}));
 
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R31), R32));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R31), R33));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R32), R33));
+        goals.push_back(ep.pred("diff", {R31, R32}));
+        goals.push_back(ep.pred("diff", {R31, R33}));
+        goals.push_back(ep.pred("diff", {R32, R33}));
 
         // 9 column-distinctness goals (3 pairs per column)
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R11), R21));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R11), R31));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R21), R31));
+        goals.push_back(ep.pred("diff", {R11, R21}));
+        goals.push_back(ep.pred("diff", {R11, R31}));
+        goals.push_back(ep.pred("diff", {R21, R31}));
 
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R12), R22));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R12), R32));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R22), R32));
+        goals.push_back(ep.pred("diff", {R12, R22}));
+        goals.push_back(ep.pred("diff", {R12, R32}));
+        goals.push_back(ep.pred("diff", {R22, R32}));
 
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R13), R23));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R13), R33));
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), R23), R33));
+        goals.push_back(ep.pred("diff", {R13, R23}));
+        goals.push_back(ep.pred("diff", {R13, R33}));
+        goals.push_back(ep.pred("diff", {R23, R33}));
 
         // All 12 distinct 3×3 Latin squares over {v1, v2, v3}, listed row-major.
         // Each solution vector has 9 elements: {R11,R12,R13, R21,R22,R23, R31,R32,R33}.
-        const expr* v1 = ep.atom("v1");
-        const expr* v2 = ep.atom("v2");
-        const expr* v3 = ep.atom("v3");
+        const expr* v1 = ep.pred("v1", {});
+        const expr* v2 = ep.pred("v2", {});
+        const expr* v3 = ep.pred("v3", {});
 
         std::set<solution> expected = {
             {v1,v2,v3, v2,v3,v1, v3,v1,v2},
@@ -21069,7 +21114,7 @@ void test_horizon() {
         sequencer seq(t);
 
         // Peano length constants
-        const expr* zero  = ep.atom("zero");
+        const expr* zero  = ep.pred("zero", {});
         const expr* one   = ep.cons(ep.atom("suc"), zero);
         const expr* two   = ep.cons(ep.atom("suc"), one);
         const expr* three = ep.cons(ep.atom("suc"), two);
@@ -21077,36 +21122,36 @@ void test_horizon() {
         database db;
 
         // --- road facts (18) ---
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("s")), ep.atom("a")), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("s")), ep.atom("b")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("a")), ep.atom("c")), {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("a")), ep.atom("d")), {}});  // idx 3
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("b")), ep.atom("d")), {}});  // idx 4
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("b")), ep.atom("e")), {}});  // idx 5
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("c")), ep.atom("f")), {}});  // idx 6
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("c")), ep.atom("g")), {}});  // idx 7
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("d")), ep.atom("g")), {}});  // idx 8
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("d")), ep.atom("h")), {}});  // idx 9
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("e")), ep.atom("g")), {}});  // idx 10
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("e")), ep.atom("h")), {}});  // idx 11
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("f")), ep.atom("i")), {}});  // idx 12
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("g")), ep.atom("i")), {}});  // idx 13
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("g")), ep.atom("j")), {}});  // idx 14
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("h")), ep.atom("j")), {}});  // idx 15
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("i")), ep.atom("t")), {}});  // idx 16
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("road"), ep.atom("j")), ep.atom("t")), {}});  // idx 17
+        db.push_back(rule{ep.pred("road", {ep.atom("s"), ep.atom("a")}), {}});  // idx 0
+        db.push_back(rule{ep.pred("road", {ep.atom("s"), ep.atom("b")}), {}});  // idx 1
+        db.push_back(rule{ep.pred("road", {ep.atom("a"), ep.atom("c")}), {}});  // idx 2
+        db.push_back(rule{ep.pred("road", {ep.atom("a"), ep.atom("d")}), {}});  // idx 3
+        db.push_back(rule{ep.pred("road", {ep.atom("b"), ep.atom("d")}), {}});  // idx 4
+        db.push_back(rule{ep.pred("road", {ep.atom("b"), ep.atom("e")}), {}});  // idx 5
+        db.push_back(rule{ep.pred("road", {ep.atom("c"), ep.atom("f")}), {}});  // idx 6
+        db.push_back(rule{ep.pred("road", {ep.atom("c"), ep.atom("g")}), {}});  // idx 7
+        db.push_back(rule{ep.pred("road", {ep.atom("d"), ep.atom("g")}), {}});  // idx 8
+        db.push_back(rule{ep.pred("road", {ep.atom("d"), ep.atom("h")}), {}});  // idx 9
+        db.push_back(rule{ep.pred("road", {ep.atom("e"), ep.atom("g")}), {}});  // idx 10
+        db.push_back(rule{ep.pred("road", {ep.atom("e"), ep.atom("h")}), {}});  // idx 11
+        db.push_back(rule{ep.pred("road", {ep.atom("f"), ep.atom("i")}), {}});  // idx 12
+        db.push_back(rule{ep.pred("road", {ep.atom("g"), ep.atom("i")}), {}});  // idx 13
+        db.push_back(rule{ep.pred("road", {ep.atom("g"), ep.atom("j")}), {}});  // idx 14
+        db.push_back(rule{ep.pred("road", {ep.atom("h"), ep.atom("j")}), {}});  // idx 15
+        db.push_back(rule{ep.pred("road", {ep.atom("i"), ep.atom("t")}), {}});  // idx 16
+        db.push_back(rule{ep.pred("road", {ep.atom("j"), ep.atom("t")}), {}});  // idx 17
 
         // --- safe_node facts (10) — all nodes except h ---
-        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("a")), {}});  // idx 18
-        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("b")), {}});  // idx 19
-        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("c")), {}});  // idx 20
-        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("d")), {}});  // idx 21
-        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("e")), {}});  // idx 22
-        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("f")), {}});  // idx 23
-        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("g")), {}});  // idx 24
-        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("i")), {}});  // idx 25
-        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("j")), {}});  // idx 26
-        db.push_back(rule{ep.cons(ep.atom("safe_node"), ep.atom("t")), {}});  // idx 27
+        db.push_back(rule{ep.pred("safe_node", {ep.atom("a")}), {}});  // idx 18
+        db.push_back(rule{ep.pred("safe_node", {ep.atom("b")}), {}});  // idx 19
+        db.push_back(rule{ep.pred("safe_node", {ep.atom("c")}), {}});  // idx 20
+        db.push_back(rule{ep.pred("safe_node", {ep.atom("d")}), {}});  // idx 21
+        db.push_back(rule{ep.pred("safe_node", {ep.atom("e")}), {}});  // idx 22
+        db.push_back(rule{ep.pred("safe_node", {ep.atom("f")}), {}});  // idx 23
+        db.push_back(rule{ep.pred("safe_node", {ep.atom("g")}), {}});  // idx 24
+        db.push_back(rule{ep.pred("safe_node", {ep.atom("i")}), {}});  // idx 25
+        db.push_back(rule{ep.pred("safe_node", {ep.atom("j")}), {}});  // idx 26
+        db.push_back(rule{ep.pred("safe_node", {ep.atom("t")}), {}});  // idx 27
         // NOTE: safe_node(h) is deliberately absent — h is the unsafe node.
 
         // --- safe_edge(X, Y) :- road(X, Y), safe_node(Y). ---
@@ -21114,9 +21159,9 @@ void test_horizon() {
             const expr* X = ep.var(seq());
             const expr* Y = ep.var(seq());
             db.push_back(rule{                                                // idx 28
-                ep.cons(ep.cons(ep.atom("safe_edge"), X), Y),
-                {ep.cons(ep.cons(ep.atom("road"),      X), Y),
-                 ep.cons(ep.atom("safe_node"), Y)}
+                ep.pred("safe_edge", {X, Y}),
+                {ep.pred("road", {X, Y}),
+                 ep.pred("safe_node", {Y})}
             });
         }
 
@@ -21125,8 +21170,8 @@ void test_horizon() {
             const expr* X = ep.var(seq());
             const expr* Y = ep.var(seq());
             db.push_back(rule{                                                // idx 29
-                ep.cons(ep.cons(ep.cons(ep.atom("safe_path"), X), Y), one),
-                {ep.cons(ep.cons(ep.atom("safe_edge"), X), Y)}
+                ep.pred("safe_path", {X, Y, one}),
+                {ep.pred("safe_edge", {X, Y})}
             });
         }
 
@@ -21138,11 +21183,9 @@ void test_horizon() {
             const expr* Z = ep.var(seq());
             const expr* N = ep.var(seq());
             db.push_back(rule{                                                // idx 30
-                ep.cons(ep.cons(ep.cons(ep.atom("safe_path"), X), Z),
-                        ep.cons(ep.atom("suc"), ep.cons(ep.atom("suc"), N))),
-                {ep.cons(ep.cons(ep.atom("safe_edge"), X), Y),
-                 ep.cons(ep.cons(ep.cons(ep.atom("safe_path"), Y), Z),
-                         ep.cons(ep.atom("suc"), N))}
+                ep.pred("safe_path", {X, Z, ep.pred("suc", {ep.cons(ep.atom("suc"), N)})}),
+                {ep.pred("safe_edge", {X, Y}),
+                 ep.pred("safe_path", {Y, Z, ep.cons(ep.atom("suc"), N)})}
             });
         }
 
@@ -21151,16 +21194,12 @@ void test_horizon() {
 
         goals goals;
         // Goal 0: safe_path(s, M, two)   — M is 2 safe hops from s
-        goals.push_back(
-            ep.cons(ep.cons(ep.cons(ep.atom("safe_path"), ep.atom("s")), M), two));
+        goals.push_back(ep.pred("safe_path", {ep.atom("s"), M, two}));
         // Goal 1: safe_path(M, t, three) — t is 3 safe hops from M
-        goals.push_back(
-            ep.cons(ep.cons(ep.cons(ep.atom("safe_path"), M), ep.atom("t")), three));
-
-        // Expected solutions: M ∈ {c, d, e}
-        const expr* c_node = ep.atom("c");
-        const expr* d_node = ep.atom("d");
-        const expr* e_node = ep.atom("e");
+        goals.push_back(ep.pred("safe_path", {M, ep.atom("t"), three}));
+        const expr* c_node = ep.pred("c", {});
+        const expr* d_node = ep.pred("d", {});
+        const expr* e_node = ep.pred("e", {});
 
         std::set<solution> expected = {
             {c_node},
@@ -21233,30 +21272,30 @@ void test_horizon() {
 
         database db;
 
-        const expr* d1 = ep.atom("d1");
-        const expr* d2 = ep.atom("d2");
-        const expr* d3 = ep.atom("d3");
-        const expr* d4 = ep.atom("d4");
+        const expr* d1 = ep.pred("d1", {});
+        const expr* d2 = ep.pred("d2", {});
+        const expr* d3 = ep.pred("d3", {});
+        const expr* d4 = ep.pred("d4", {});
 
         // digit/1 facts — the 4-element domain
-        db.push_back(rule{ep.cons(ep.atom("digit"), d1), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("digit"), d2), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("digit"), d3), {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.atom("digit"), d4), {}});  // idx 3
+        db.push_back(rule{ep.pred("digit", {d1}), {}});  // idx 0
+        db.push_back(rule{ep.pred("digit", {d2}), {}});  // idx 1
+        db.push_back(rule{ep.pred("digit", {d3}), {}});  // idx 2
+        db.push_back(rule{ep.pred("digit", {d4}), {}});  // idx 3
 
         // diff/2 facts — all 12 ordered pairs of distinct values
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), d1), d2), {}});  // idx 4
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), d2), d1), {}});  // idx 5
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), d1), d3), {}});  // idx 6
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), d3), d1), {}});  // idx 7
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), d1), d4), {}});  // idx 8
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), d4), d1), {}});  // idx 9
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), d2), d3), {}});  // idx 10
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), d3), d2), {}});  // idx 11
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), d2), d4), {}});  // idx 12
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), d4), d2), {}});  // idx 13
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), d3), d4), {}});  // idx 14
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), d4), d3), {}});  // idx 15
+        db.push_back(rule{ep.pred("diff", {d1, d2}), {}});  // idx 4
+        db.push_back(rule{ep.pred("diff", {d2, d1}), {}});  // idx 5
+        db.push_back(rule{ep.pred("diff", {d1, d3}), {}});  // idx 6
+        db.push_back(rule{ep.pred("diff", {d3, d1}), {}});  // idx 7
+        db.push_back(rule{ep.pred("diff", {d1, d4}), {}});  // idx 8
+        db.push_back(rule{ep.pred("diff", {d4, d1}), {}});  // idx 9
+        db.push_back(rule{ep.pred("diff", {d2, d3}), {}});  // idx 10
+        db.push_back(rule{ep.pred("diff", {d3, d2}), {}});  // idx 11
+        db.push_back(rule{ep.pred("diff", {d2, d4}), {}});  // idx 12
+        db.push_back(rule{ep.pred("diff", {d4, d2}), {}});  // idx 13
+        db.push_back(rule{ep.pred("diff", {d3, d4}), {}});  // idx 14
+        db.push_back(rule{ep.pred("diff", {d4, d3}), {}});  // idx 15
 
         // Variable cells — 7 unknowns (row 1 col 2 pre-filled as d2 to force uniqueness)
         const expr* V13 = ep.var(seq());  // row 1, col 3
@@ -21279,14 +21318,14 @@ void test_horizon() {
 
         // Domain goals — only for variable cells
         for (auto* v : {V13, V21, V24, V31, V34, V42, V43}) {
-            goals.push_back(ep.cons(ep.atom("digit"), v));
+            goals.push_back(ep.pred("digit", {v}));
         }
 
         // Row distinctness constraints (i < j, one direction per pair)
         for (int r = 0; r < 4; r++) {
             for (int i = 0; i < 4; i++) {
                 for (int j = i + 1; j < 4; j++) {
-                    goals.push_back(ep.cons(ep.cons(ep.atom("diff"), cell[r][i]), cell[r][j]));
+                    goals.push_back(ep.pred("diff", {cell[r][i], cell[r][j]}));
                 }
             }
         }
@@ -21295,7 +21334,7 @@ void test_horizon() {
         for (int c = 0; c < 4; c++) {
             for (int i = 0; i < 4; i++) {
                 for (int j = i + 1; j < 4; j++) {
-                    goals.push_back(ep.cons(ep.cons(ep.atom("diff"), cell[i][c]), cell[j][c]));
+                    goals.push_back(ep.pred("diff", {cell[i][c], cell[j][c]}));
                 }
             }
         }
@@ -21311,7 +21350,7 @@ void test_horizon() {
                 };
                 for (int i = 0; i < 4; i++) {
                     for (int j = i + 1; j < 4; j++) {
-                        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), box[i]), box[j]));
+                        goals.push_back(ep.pred("diff", {box[i], box[j]}));
                     }
                 }
             }
@@ -21352,10 +21391,10 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("a"), {}});  // Fact: a.
+        db.push_back(rule{ep.pred("a", {}), {}});  // Fact: a.
         
         goals goals;
-        goals.push_back(ep.atom("a"));  // Goal: :- a.
+        goals.push_back(ep.pred("a", {}));  // Goal: :- a.
         
         cdcl c;
         
@@ -21410,7 +21449,7 @@ void test_ridge_sim() {
         database db;  // Empty database
         
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
         
         cdcl c;
         
@@ -21454,11 +21493,11 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("a"), {}});  // idx 0
-        db.push_back(rule{ep.atom("b"), {}});  // idx 1
+        db.push_back(rule{ep.pred("a", {}), {}});  // idx 0
+        db.push_back(rule{ep.pred("b", {}), {}});  // idx 1
         
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
         
         cdcl c;
         
@@ -21505,13 +21544,13 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
-        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
-        db.push_back(rule{ep.atom("b"), {}});  // idx 2
-        db.push_back(rule{ep.atom("c"), {}});  // idx 3
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("b", {})}});  // idx 0
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("c", {})}});  // idx 1
+        db.push_back(rule{ep.pred("b", {}), {}});  // idx 2
+        db.push_back(rule{ep.pred("c", {}), {}});  // idx 3
         
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
         
         // Pre-populate avoidance: avoid (gl0, idx 0)
         const goal_lineage* gl0_avoid = lp.goal(nullptr, 0);
@@ -21570,12 +21609,12 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
-        db.push_back(rule{ep.atom("b"), {ep.atom("c")}});  // idx 1
-        db.push_back(rule{ep.atom("c"), {}});  // idx 2
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("b", {})}});  // idx 0
+        db.push_back(rule{ep.pred("b", {}), {ep.pred("c", {})}});  // idx 1
+        db.push_back(rule{ep.pred("c", {}), {}});  // idx 2
         
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
         
         cdcl c;
         
@@ -21632,13 +21671,13 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
-        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
-        db.push_back(rule{ep.atom("b"), {}});  // idx 2
-        db.push_back(rule{ep.atom("c"), {}});  // idx 3
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("b", {})}});  // idx 0
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("c", {})}});  // idx 1
+        db.push_back(rule{ep.pred("b", {}), {}});  // idx 2
+        db.push_back(rule{ep.pred("c", {}), {}});  // idx 3
         
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
         
         cdcl c;
         
@@ -21709,11 +21748,11 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
-        db.push_back(rule{ep.atom("b"), {}});  // idx 1
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("b", {})}});  // idx 0
+        db.push_back(rule{ep.pred("b", {}), {}});  // idx 1
         
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
         
         cdcl c;
         
@@ -21764,14 +21803,14 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
-        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
-        db.push_back(rule{ep.atom("b"), {ep.atom("d")}});  // idx 2
-        db.push_back(rule{ep.atom("c"), {ep.atom("e")}});  // idx 3
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("b", {})}});  // idx 0
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("c", {})}});  // idx 1
+        db.push_back(rule{ep.pred("b", {}), {ep.pred("d", {})}});  // idx 2
+        db.push_back(rule{ep.pred("c", {}), {ep.pred("e", {})}});  // idx 3
         // No rules for d or e
         
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
         
         cdcl c;
         
@@ -21838,16 +21877,16 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});
-        db.push_back(rule{ep.atom("b"), {ep.atom("c")}});
-        db.push_back(rule{ep.atom("c"), {ep.atom("d")}});
-        db.push_back(rule{ep.atom("d"), {ep.atom("e")}});
-        db.push_back(rule{ep.atom("e"), {ep.atom("f")}});
-        db.push_back(rule{ep.atom("f"), {ep.atom("g")}});
-        db.push_back(rule{ep.atom("g"), {}});
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("b", {})}});
+        db.push_back(rule{ep.pred("b", {}), {ep.pred("c", {})}});
+        db.push_back(rule{ep.pred("c", {}), {ep.pred("d", {})}});
+        db.push_back(rule{ep.pred("d", {}), {ep.pred("e", {})}});
+        db.push_back(rule{ep.pred("e", {}), {ep.pred("f", {})}});
+        db.push_back(rule{ep.pred("f", {}), {ep.pred("g", {})}});
+        db.push_back(rule{ep.pred("g", {}), {}});
         
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
         
         cdcl c;
         
@@ -21910,14 +21949,14 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("a"), {}});  // idx 0
-        db.push_back(rule{ep.atom("b"), {}});  // idx 1
-        db.push_back(rule{ep.atom("c"), {}});  // idx 2
-        db.push_back(rule{ep.atom("d"), {}});  // idx 3
-        db.push_back(rule{ep.atom("e"), {ep.atom("f")}});  // idx 4
+        db.push_back(rule{ep.pred("a", {}), {}});  // idx 0
+        db.push_back(rule{ep.pred("b", {}), {}});  // idx 1
+        db.push_back(rule{ep.pred("c", {}), {}});  // idx 2
+        db.push_back(rule{ep.pred("d", {}), {}});  // idx 3
+        db.push_back(rule{ep.pred("e", {}), {ep.pred("f", {})}});  // idx 4
         
         goals goals;
-        goals.push_back(ep.atom("e"));
+        goals.push_back(ep.pred("e", {}));
         
         cdcl c;
         
@@ -21971,11 +22010,11 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
-        db.push_back(rule{ep.atom("b"), {}});  // idx 1
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("b", {})}});  // idx 0
+        db.push_back(rule{ep.pred("b", {}), {}});  // idx 1
         
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
         
         // Pre-populate avoidance with the future resolution plus a dummy
         const goal_lineage* gl0_pre = lp.goal(nullptr, 0);
@@ -22038,15 +22077,15 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
-        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
-        db.push_back(rule{ep.atom("b"), {ep.atom("d")}});  // idx 2
-        db.push_back(rule{ep.atom("c"), {ep.atom("e")}});  // idx 3
-        db.push_back(rule{ep.atom("d"), {}});  // idx 4
-        db.push_back(rule{ep.atom("e"), {}});  // idx 5
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("b", {})}});  // idx 0
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("c", {})}});  // idx 1
+        db.push_back(rule{ep.pred("b", {}), {ep.pred("d", {})}});  // idx 2
+        db.push_back(rule{ep.pred("c", {}), {ep.pred("e", {})}});  // idx 3
+        db.push_back(rule{ep.pred("d", {}), {}});  // idx 4
+        db.push_back(rule{ep.pred("e", {}), {}});  // idx 5
         
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
         
         cdcl c;
         
@@ -22158,12 +22197,12 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b"), ep.atom("c")}});  // idx 0
-        db.push_back(rule{ep.atom("b"), {}});  // idx 1
-        db.push_back(rule{ep.atom("c"), {}});  // idx 2
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("b", {}), ep.pred("c", {})}});  // idx 0
+        db.push_back(rule{ep.pred("b", {}), {}});  // idx 1
+        db.push_back(rule{ep.pred("c", {}), {}});  // idx 2
         
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
         
         cdcl c;
         
@@ -22220,14 +22259,14 @@ void test_ridge_sim() {
         // p(X) :- q(X).
         const expr* X = ep.var(seq());
         db.push_back(rule{
-            ep.cons(ep.atom("p"), X),
-            {ep.cons(ep.atom("q"), X)}
+            ep.pred("p", {X}),
+            {ep.pred("q", {X})}
         });
         // q(a).
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});
+        db.push_back(rule{ep.pred("q", {ep.atom("a")})});
         
         goals goals;
-        goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));  // :- p(a).
+        goals.push_back(ep.pred("p", {ep.atom("a")}));  // :- p(a).
         
         cdcl c;
         
@@ -22279,12 +22318,12 @@ void test_ridge_sim() {
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         
-        db.push_back(rule{ep.cons(ep.atom("p"), X), {ep.cons(ep.atom("q"), X)}});
-        db.push_back(rule{ep.cons(ep.atom("q"), Y), {ep.cons(ep.atom("r"), Y)}});
-        db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("a")), {}});
+        db.push_back(rule{ep.pred("p", {X}), {ep.pred("q", {X})}});
+        db.push_back(rule{ep.pred("q", {Y}), {ep.pred("r", {Y})}});
+        db.push_back(rule{ep.pred("r", {ep.atom("a")}), {}});
         
         goals goals;
-        goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));
+        goals.push_back(ep.pred("p", {ep.atom("a")}));
         
         cdcl c;
         
@@ -22341,14 +22380,14 @@ void test_ridge_sim() {
         const expr* Y = ep.var(seq());
         
         db.push_back(rule{
-            ep.cons(ep.atom("p"), ep.cons(X, Y)),
-            {ep.cons(ep.atom("q"), X), ep.cons(ep.atom("r"), Y)}
+            ep.pred("p", {X, Y}),
+            {ep.pred("q", {X}), ep.pred("r", {Y})}
         });
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});
-        db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("b")), {}});
+        db.push_back(rule{ep.pred("q", {ep.atom("a")}), {}});
+        db.push_back(rule{ep.pred("r", {ep.atom("b")}), {}});
         
         goals goals;
-        goals.push_back(ep.cons(ep.atom("p"), ep.cons(ep.atom("a"), ep.atom("b"))));
+        goals.push_back(ep.pred("p", {ep.atom("a"), ep.atom("b")}));
         
         cdcl c;
         
@@ -22404,13 +22443,13 @@ void test_ridge_sim() {
         const expr* X1 = ep.var(seq());
         const expr* X2 = ep.var(seq());
         
-        db.push_back(rule{ep.cons(ep.atom("p"), X1), {ep.cons(ep.atom("q"), X1)}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("p"), X2), {ep.cons(ep.atom("r"), X2)}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("b")), {}});  // idx 3
+        db.push_back(rule{ep.pred("p", {X1}), {ep.pred("q", {X1})}});  // idx 0
+        db.push_back(rule{ep.pred("p", {X2}), {ep.pred("r", {X2})}});  // idx 1
+        db.push_back(rule{ep.pred("q", {ep.atom("a")})});  // idx 2
+        db.push_back(rule{ep.pred("r", {ep.atom("b")})});  // idx 3
         
         goals goals;
-        goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));
+        goals.push_back(ep.pred("p", {ep.atom("a")}));
         
         cdcl c;
         
@@ -22474,10 +22513,10 @@ void test_ridge_sim() {
             db.push_back(rule{ep.atom("x" + std::to_string(i)), {}});
         }
         // Add 1 matching rule
-        db.push_back(rule{ep.atom("target"), {}});  // idx 19
+        db.push_back(rule{ep.pred("target", {}), {}});  // idx 19
         
         goals goals;
-        goals.push_back(ep.atom("target"));
+        goals.push_back(ep.pred("target", {}));
         
         cdcl c;
         
@@ -22578,14 +22617,14 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
-        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
-        db.push_back(rule{ep.atom("b"), {ep.atom("d")}});  // idx 2
-        db.push_back(rule{ep.atom("c"), {}});  // idx 3
-        db.push_back(rule{ep.atom("d"), {}});  // idx 4
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("b", {})}});  // idx 0
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("c", {})}});  // idx 1
+        db.push_back(rule{ep.pred("b", {}), {ep.pred("d", {})}});  // idx 2
+        db.push_back(rule{ep.pred("c", {}), {}});  // idx 3
+        db.push_back(rule{ep.pred("d", {}), {}});  // idx 4
         
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
         
         // Pre-populate avoidance
         const goal_lineage* gl0_pre = lp.goal(nullptr, 0);
@@ -22665,10 +22704,10 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {ep.cons(ep.atom("q"), ep.atom("b"))}});
+        db.push_back(rule{ep.pred("p", {ep.atom("a")}), {ep.pred("q", {ep.atom("b")})}});
         
         goals goals;
-        goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));
+        goals.push_back(ep.pred("p", {ep.atom("a")}));
         
         cdcl c;
         
@@ -22715,16 +22754,16 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0
-        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1
-        db.push_back(rule{ep.atom("b"), {ep.atom("d")}});  // idx 2
-        db.push_back(rule{ep.atom("b"), {ep.atom("e")}});  // idx 3
-        db.push_back(rule{ep.atom("c"), {}});  // idx 4
-        db.push_back(rule{ep.atom("d"), {}});  // idx 5
-        db.push_back(rule{ep.atom("e"), {}});  // idx 6
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("b", {})}});  // idx 0
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("c", {})}});  // idx 1
+        db.push_back(rule{ep.pred("b", {}), {ep.pred("d", {})}});  // idx 2
+        db.push_back(rule{ep.pred("b", {}), {ep.pred("e", {})}});  // idx 3
+        db.push_back(rule{ep.pred("c", {}), {}});  // idx 4
+        db.push_back(rule{ep.pred("d", {}), {}});  // idx 5
+        db.push_back(rule{ep.pred("e", {}), {}});  // idx 6
         
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
         
         cdcl c;
         
@@ -22780,6 +22819,7 @@ void test_ridge_sim() {
     // Database: append(nil, X, X)., append(cons(H,T), X, cons(H,R)) :- append(T, X, R).
     // Goal: :- append(cons(a,nil), cons(b,nil), cons(a,cons(b,nil))).
     // Expected: Resolution with recursive rule
+    // Using pred for append; cons is represented as a data pred "cons(H,T)".
     {
         trail t;
         t.push();
@@ -22794,9 +22834,8 @@ void test_ridge_sim() {
         // append(nil, X, X).
         const expr* X1 = ep.var(seq());
         db.push_back(rule{
-            ep.cons(ep.atom("append"), ep.cons(ep.atom("nil"), ep.cons(X1, X1))),
-            {}
-        });
+            ep.pred("append", {ep.atom("nil"), X1, X1}), {}
+        });  // idx 0
         
         // append(cons(H,T), X, cons(H,R)) :- append(T, X, R).
         const expr* H = ep.var(seq());
@@ -22805,19 +22844,17 @@ void test_ridge_sim() {
         const expr* R = ep.var(seq());
         
         db.push_back(rule{
-            ep.cons(ep.atom("append"), ep.cons(
-                ep.cons(ep.atom("cons"), ep.cons(H, T)),
-                ep.cons(X2, ep.cons(ep.atom("cons"), ep.cons(H, R)))
-            )),
-            {ep.cons(ep.atom("append"), ep.cons(T, ep.cons(X2, R)))}
-        });
+            ep.pred("append", {ep.cons(H, T), X2, ep.cons(H, R)}),
+            {ep.pred("append", {T, X2, R})}
+        });  // idx 1
         
+        // Goal: append(cons(a,nil), cons(b,nil), cons(a,cons(b,nil)))
         goals goals;
-        goals.push_back(ep.cons(ep.atom("append"), ep.cons(
-            ep.cons(ep.atom("cons"), ep.cons(ep.atom("a"), ep.atom("nil"))),
-            ep.cons(ep.cons(ep.atom("cons"), ep.cons(ep.atom("b"), ep.atom("nil"))),
-                    ep.cons(ep.atom("cons"), ep.cons(ep.atom("a"), ep.cons(ep.atom("cons"), ep.cons(ep.atom("b"), ep.atom("nil"))))))
-        )));
+        goals.push_back(ep.pred("append", {
+            ep.cons(ep.atom("a"), ep.atom("nil")),
+            ep.cons(ep.atom("b"), ep.atom("nil")),
+            ep.cons(ep.atom("a"), ep.cons(ep.atom("b"), ep.atom("nil")))
+        }));
         
         cdcl c;
         
@@ -22832,7 +22869,7 @@ void test_ridge_sim() {
         // CRITICAL: Solution found
         assert(result == true);
         
-        // CRITICAL: Exactly 2 resolutions (recursive case, base case)
+        // CRITICAL: Exactly 2 resolutions (recursive case then base case)
         assert(simulation.rs.size() == 2);
         
         // CRITICAL: Verify exact resolutions
@@ -22864,24 +22901,19 @@ void test_ridge_sim() {
         
         database db;
         
-        // Create a complex dependency graph
-        // 30 rules total
-        for (int i = 0; i < 10; i++) {
-            db.push_back(rule{ep.atom("noise" + std::to_string(i)), {}});
+        // Create a complex dependency graph using pred for all rules.
+        // 30 rules total: 27 noise predicates + 3 main rules.
+        for (int i = 0; i < 27; i++) {
+            db.push_back(rule{ep.pred("noise" + std::to_string(i), {}), {}});
         }
         
-        // Main rules: p :- q, r., q., r.
-        db.push_back(rule{ep.atom("p"), {ep.atom("q"), ep.atom("r")}});
-        db.push_back(rule{ep.atom("q"), {}});
-        db.push_back(rule{ep.atom("r"), {}});
-        
-        // More noise
-        for (int i = 10; i < 27; i++) {
-            db.push_back(rule{ep.atom("noise" + std::to_string(i)), {}});
-        }
+        // Main rules: p :- q, r., q., r.  (indices 27, 28, 29)
+        db.push_back(rule{ep.pred("p", {}), {ep.pred("q", {}), ep.pred("r", {})}});  // idx 27
+        db.push_back(rule{ep.pred("q", {}), {}});  // idx 28
+        db.push_back(rule{ep.pred("r", {}), {}});   // idx 29
         
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         
         cdcl c;
         
@@ -22891,9 +22923,10 @@ void test_ridge_sim() {
         
         ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
         
-        // Verify 30 candidates initially
+        // With predicate indexing, goal "p" only gets rule 27
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        assert(simulation.cs.at(gl0).size() == 30);
+        assert(simulation.cs.at(gl0).size() == 1);
+        assert(simulation.cs.at(gl0)[0] == 27);
         
         bool result = simulation();
         
@@ -22940,12 +22973,12 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("b")), {}});  // idx 1
+        db.push_back(rule{ep.pred("p", {ep.atom("a")})});  // idx 0
+        db.push_back(rule{ep.pred("p", {ep.atom("b")})});  // idx 1
         
         goals goals;
         const expr* X = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("p"), X));
+        goals.push_back(ep.pred("p", {X}));
         
         cdcl c;
         
@@ -22983,7 +23016,7 @@ void test_ridge_sim() {
         // CRITICAL: Verify X binds to exactly 'a'
         normalizer norm(ep, bm);
         const expr* X_normalized = norm(X);
-        assert(X_normalized == ep.atom("a"));
+        assert(X_normalized == ep.pred("a", {}));
     }
     
     // Test 27: Variable binds to compound term
@@ -23000,12 +23033,12 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        const expr* cons_a_nil = ep.cons(ep.atom("cons"), ep.cons(ep.atom("a"), ep.atom("nil")));
-        db.push_back(rule{ep.cons(ep.atom("q"), cons_a_nil), {}});  // idx 0
+        const expr* cons_a_nil = ep.cons(ep.atom("a"), ep.atom("nil"));
+        db.push_back(rule{ep.pred("q", {cons_a_nil})});  // idx 0
         
         goals goals;
         const expr* X = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("q"), X));
+        goals.push_back(ep.pred("q", {X}));
         
         cdcl c;
         
@@ -23042,13 +23075,13 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        const expr* pair_a_b = ep.cons(ep.atom("pair"), ep.cons(ep.atom("a"), ep.atom("b")));
+        const expr* pair_a_b = ep.pred("pair", {ep.atom("a"), ep.atom("b")});
         db.push_back(rule{pair_a_b, {}});  // idx 0
         
         goals goals;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
-        const expr* pair_X_Y = ep.cons(ep.atom("pair"), ep.cons(X, Y));
+        const expr* pair_X_Y = ep.pred("pair", {X, Y});
         goals.push_back(pair_X_Y);
         
         cdcl c;
@@ -23089,12 +23122,12 @@ void test_ridge_sim() {
         
         database db;
         const expr* X_rule = ep.var(seq());
-        db.push_back(rule{ep.cons(ep.atom("p"), X_rule), {ep.cons(ep.atom("q"), X_rule)}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("hello")), {}});  // idx 1
+        db.push_back(rule{ep.pred("p", {X_rule}), {ep.pred("q", {X_rule})}});  // idx 0
+        db.push_back(rule{ep.pred("q", {ep.atom("hello")})});  // idx 1
         
         goals goals;
         const expr* Y_goal = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("p"), Y_goal));
+        goals.push_back(ep.pred("p", {Y_goal}));
         
         cdcl c;
         
@@ -23114,7 +23147,7 @@ void test_ridge_sim() {
         // CRITICAL: Verify Y binds to hello through chain
         normalizer norm(ep, bm);
         const expr* Y_normalized = norm(Y_goal);
-        assert(Y_normalized == ep.atom("hello"));
+        assert(Y_normalized == ep.pred("hello", {}));
     }
     
     // Test 30: Two starting goals with variables
@@ -23131,14 +23164,14 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("b")), {}});  // idx 1
+        db.push_back(rule{ep.pred("p", {ep.atom("a")})});  // idx 0
+        db.push_back(rule{ep.pred("q", {ep.atom("b")})});  // idx 1
         
         goals goals;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("p"), X));
-        goals.push_back(ep.cons(ep.atom("q"), Y));
+        goals.push_back(ep.pred("p", {X}));
+        goals.push_back(ep.pred("q", {Y}));
         
         cdcl c;
         
@@ -23172,8 +23205,8 @@ void test_ridge_sim() {
         normalizer norm(ep, bm);
         const expr* X_normalized = norm(X);
         const expr* Y_normalized = norm(Y);
-        assert(X_normalized == ep.atom("a"));
-        assert(Y_normalized == ep.atom("b"));
+        assert(X_normalized == ep.pred("a", {}));
+        assert(Y_normalized == ep.pred("b", {}));
     }
     
     // Test 31: Three starting goals with shared variable
@@ -23190,15 +23223,15 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("a")), {}});  // idx 2
+        db.push_back(rule{ep.pred("p", {ep.atom("a")})});  // idx 0
+        db.push_back(rule{ep.pred("q", {ep.atom("a")})});  // idx 1
+        db.push_back(rule{ep.pred("r", {ep.atom("a")})});  // idx 2
         
         goals goals;
         const expr* X = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("p"), X));
-        goals.push_back(ep.cons(ep.atom("q"), X));
-        goals.push_back(ep.cons(ep.atom("r"), X));
+        goals.push_back(ep.pred("p", {X}));
+        goals.push_back(ep.pred("q", {X}));
+        goals.push_back(ep.pred("r", {X}));
         
         cdcl c;
         
@@ -23238,7 +23271,7 @@ void test_ridge_sim() {
         // CRITICAL: X binds to a
         normalizer norm(ep, bm);
         const expr* X_normalized = norm(X);
-        assert(X_normalized == ep.atom("a"));
+        assert(X_normalized == ep.pred("a", {}));
     }
     
     // Test 32: Multiple goals with dependent variables
@@ -23255,8 +23288,8 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        const expr* f_a_b = ep.cons(ep.atom("f"), ep.cons(ep.atom("a"), ep.atom("b")));
-        const expr* g_b_c = ep.cons(ep.atom("g"), ep.cons(ep.atom("b"), ep.atom("c")));
+        const expr* f_a_b = ep.pred("f", {ep.atom("a"), ep.atom("b")});
+        const expr* g_b_c = ep.pred("g", {ep.atom("b"), ep.atom("c")});
         db.push_back(rule{f_a_b, {}});  // idx 0
         db.push_back(rule{g_b_c, {}});  // idx 1
         
@@ -23264,8 +23297,8 @@ void test_ridge_sim() {
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         const expr* Z = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("f"), ep.cons(X, Y)));
-        goals.push_back(ep.cons(ep.atom("g"), ep.cons(Y, Z)));
+        goals.push_back(ep.pred("f", {ep.cons(X, Y)}));
+        goals.push_back(ep.pred("g", {ep.cons(Y, Z)}));
         
         cdcl c;
         
@@ -23303,9 +23336,9 @@ void test_ridge_sim() {
         const expr* X_normalized = norm(X);
         const expr* Y_normalized = norm(Y);
         const expr* Z_normalized = norm(Z);
-        assert(X_normalized == ep.atom("a"));
-        assert(Y_normalized == ep.atom("b"));
-        assert(Z_normalized == ep.atom("c"));
+        assert(X_normalized == ep.pred("a", {}));
+        assert(Y_normalized == ep.pred("b", {}));
+        assert(Z_normalized == ep.pred("c", {}));
     }
     
     // Test 33: Variable binds to complex nested structure
@@ -23322,15 +23355,15 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        const expr* leaf1 = ep.cons(ep.atom("leaf"), ep.atom("1"));
-        const expr* leaf2 = ep.cons(ep.atom("leaf"), ep.atom("2"));
-        const expr* node = ep.cons(ep.atom("node"), ep.cons(leaf1, leaf2));
-        const expr* tree = ep.cons(ep.atom("tree"), node);
+        const expr* leaf1 = ep.pred("leaf", {ep.atom("1")});
+        const expr* leaf2 = ep.pred("leaf", {ep.atom("2")});
+        const expr* node = ep.pred("node", {ep.cons(leaf1, leaf2)});
+        const expr* tree = ep.pred("tree", {node});
         db.push_back(rule{tree, {}});  // idx 0
         
         goals goals;
         const expr* X = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("tree"), X));
+        goals.push_back(ep.pred("tree", {X}));
         
         cdcl c;
         
@@ -23369,15 +23402,15 @@ void test_ridge_sim() {
         database db;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
-        db.push_back(rule{ep.cons(ep.atom("p"), X), {ep.cons(ep.atom("q"), X)}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("q"), Y), {ep.cons(ep.atom("r"), Y)}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("hello")), {}});  // idx 2
+        db.push_back(rule{ep.pred("p", {X}), {ep.pred("q", {X})}});  // idx 0
+        db.push_back(rule{ep.pred("q", {Y}), {ep.pred("r", {Y})}});  // idx 1
+        db.push_back(rule{ep.pred("r", {ep.atom("hello")})});  // idx 2
         
         goals goals;
         const expr* A = ep.var(seq());
         const expr* B = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("p"), A));
-        goals.push_back(ep.cons(ep.atom("p"), B));
+        goals.push_back(ep.pred("p", {A}));
+        goals.push_back(ep.pred("p", {B}));
         
         cdcl c;
         
@@ -23431,8 +23464,8 @@ void test_ridge_sim() {
         normalizer norm(ep, bm);
         const expr* A_normalized = norm(A);
         const expr* B_normalized = norm(B);
-        assert(A_normalized == ep.atom("hello"));
-        assert(B_normalized == ep.atom("hello"));
+        assert(A_normalized == ep.pred("hello", {}));
+        assert(B_normalized == ep.pred("hello", {}));
     }
     
     // Test 35: Five starting goals with mixed variables
@@ -23449,11 +23482,11 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.cons(ep.atom("a"), ep.atom("1")), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("b"), ep.atom("2")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("c"), ep.atom("3")), {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.atom("d"), ep.atom("4")), {}});  // idx 3
-        db.push_back(rule{ep.cons(ep.atom("e"), ep.atom("5")), {}});  // idx 4
+        db.push_back(rule{ep.pred("a", {ep.atom("1")})});  // idx 0
+        db.push_back(rule{ep.pred("b", {ep.atom("2")})});  // idx 1
+        db.push_back(rule{ep.pred("c", {ep.atom("3")})});  // idx 2
+        db.push_back(rule{ep.pred("d", {ep.atom("4")})});  // idx 3
+        db.push_back(rule{ep.pred("e", {ep.atom("5")})});  // idx 4
         
         goals goals;
         const expr* V1 = ep.var(seq());
@@ -23461,11 +23494,11 @@ void test_ridge_sim() {
         const expr* V3 = ep.var(seq());
         const expr* V4 = ep.var(seq());
         const expr* V5 = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("a"), V1));
-        goals.push_back(ep.cons(ep.atom("b"), V2));
-        goals.push_back(ep.cons(ep.atom("c"), V3));
-        goals.push_back(ep.cons(ep.atom("d"), V4));
-        goals.push_back(ep.cons(ep.atom("e"), V5));
+        goals.push_back(ep.pred("a", {V1}));
+        goals.push_back(ep.pred("b", {V2}));
+        goals.push_back(ep.pred("c", {V3}));
+        goals.push_back(ep.pred("d", {V4}));
+        goals.push_back(ep.pred("e", {V5}));
         
         cdcl c;
         
@@ -23535,14 +23568,14 @@ void test_ridge_sim() {
         database db;
         const expr* X1 = ep.var(seq());
         const expr* X2 = ep.var(seq());
-        db.push_back(rule{ep.cons(ep.atom("p"), X1), {ep.cons(ep.atom("q"), X1)}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("p"), X2), {ep.cons(ep.atom("r"), X2)}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("apple")), {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("banana")), {}});  // idx 3
+        db.push_back(rule{ep.pred("p", {X1}), {ep.pred("q", {X1})}});  // idx 0
+        db.push_back(rule{ep.pred("p", {X2}), {ep.pred("r", {X2})}});  // idx 1
+        db.push_back(rule{ep.pred("q", {ep.atom("apple")})});  // idx 2
+        db.push_back(rule{ep.pred("r", {ep.atom("banana")})});  // idx 3
         
         goals goals;
         const expr* Fruit = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("p"), Fruit));
+        goals.push_back(ep.pred("p", {Fruit}));
         
         cdcl c;
         
@@ -23571,7 +23604,7 @@ void test_ridge_sim() {
         // CRITICAL: Fruit binds to apple (based on forced decision)
         normalizer norm(ep, bm);
         const expr* Fruit_normalized = norm(Fruit);
-        assert(Fruit_normalized == ep.atom("apple"));
+        assert(Fruit_normalized == ep.pred("apple", {}));
     }
     
     // Test 37: Partial instantiation with variable (base case)
@@ -23588,28 +23621,28 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        const expr* link_a_b = ep.cons(ep.atom("link"), ep.cons(ep.atom("a"), ep.atom("b")));
-        const expr* link_b_c = ep.cons(ep.atom("link"), ep.cons(ep.atom("b"), ep.atom("c")));
+        const expr* link_a_b = ep.pred("link", {ep.atom("a"), ep.atom("b")});
+        const expr* link_b_c = ep.pred("link", {ep.atom("b"), ep.atom("c")});
         db.push_back(rule{link_a_b, {}});  // idx 0
         db.push_back(rule{link_b_c, {}});  // idx 1
         
         const expr* X1 = ep.var(seq());
         const expr* Y1 = ep.var(seq());
-        const expr* path_base = ep.cons(ep.atom("path"), ep.cons(X1, Y1));
-        const expr* link_X1_Y1 = ep.cons(ep.atom("link"), ep.cons(X1, Y1));
+        const expr* path_base = ep.pred("path", {ep.cons(X1, Y1)});
+        const expr* link_X1_Y1 = ep.pred("link", {ep.cons(X1, Y1)});
         db.push_back(rule{path_base, {link_X1_Y1}});  // idx 2
         
         const expr* X2 = ep.var(seq());
         const expr* Y2 = ep.var(seq());
         const expr* Z2 = ep.var(seq());
-        const expr* path_rec = ep.cons(ep.atom("path"), ep.cons(X2, Z2));
-        const expr* link_X2_Y2 = ep.cons(ep.atom("link"), ep.cons(X2, Y2));
-        const expr* path_Y2_Z2 = ep.cons(ep.atom("path"), ep.cons(Y2, Z2));
+        const expr* path_rec = ep.pred("path", {ep.cons(X2, Z2)});
+        const expr* link_X2_Y2 = ep.pred("link", {ep.cons(X2, Y2)});
+        const expr* path_Y2_Z2 = ep.pred("path", {ep.cons(Y2, Z2)});
         db.push_back(rule{path_rec, {link_X2_Y2, path_Y2_Z2}});  // idx 3
         
         goals goals;
         const expr* Dest = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("path"), ep.cons(ep.atom("a"), Dest)));
+        goals.push_back(ep.pred("path", {ep.atom("a"), Dest}));
         
         cdcl c;
         
@@ -23655,7 +23688,7 @@ void test_ridge_sim() {
         // CRITICAL: Dest binds to exactly 'b'
         normalizer norm(ep, bm);
         const expr* Dest_normalized = norm(Dest);
-        assert(Dest_normalized == ep.atom("b"));
+        assert(Dest_normalized == ep.pred("b", {}));
     }
     
     // Test 38: Multiple goals with complex variable sharing
@@ -23675,28 +23708,19 @@ void test_ridge_sim() {
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         const expr* Z = ep.var(seq());
-        const expr* add_rule = ep.cons(ep.atom("add"), ep.cons(X, ep.cons(Y, Z)));
-        const expr* plus_body = ep.cons(ep.atom("plus"), ep.cons(X, ep.cons(Y, Z)));
-        db.push_back(rule{add_rule, {plus_body}});  // idx 0
-        
-        const expr* plus_fact = ep.cons(ep.atom("plus"), ep.cons(ep.atom("1"), ep.cons(ep.atom("2"), ep.atom("3"))));
-        db.push_back(rule{plus_fact, {}});  // idx 1
-        
+        db.push_back(rule{ep.pred("add", {X, Y, Z}), {ep.pred("plus",  {X, Y, Z})}}); // idx 0
+        db.push_back(rule{ep.pred("plus",  {ep.atom("1"), ep.atom("2"), ep.atom("3")}), {}}); // idx 1
         const expr* A = ep.var(seq());
         const expr* B = ep.var(seq());
         const expr* C = ep.var(seq());
-        const expr* mul_rule = ep.cons(ep.atom("mul"), ep.cons(A, ep.cons(B, C)));
-        const expr* times_body = ep.cons(ep.atom("times"), ep.cons(A, ep.cons(B, C)));
-        db.push_back(rule{mul_rule, {times_body}});  // idx 2
-        
-        const expr* times_fact = ep.cons(ep.atom("times"), ep.cons(ep.atom("2"), ep.cons(ep.atom("3"), ep.atom("6"))));
-        db.push_back(rule{times_fact, {}});  // idx 3
+        db.push_back(rule{ep.pred("mul",   {A, B, C}), {ep.pred("times", {A, B, C})}}); // idx 2
+        db.push_back(rule{ep.pred("times", {ep.atom("2"), ep.atom("3"), ep.atom("6")})}); // idx 3
         
         goals goals;
-        const expr* Sum = ep.var(seq());
+        const expr* Sum  = ep.var(seq());
         const expr* Prod = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("add"), ep.cons(ep.atom("1"), ep.cons(ep.atom("2"), Sum))));
-        goals.push_back(ep.cons(ep.atom("mul"), ep.cons(ep.atom("2"), ep.cons(ep.atom("3"), Prod))));
+        goals.push_back(ep.pred("add", {ep.atom("1"), ep.atom("2"), Sum}));
+        goals.push_back(ep.pred("mul", {ep.atom("2"), ep.atom("3"), Prod}));
         
         cdcl c;
         
@@ -23762,13 +23786,13 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("b")), {}});  // idx 1
+        db.push_back(rule{ep.pred("p", {ep.atom("a")})});  // idx 0
+        db.push_back(rule{ep.pred("q", {ep.atom("b")})});  // idx 1
         
         goals goals;
         const expr* X = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("p"), X));
-        goals.push_back(ep.cons(ep.atom("q"), X));
+        goals.push_back(ep.pred("p", {X}));
+        goals.push_back(ep.pred("q", {X}));
         
         cdcl c;
         
@@ -23811,13 +23835,13 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.cons(ep.atom("pair"), ep.cons(ep.atom("a"), ep.atom("a"))), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("pair"), ep.cons(ep.atom("a"), ep.atom("b"))), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("pair"), ep.cons(ep.atom("b"), ep.atom("b"))), {}});  // idx 2
+        db.push_back(rule{ep.pred("pair", {ep.atom("a"), ep.atom("a")})});  // idx 0
+        db.push_back(rule{ep.pred("pair", {ep.atom("a"), ep.atom("b")})});  // idx 1
+        db.push_back(rule{ep.pred("pair", {ep.atom("b"), ep.atom("b")})});  // idx 2
         
         goals goals;
         const expr* X = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("pair"), ep.cons(X, X)));
+        goals.push_back(ep.pred("pair", {ep.cons(X, X)}));
         
         cdcl c;
         
@@ -23856,7 +23880,7 @@ void test_ridge_sim() {
         // CRITICAL: X binds to exactly 'b' (NOT 'a', because we used idx 2)
         normalizer norm(ep, bm);
         const expr* X_normalized = norm(X);
-        assert(X_normalized == ep.atom("b"));
+        assert(X_normalized == ep.pred("b", {}));
         
         // CRITICAL: MCTS called once
         assert(sim.length() == 2);
@@ -23876,11 +23900,11 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 0
+        db.push_back(rule{ep.pred("q", {ep.atom("a")})});  // idx 0
         
         goals goals;
         const expr* X = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("p"), X));
+        goals.push_back(ep.pred("p", {X}));
         
         cdcl c;
         
@@ -23926,13 +23950,13 @@ void test_ridge_sim() {
         database db;
         const expr* X_rule = ep.var(seq());
         const expr* Y_rule = ep.var(seq());
-        db.push_back(rule{ep.cons(ep.atom("p"), X_rule), {ep.cons(ep.atom("q"), X_rule)}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("q"), Y_rule), {ep.cons(ep.atom("r"), Y_rule)}});  // idx 1
+        db.push_back(rule{ep.pred("p", {X_rule}), {ep.pred("q", {X_rule})}});  // idx 0
+        db.push_back(rule{ep.pred("q", {Y_rule}), {ep.pred("r", {Y_rule})}});  // idx 1
         // No r facts
         
         goals goals;
         const expr* Z_goal = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("p"), Z_goal));
+        goals.push_back(ep.pred("p", {Z_goal}));
         
         cdcl c;
         
@@ -23985,13 +24009,13 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("b")), {}});  // idx 1
+        db.push_back(rule{ep.pred("p", {ep.atom("a")})});  // idx 0
+        db.push_back(rule{ep.pred("q", {ep.atom("b")})});  // idx 1
         
         goals goals;
-        goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));  // Instantiated
+        goals.push_back(ep.pred("p", {ep.atom("a")}));  // Instantiated
         const expr* X = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("q"), X));  // Variable
+        goals.push_back(ep.pred("q", {X}));  // Variable
         
         cdcl c;
         
@@ -24027,7 +24051,7 @@ void test_ridge_sim() {
         // CRITICAL: X binds to 'b'
         normalizer norm(ep, bm);
         const expr* X_normalized = norm(X);
-        assert(X_normalized == ep.atom("b"));
+        assert(X_normalized == ep.pred("b", {}));
     }
     
     // Test 44: Deep variable chain (6 levels)
@@ -24051,16 +24075,16 @@ void test_ridge_sim() {
         const expr* W = ep.var(seq());
         const expr* V = ep.var(seq());
         
-        db.push_back(rule{ep.cons(ep.atom("a"), X), {ep.cons(ep.atom("b"), X)}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("b"), Y), {ep.cons(ep.atom("c"), Y)}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("c"), Z), {ep.cons(ep.atom("d"), Z)}});  // idx 2
-        db.push_back(rule{ep.cons(ep.atom("d"), W), {ep.cons(ep.atom("e"), W)}});  // idx 3
-        db.push_back(rule{ep.cons(ep.atom("e"), V), {ep.cons(ep.atom("f"), V)}});  // idx 4
-        db.push_back(rule{ep.cons(ep.atom("f"), ep.atom("hello")), {}});  // idx 5
+        db.push_back(rule{ep.pred("a", {X}), {ep.pred("b", {X})}});  // idx 0
+        db.push_back(rule{ep.pred("b", {Y}), {ep.pred("c", {Y})}});  // idx 1
+        db.push_back(rule{ep.pred("c", {Z}), {ep.pred("d", {Z})}});  // idx 2
+        db.push_back(rule{ep.pred("d", {W}), {ep.pred("e", {W})}});  // idx 3
+        db.push_back(rule{ep.pred("e", {V}), {ep.pred("f", {V})}});  // idx 4
+        db.push_back(rule{ep.pred("f", {ep.atom("hello")})});  // idx 5
         
         goals goals;
         const expr* Result = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("a"), Result));
+        goals.push_back(ep.pred("a", {Result}));
         
         cdcl c;
         
@@ -24112,7 +24136,7 @@ void test_ridge_sim() {
         // CRITICAL: Result binds to 'hello'
         normalizer norm(ep, bm);
         const expr* Result_normalized = norm(Result);
-        assert(Result_normalized == ep.atom("hello"));
+        assert(Result_normalized == ep.pred("hello", {}));
     }
     
     // Test 45: Variables in multiple body goals
@@ -24133,22 +24157,22 @@ void test_ridge_sim() {
         const expr* Y = ep.var(seq());
         const expr* Z = ep.var(seq());
         
-        const expr* foo_head = ep.cons(ep.atom("foo"), ep.cons(X, ep.cons(Y, Z)));
-        const expr* bar_body = ep.cons(ep.atom("bar"), ep.cons(X, Y));
-        const expr* baz_body = ep.cons(ep.atom("baz"), ep.cons(Y, Z));
+        const expr* foo_head = ep.pred("foo", {ep.cons(X, ep.cons(Y, Z))});
+        const expr* bar_body = ep.pred("bar", {ep.cons(X, Y)});
+        const expr* baz_body = ep.pred("baz", {ep.cons(Y, Z)});
         db.push_back(rule{foo_head, {bar_body, baz_body}});  // idx 0
         
-        const expr* bar_fact = ep.cons(ep.atom("bar"), ep.cons(ep.atom("1"), ep.atom("2")));
+        const expr* bar_fact = ep.pred("bar", {ep.atom("1"), ep.atom("2")});
         db.push_back(rule{bar_fact, {}});  // idx 1
         
-        const expr* baz_fact = ep.cons(ep.atom("baz"), ep.cons(ep.atom("2"), ep.atom("3")));
+        const expr* baz_fact = ep.pred("baz", {ep.atom("2"), ep.atom("3")});
         db.push_back(rule{baz_fact, {}});  // idx 2
         
         goals goals;
         const expr* A = ep.var(seq());
         const expr* B = ep.var(seq());
         const expr* C = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("foo"), ep.cons(A, ep.cons(B, C))));
+        goals.push_back(ep.pred("foo", {ep.cons(A, ep.cons(B, C))}));
         
         cdcl c;
         
@@ -24212,18 +24236,18 @@ void test_ridge_sim() {
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         
-        const expr* cons_a_X = ep.cons(ep.atom("cons"), ep.cons(ep.atom("a"), X));
-        db.push_back(rule{ep.cons(ep.atom("p"), cons_a_X), {}});  // idx 0
+        const expr* cons_a_X = ep.cons(ep.atom("a"), X);
+        db.push_back(rule{ep.pred("p", {cons_a_X})});  // idx 0
         
-        const expr* cons_b_Y = ep.cons(ep.atom("cons"), ep.cons(ep.atom("b"), Y));
-        db.push_back(rule{ep.cons(ep.atom("p"), cons_b_Y), {}});  // idx 1
+        const expr* cons_b_Y = ep.cons(ep.atom("b"), Y);
+        db.push_back(rule{ep.pred("p", {cons_b_Y})});  // idx 1
         
-        const expr* atom_z = ep.cons(ep.atom("atom"), ep.atom("z"));
-        db.push_back(rule{ep.cons(ep.atom("p"), atom_z), {}});  // idx 2
+        const expr* atom_z = ep.pred("atom", {ep.atom("z")});
+        db.push_back(rule{ep.pred("p", {atom_z})});  // idx 2
         
         goals goals;
-        const expr* cons_a_nil = ep.cons(ep.atom("cons"), ep.cons(ep.atom("a"), ep.atom("nil")));
-        goals.push_back(ep.cons(ep.atom("p"), cons_a_nil));
+        const expr* cons_a_nil = ep.pred("cons", {ep.atom("a"), ep.atom("nil")});
+        goals.push_back(ep.pred("p", {cons_a_nil}));
         
         cdcl c;
         
@@ -24267,13 +24291,13 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.cons(ep.atom("person"), ep.atom("alice")), {}});    // idx 0
-        db.push_back(rule{ep.cons(ep.atom("person"), ep.atom("bob")), {}});      // idx 1
-        db.push_back(rule{ep.cons(ep.atom("person"), ep.atom("charlie")), {}});  // idx 2
+        db.push_back(rule{ep.pred("person", {ep.atom("alice")})});    // idx 0
+        db.push_back(rule{ep.pred("person", {ep.atom("bob")})});      // idx 1
+        db.push_back(rule{ep.pred("person", {ep.atom("charlie")})});  // idx 2
         
         goals goals;
         const expr* Who = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("person"), Who));
+        goals.push_back(ep.pred("person", {Who}));
         
         cdcl c;
         
@@ -24334,14 +24358,14 @@ void test_ridge_sim() {
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         
-        db.push_back(rule{ep.cons(ep.atom("p"), X), {ep.cons(ep.atom("q"), X)}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("p"), Y), {ep.cons(ep.atom("r"), Y)}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("b")), {}});  // idx 3
+        db.push_back(rule{ep.pred("p", {X}), {ep.pred("q", {X})}});  // idx 0
+        db.push_back(rule{ep.pred("p", {Y}), {ep.pred("r", {Y})}});  // idx 1
+        db.push_back(rule{ep.pred("q", {ep.atom("a")})});  // idx 2
+        db.push_back(rule{ep.pred("r", {ep.atom("b")})});  // idx 3
         
         goals goals;
         const expr* Z = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("p"), Z));
+        goals.push_back(ep.pred("p", {Z}));
         
         // Pre-populate avoidance store to avoid idx 0
         const goal_lineage* gl_p = lp.goal(nullptr, 0);
@@ -24382,7 +24406,7 @@ void test_ridge_sim() {
         // CRITICAL: Z binds to 'b'
         normalizer norm(ep, bm);
         const expr* Z_normalized = norm(Z);
-        assert(Z_normalized == ep.atom("b"));
+        assert(Z_normalized == ep.pred("b", {}));
     }
     
     // Test 49: Existential variables (variables only in body)
@@ -24401,11 +24425,11 @@ void test_ridge_sim() {
         database db;
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
-        db.push_back(rule{ep.cons(ep.atom("p"), X), {ep.cons(ep.atom("q"), Y)}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 1
+        db.push_back(rule{ep.pred("p", {X}), {ep.pred("q", {Y})}});  // idx 0
+        db.push_back(rule{ep.pred("q", {ep.atom("a")})});  // idx 1
         
         goals goals;
-        goals.push_back(ep.cons(ep.atom("p"), ep.atom("hello")));
+        goals.push_back(ep.pred("p", {ep.atom("hello")}));
         
         cdcl c;
         
@@ -24455,10 +24479,10 @@ void test_ridge_sim() {
         
         database db;
         const expr* X = ep.var(seq());
-        db.push_back(rule{ep.cons(ep.atom("p"), X), {ep.cons(ep.atom("p"), X)}});  // idx 0: p(X) :- p(X)
+        db.push_back(rule{ep.pred("p", {X}), {ep.pred("p", {X})}});  // idx 0: p(X) :- p(X)
         
         goals goals;
-        goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));
+        goals.push_back(ep.pred("p", {ep.atom("a")}));
         
         cdcl c;
         
@@ -24502,7 +24526,7 @@ void test_ridge_sim() {
         
         goals goals;
         const expr* X = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("p"), X));
+        goals.push_back(ep.pred("p", {X}));
         
         cdcl c;
         
@@ -24543,10 +24567,10 @@ void test_ridge_sim() {
         
         database db;
         const expr* X = ep.var(seq());
-        db.push_back(rule{ep.cons(ep.atom("p"), X), {}});  // idx 0: p(X). (fact with variable)
+        db.push_back(rule{ep.pred("p", {X})});  // idx 0: p(X). (fact with variable)
         
         goals goals;
-        goals.push_back(ep.cons(ep.atom("p"), ep.atom("hello")));
+        goals.push_back(ep.pred("p", {ep.atom("hello")}));
         
         cdcl c;
         
@@ -24596,24 +24620,24 @@ void test_ridge_sim() {
         const expr* Y = ep.var(seq());
         const expr* Z = ep.var(seq());
         
-        const expr* big_head = ep.cons(ep.atom("big"), ep.cons(W, ep.cons(X, ep.cons(Y, Z))));
-        const expr* a_body = ep.cons(ep.atom("a"), W);
-        const expr* b_body = ep.cons(ep.atom("b"), X);
-        const expr* c_body = ep.cons(ep.atom("c"), Y);
-        const expr* d_body = ep.cons(ep.atom("d"), Z);
+        const expr* big_head = ep.pred("big", {ep.cons(W, ep.cons(X, ep.cons(Y, Z)))});
+        const expr* a_body = ep.pred("a", {W});
+        const expr* b_body = ep.pred("b", {X});
+        const expr* c_body = ep.pred("c", {Y});
+        const expr* d_body = ep.pred("d", {Z});
         db.push_back(rule{big_head, {a_body, b_body, c_body, d_body}});  // idx 0
         
-        db.push_back(rule{ep.cons(ep.atom("a"), ep.atom("1")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("b"), ep.atom("2")), {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.atom("c"), ep.atom("3")), {}});  // idx 3
-        db.push_back(rule{ep.cons(ep.atom("d"), ep.atom("4")), {}});  // idx 4
+        db.push_back(rule{ep.pred("a", {ep.atom("1")})});  // idx 1
+        db.push_back(rule{ep.pred("b", {ep.atom("2")})});  // idx 2
+        db.push_back(rule{ep.pred("c", {ep.atom("3")})});  // idx 3
+        db.push_back(rule{ep.pred("d", {ep.atom("4")})});  // idx 4
         
         goals goals;
         const expr* A = ep.var(seq());
         const expr* B = ep.var(seq());
         const expr* C = ep.var(seq());
         const expr* D = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("big"), ep.cons(A, ep.cons(B, ep.cons(C, D)))));
+        goals.push_back(ep.pred("big", {ep.cons(A, ep.cons(B, ep.cons(C, D)))}));
         
         cdcl c;
         
@@ -24681,14 +24705,14 @@ void test_ridge_sim() {
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         
-        db.push_back(rule{ep.cons(ep.atom("p"), X), {ep.cons(ep.atom("q"), X)}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("p"), Y), {ep.cons(ep.atom("r"), Y)}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("b")), {}});  // idx 3
+        db.push_back(rule{ep.pred("p", {X}), {ep.pred("q", {X})}});  // idx 0
+        db.push_back(rule{ep.pred("p", {Y}), {ep.pred("r", {Y})}});  // idx 1
+        db.push_back(rule{ep.pred("q", {ep.atom("a")})});  // idx 2
+        db.push_back(rule{ep.pred("r", {ep.atom("b")})});  // idx 3
         
         goals goals;
         const expr* Z = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("p"), Z));
+        goals.push_back(ep.pred("p", {Z}));
         
         // Pre-populate avoidance store with BOTH resolutions
         const goal_lineage* gl_p = lp.goal(nullptr, 0);
@@ -24743,15 +24767,15 @@ void test_ridge_sim() {
         const expr* X = ep.var(seq());
         const expr* Y = ep.var(seq());
         
-        const expr* cons_a_X = ep.cons(ep.atom("cons"), ep.cons(ep.atom("a"), X));
-        db.push_back(rule{ep.cons(ep.atom("p"), cons_a_X), {}});  // idx 0
+        const expr* cons_a_X = ep.cons(ep.atom("a"), X);
+        db.push_back(rule{ep.pred("p", {cons_a_X})});  // idx 0
         
-        const expr* cons_b_Y = ep.cons(ep.atom("cons"), ep.cons(ep.atom("b"), Y));
-        db.push_back(rule{ep.cons(ep.atom("p"), cons_b_Y), {}});  // idx 1
+        const expr* cons_b_Y = ep.cons(ep.atom("b"), Y);
+        db.push_back(rule{ep.pred("p", {cons_b_Y})});  // idx 1
         
         goals goals;
-        const expr* atom_z = ep.cons(ep.atom("atom"), ep.atom("z"));
-        goals.push_back(ep.cons(ep.atom("p"), atom_z));
+        const expr* atom_z = ep.pred("atom", {ep.atom("z")});
+        goals.push_back(ep.pred("p", {atom_z}));
         
         cdcl c;
         
@@ -24791,16 +24815,15 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        const expr* level1 = ep.cons(ep.atom("cons"), ep.cons(ep.atom("a"), ep.atom("b")));
-        const expr* level2 = ep.cons(ep.atom("cons"), ep.cons(level1, ep.atom("c")));
-        const expr* level3 = ep.cons(ep.atom("cons"), ep.cons(level2, ep.atom("d")));
-        const expr* level4 = ep.cons(ep.atom("cons"), ep.cons(level3, ep.atom("e")));
-        const expr* level5 = ep.cons(ep.atom("cons"), ep.cons(level4, ep.atom("f")));
-        db.push_back(rule{ep.cons(ep.atom("deep"), level5), {}});  // idx 0
+        const expr* level1 = ep.cons(ep.atom("a"), ep.atom("b"));
+        const expr* level2 = ep.cons(level1, ep.atom("c"));
+        const expr* level3 = ep.cons(level2, ep.atom("d"));
+        const expr* level4 = ep.cons(level3, ep.atom("e"));
+        const expr* level5 = ep.cons(level4, ep.atom("f"));
         
         goals goals;
         const expr* X = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("deep"), X));
+        goals.push_back(ep.pred("deep", {X}));
         
         cdcl c;
         
@@ -24841,20 +24864,20 @@ void test_ridge_sim() {
         }
         
         // Build chain: a→b→c→d→e→f→g→h→i→j→end
-        db.push_back(rule{ep.cons(ep.atom("a"), vars[0]), {ep.cons(ep.atom("b"), vars[0])}});
-        db.push_back(rule{ep.cons(ep.atom("b"), vars[1]), {ep.cons(ep.atom("c"), vars[1])}});
-        db.push_back(rule{ep.cons(ep.atom("c"), vars[2]), {ep.cons(ep.atom("d"), vars[2])}});
-        db.push_back(rule{ep.cons(ep.atom("d"), vars[3]), {ep.cons(ep.atom("e"), vars[3])}});
-        db.push_back(rule{ep.cons(ep.atom("e"), vars[4]), {ep.cons(ep.atom("f"), vars[4])}});
-        db.push_back(rule{ep.cons(ep.atom("f"), vars[5]), {ep.cons(ep.atom("g"), vars[5])}});
-        db.push_back(rule{ep.cons(ep.atom("g"), vars[6]), {ep.cons(ep.atom("h"), vars[6])}});
-        db.push_back(rule{ep.cons(ep.atom("h"), vars[7]), {ep.cons(ep.atom("i"), vars[7])}});
-        db.push_back(rule{ep.cons(ep.atom("i"), vars[8]), {ep.cons(ep.atom("j"), vars[8])}});
-        db.push_back(rule{ep.cons(ep.atom("j"), ep.atom("end")), {}});
+        db.push_back(rule{ep.pred("a", {vars[0]}), {ep.pred("b", {vars[0]})}});
+        db.push_back(rule{ep.pred("b", {vars[1]}), {ep.pred("c", {vars[1]})}});
+        db.push_back(rule{ep.pred("c", {vars[2]}), {ep.pred("d", {vars[2]})}});
+        db.push_back(rule{ep.pred("d", {vars[3]}), {ep.pred("e", {vars[3]})}});
+        db.push_back(rule{ep.pred("e", {vars[4]}), {ep.pred("f", {vars[4]})}});
+        db.push_back(rule{ep.pred("f", {vars[5]}), {ep.pred("g", {vars[5]})}});
+        db.push_back(rule{ep.pred("g", {vars[6]}), {ep.pred("h", {vars[6]})}});
+        db.push_back(rule{ep.pred("h", {vars[7]}), {ep.pred("i", {vars[7]})}});
+        db.push_back(rule{ep.pred("i", {vars[8]}), {ep.pred("j", {vars[8]})}});
+        db.push_back(rule{ep.pred("j", {ep.atom("end")})});
         
         goals goals;
         const expr* X = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("a"), X));
+        goals.push_back(ep.pred("a", {X}));
         
         cdcl c;
         
@@ -24892,11 +24915,11 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.cons(ep.atom("p"), ep.atom("a")), {ep.cons(ep.atom("q"), ep.atom("b"))}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("c")), {}});  // idx 1: q(c) not q(b)!
+        db.push_back(rule{ep.pred("p", {ep.atom("a")}), {ep.pred("q", {ep.atom("b")})}});  // idx 0
+        db.push_back(rule{ep.pred("q", {ep.atom("c")})});  // idx 1: q(c) not q(b)!
         
         goals goals;
-        goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));
+        goals.push_back(ep.pred("p", {ep.atom("a")}));
         
         cdcl c;
         
@@ -24939,14 +24962,13 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.cons(ep.atom("edge"), ep.cons(ep.atom("a"), ep.atom("b"))), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("edge"), ep.cons(ep.atom("a"), ep.atom("c"))), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("edge"), ep.cons(ep.atom("a"), ep.atom("d"))), {}});  // idx 2
+        db.push_back(rule{ep.pred("edge", {ep.atom("a"), ep.atom("b")})});  // idx 0
+        db.push_back(rule{ep.pred("edge", {ep.atom("a"), ep.atom("c")})});  // idx 1
+        db.push_back(rule{ep.pred("edge", {ep.atom("a"), ep.atom("d")})});  // idx 2
         
         goals goals;
         const expr* X = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("edge"), ep.cons(ep.atom("a"), X)));
-        
+        goals.push_back(ep.pred("edge", {ep.cons(ep.atom("a"), X)}));
         cdcl c;
         
         monte_carlo::tree_node<mcts_decider::choice> root;
@@ -24980,7 +25002,7 @@ void test_ridge_sim() {
         
         // CRITICAL: X binds to 'd'
         normalizer norm(ep, bm);
-        assert(norm(X) == ep.atom("d"));
+        assert(norm(X) == ep.pred("d", {}));
     }
     
     // Test 60: Unification failure due to nested structure mismatch
@@ -24997,18 +25019,12 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        const expr* nested_db = ep.cons(ep.atom("cons"), 
-                                   ep.cons(ep.atom("a"), 
-                                      ep.cons(ep.atom("cons"), 
-                                         ep.cons(ep.atom("b"), ep.atom("nil")))));
-        db.push_back(rule{ep.cons(ep.atom("p"), nested_db), {}});  // idx 0
+        const expr* nested_db = ep.cons(ep.atom("a"), ep.cons(ep.atom("b"), ep.atom("nil")));
+        db.push_back(rule{ep.pred("p", {nested_db}), {}});  // idx 0
         
         goals goals;
-        const expr* nested_goal = ep.cons(ep.atom("cons"), 
-                                     ep.cons(ep.atom("a"), 
-                                        ep.cons(ep.atom("cons"), 
-                                           ep.cons(ep.atom("c"), ep.atom("nil")))));
-        goals.push_back(ep.cons(ep.atom("p"), nested_goal));
+        const expr* nested_goal = ep.cons(ep.atom("a"), ep.cons(ep.atom("c"), ep.atom("nil")));
+        goals.push_back(ep.pred("p", {nested_goal}));
         
         cdcl c;
         
@@ -25048,13 +25064,12 @@ void test_ridge_sim() {
         
         database db;
         const expr* X = ep.var(seq());
-        const expr* weird = ep.cons(ep.atom("weird"), ep.cons(X, ep.cons(X, X)));
+        const expr* weird = ep.pred("weird", {ep.cons(X, ep.cons(X, X))});
         db.push_back(rule{weird, {}});  // idx 0: weird(X,X,X)
         
         goals goals;
         const expr* Y = ep.var(seq());
-        const expr* goal = ep.cons(ep.atom("weird"), ep.cons(ep.atom("a"), ep.cons(Y, ep.atom("a"))));
-        goals.push_back(goal);
+        const expr* goal = ep.pred("weird", {ep.cons(ep.atom("a"), ep.cons(Y, ep.atom("a")))});
         
         cdcl c;
         
@@ -25074,7 +25089,7 @@ void test_ridge_sim() {
         
         // CRITICAL: Y binds to 'a'
         normalizer norm(ep, bm);
-        assert(norm(Y) == ep.atom("a"));
+        assert(norm(Y) == ep.pred("a", {}));
     }
     
     // Test 62: CDCL elimination chain reaction
@@ -25093,16 +25108,16 @@ void test_ridge_sim() {
         const expr* X2 = ep.var(seq());
         const expr* X3 = ep.var(seq());
         
-        db.push_back(rule{ep.cons(ep.atom("p"), X1), {ep.cons(ep.atom("q"), X1)}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("p"), X2), {ep.cons(ep.atom("r"), X2)}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("p"), X3), {ep.cons(ep.atom("s"), X3)}});  // idx 2
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 3
-        db.push_back(rule{ep.cons(ep.atom("r"), ep.atom("b")), {}});  // idx 4
-        db.push_back(rule{ep.cons(ep.atom("s"), ep.atom("c")), {}});  // idx 5
+        db.push_back(rule{ep.pred("p", {X1}), {ep.pred("q", {X1})}});  // idx 0
+        db.push_back(rule{ep.pred("p", {X2}), {ep.pred("r", {X2})}});  // idx 1
+        db.push_back(rule{ep.pred("p", {X3}), {ep.pred("s", {X3})}});  // idx 2
+        db.push_back(rule{ep.pred("q", {ep.atom("a")})});  // idx 3
+        db.push_back(rule{ep.pred("r", {ep.atom("b")})});  // idx 4
+        db.push_back(rule{ep.pred("s", {ep.atom("c")})});  // idx 5
         
         goals goals;
         const expr* Z = ep.var(seq());
-        goals.push_back(ep.cons(ep.atom("p"), Z));
+        goals.push_back(ep.pred("p", {Z}));
         
         // Pre-populate avoidance to eliminate idx 0 and 1
         const goal_lineage* gl_p = lp.goal(nullptr, 0);
@@ -25136,7 +25151,7 @@ void test_ridge_sim() {
         
         // CRITICAL: Z binds to 'c'
         normalizer norm(ep, bm);
-        assert(norm(Z) == ep.atom("c"));
+        assert(norm(Z) == ep.pred("c", {}));
     }
     
     // Test 63: Unbound variables in normalizer
@@ -25151,10 +25166,10 @@ void test_ridge_sim() {
         lineage_pool lp;
         
         database db;
-        db.push_back(rule{ep.atom("p"), {}});  // idx 0: p. (no variables)
+        db.push_back(rule{ep.pred("p", {}), {}});  // idx 0: p. (no variables)
         
         goals goals;
-        goals.push_back(ep.atom("p"));
+        goals.push_back(ep.pred("p", {}));
         
         cdcl c;
         
@@ -25194,11 +25209,11 @@ void test_ridge_sim() {
         
         database db;
         const expr* X = ep.var(seq());
-        db.push_back(rule{X, {ep.cons(ep.atom("q"), ep.atom("a"))}});  // idx 0: X :- q(a).
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.atom("a")), {}});  // idx 1: q(a).
+        db.push_back(rule{X, {ep.pred("q", {ep.atom("a")})}});  // idx 0: X :- q(a).
+        db.push_back(rule{ep.pred("q", {ep.atom("a")})});  // idx 1: q(a).
         
         goals goals;
-        goals.push_back(ep.cons(ep.atom("p"), ep.atom("hello")));
+        goals.push_back(ep.pred("p", {ep.atom("hello")}));
         
         cdcl c;
         
@@ -25396,11 +25411,10 @@ void test_ridge_constructor_and_destructor() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.atom("p"), {}});
-        db.push_back(rule{ep.cons(ep.atom("q"), ep.var(seq())), {ep.atom("p")}});
-
+        db.push_back(rule{ep.pred("p", {}), {}});
+        db.push_back(rule{ep.pred("q", {ep.var(seq())}), {ep.pred("p", {})}});
         goals goals;
-        goals.push_back(ep.cons(ep.atom("q"), ep.atom("a")));
+        goals.push_back(ep.pred("q", {ep.atom("a")}));
 
         std::mt19937 rng(999);
 
@@ -25442,10 +25456,10 @@ void test_ridge() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.atom("a"), {}});
+        db.push_back(rule{ep.pred("a", {}), {}});
 
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
 
         std::mt19937 rng(42);
         ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -25472,10 +25486,10 @@ void test_ridge() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.atom("a"), {}});  // idx 0: a.
+        db.push_back(rule{ep.pred("a", {}), {}});  // idx 0: a.
 
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
 
         std::mt19937 rng(42);
         ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -25511,11 +25525,11 @@ void test_ridge() {
 
         database db;
         // idx 0: answer(42).
-        db.push_back(rule{ep.cons(ep.atom("answer"), ep.atom("42")), {}});
+        db.push_back(rule{ep.pred("answer", {ep.atom("42")})});
 
         const expr* X = ep.var(seq());
         goals goals;
-        goals.push_back(ep.cons(ep.atom("answer"), X));
+        goals.push_back(ep.pred("answer", {X}));
 
         std::mt19937 rng(42);
         ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -25550,7 +25564,7 @@ void test_ridge() {
         database db;  // intentionally empty
 
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
 
         std::mt19937 rng(42);
         ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -25581,11 +25595,11 @@ void test_ridge() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.atom("a"), {ep.atom("b")}});  // idx 0: a :- b.
-        db.push_back(rule{ep.atom("a"), {ep.atom("c")}});  // idx 1: a :- c.
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("b", {})}});  // idx 0: a :- b.
+        db.push_back(rule{ep.pred("a", {}), {ep.pred("c", {})}});  // idx 1: a :- c.
 
         goals goals;
-        goals.push_back(ep.atom("a"));
+        goals.push_back(ep.pred("a", {}));
 
         std::mt19937 rng(42);
         ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -25629,15 +25643,15 @@ void test_ridge() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("is_a"), ep.atom("1")), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("is_a"), ep.atom("2")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("is_b"), ep.atom("2")), {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.atom("is_b"), ep.atom("3")), {}});  // idx 3
+        db.push_back(rule{ep.pred("is_a", {ep.atom("1")})});  // idx 0
+        db.push_back(rule{ep.pred("is_a", {ep.atom("2")})});  // idx 1
+        db.push_back(rule{ep.pred("is_b", {ep.atom("2")})});  // idx 2
+        db.push_back(rule{ep.pred("is_b", {ep.atom("3")})});  // idx 3
 
         const expr* X = ep.var(seq());
         goals goals;
-        goals.push_back(ep.cons(ep.atom("is_a"), X));  // goal 0: is_a(X)
-        goals.push_back(ep.cons(ep.atom("is_b"), X));  // goal 1: is_b(X)
+        goals.push_back(ep.pred("is_a", {X}));  // goal 0: is_a(X)
+        goals.push_back(ep.pred("is_b", {X}));  // goal 1: is_b(X)
 
         std::mt19937 rng(42);
         ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -25694,14 +25708,13 @@ void test_ridge() {
         sequencer seq(t);
 
         database db;
-        // parent(A, B) encoded as cons(cons(atom("parent"), A), B)
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("parent"), ep.atom("bob")),   ep.atom("alice")), {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("parent"), ep.atom("carol")), ep.atom("alice")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("parent"), ep.atom("dave")),  ep.atom("bob")),  {}});   // idx 2
+        db.push_back(rule{ep.pred("parent", {ep.atom("bob"),   ep.atom("alice")}), {}});  // idx 0
+        db.push_back(rule{ep.pred("parent", {ep.atom("carol"), ep.atom("alice")}), {}});  // idx 1
+        db.push_back(rule{ep.pred("parent", {ep.atom("dave"),  ep.atom("bob")}),   {}});  // idx 2
 
         const expr* X = ep.var(seq());
         goals goals;
-        goals.push_back(ep.cons(ep.cons(ep.atom("parent"), X), ep.atom("alice")));
+        goals.push_back(ep.pred("parent", {X, ep.atom("alice")}));
 
         std::mt19937 rng(42);
         ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -25774,14 +25787,14 @@ void test_ridge() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("true")),  {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("false")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("not"), ep.atom("true")),  ep.atom("false")), {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("not"), ep.atom("false")), ep.atom("true")),  {}});  // idx 3
-        db.push_back(rule{ep.cons(ep.cons(ep.cons(ep.atom("or"), ep.atom("true")),  ep.atom("true")),  ep.atom("true")),  {}});  // idx 4
-        db.push_back(rule{ep.cons(ep.cons(ep.cons(ep.atom("or"), ep.atom("true")),  ep.atom("false")), ep.atom("true")),  {}});  // idx 5
-        db.push_back(rule{ep.cons(ep.cons(ep.cons(ep.atom("or"), ep.atom("false")), ep.atom("true")),  ep.atom("true")),  {}});  // idx 6
-        db.push_back(rule{ep.cons(ep.cons(ep.cons(ep.atom("or"), ep.atom("false")), ep.atom("false")), ep.atom("false")), {}});  // idx 7
+        db.push_back(rule{ep.pred("bool", {ep.atom("true")}), {}});  // idx 0
+        db.push_back(rule{ep.pred("bool", {ep.atom("false")})});  // idx 1
+        db.push_back(rule{ep.pred("not", {ep.atom("true"),  ep.atom("false")}), {}});  // idx 2
+        db.push_back(rule{ep.pred("not", {ep.atom("false"), ep.atom("true")}),  {}});  // idx 3
+        db.push_back(rule{ep.pred("or", {ep.atom("true"),  ep.atom("true"),  ep.atom("true")}),  {}});  // idx 4
+        db.push_back(rule{ep.pred("or", {ep.atom("true"),  ep.atom("false"), ep.atom("true")}),  {}});  // idx 5
+        db.push_back(rule{ep.pred("or", {ep.atom("false"), ep.atom("true"),  ep.atom("true")}),  {}});  // idx 6
+        db.push_back(rule{ep.pred("or", {ep.atom("false"), ep.atom("false"), ep.atom("false")}), {}});  // idx 7
 
         const expr* P  = ep.var(seq());
         const expr* Q  = ep.var(seq());
@@ -25789,15 +25802,15 @@ void test_ridge() {
 
         goals goals;
         // goal 0: bool(P)
-        goals.push_back(ep.cons(ep.atom("bool"), P));
+        goals.push_back(ep.pred("bool", {P}));
         // goal 1: bool(Q)
-        goals.push_back(ep.cons(ep.atom("bool"), Q));
+        goals.push_back(ep.pred("bool", {Q}));
         // goal 2: or(P, Q, true) — P ∨ Q = true
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("or"), P), Q), ep.atom("true")));
+        goals.push_back(ep.pred("or", {P, Q, ep.atom("true")}));
         // goal 3: not(P, NP) — compute ¬P
-        goals.push_back(ep.cons(ep.cons(ep.atom("not"), P), NP));
+        goals.push_back(ep.pred("not", {P, NP}));
         // goal 4: or(NP, Q, true) — ¬P ∨ Q = true
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("or"), NP), Q), ep.atom("true")));
+        goals.push_back(ep.pred("or", {NP, Q, ep.atom("true")}));
 
         std::mt19937 rng(42);
         ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -25873,22 +25886,22 @@ void test_ridge() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("red")),  {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("blue")), {}});  // idx 1
+        db.push_back(rule{ep.pred("color", {ep.atom("red")}), {}});  // idx 0
+        db.push_back(rule{ep.pred("color", {ep.atom("blue")})});  // idx 1
         // diff(X, Y) encoded as cons(cons(atom("diff"), X), Y)
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("red")),  ep.atom("blue")), {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("blue")), ep.atom("red")),  {}});  // idx 3
+        db.push_back(rule{ep.pred("diff", {ep.atom("red"), ep.atom("blue")}), {}});  // idx 2
+        db.push_back(rule{ep.pred("diff", {ep.atom("blue"), ep.atom("red")}),  {}});  // idx 3
 
         const expr* A = ep.var(seq());
         const expr* B = ep.var(seq());
         const expr* C = ep.var(seq());
 
         goals goals;
-        goals.push_back(ep.cons(ep.atom("color"), A));                 // goal 0: color(A)
-        goals.push_back(ep.cons(ep.atom("color"), B));                 // goal 1: color(B)
-        goals.push_back(ep.cons(ep.atom("color"), C));                 // goal 2: color(C)
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), A), B));      // goal 3: diff(A, B)
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), B), C));      // goal 4: diff(B, C)
+        goals.push_back(ep.pred("color", {A}));                 // goal 0: color(A)
+        goals.push_back(ep.pred("color", {B}));                 // goal 1: color(B)
+        goals.push_back(ep.pred("color", {C}));                 // goal 2: color(C)
+        goals.push_back(ep.pred("diff", {A, B}));      // goal 3: diff(A, B)
+        goals.push_back(ep.pred("diff", {B, C}));      // goal 4: diff(B, C)
 
         std::mt19937 rng(42);
         ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
@@ -26016,28 +26029,28 @@ void test_ridge() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("red")),   {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("green")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("blue")),  {}});  // idx 2
+        db.push_back(rule{ep.pred("color", {ep.atom("red")}), {}});  // idx 0
+        db.push_back(rule{ep.pred("color", {ep.atom("green")})});  // idx 1
+        db.push_back(rule{ep.pred("color", {ep.atom("blue")}), {}});  // idx 2
         // diff(X, Y) = cons(cons(atom("diff"), X), Y) — all 6 asymmetric pairs
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("red")),   ep.atom("green")), {}});  // idx 3
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("red")),   ep.atom("blue")),  {}});  // idx 4
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("green")), ep.atom("red")),   {}});  // idx 5
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("green")), ep.atom("blue")),  {}});  // idx 6
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("blue")),  ep.atom("red")),   {}});  // idx 7
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("blue")),  ep.atom("green")), {}});  // idx 8
+        db.push_back(rule{ep.pred("diff", {ep.atom("red"), ep.atom("green")}), {}});  // idx 3
+        db.push_back(rule{ep.pred("diff", {ep.atom("red"),   ep.atom("blue")}),  {}});  // idx 4
+        db.push_back(rule{ep.pred("diff", {ep.atom("green"), ep.atom("red")}),   {}});  // idx 5
+        db.push_back(rule{ep.pred("diff", {ep.atom("green"), ep.atom("blue")}),  {}});  // idx 6
+        db.push_back(rule{ep.pred("diff", {ep.atom("blue"),  ep.atom("red")}),   {}});  // idx 7
+        db.push_back(rule{ep.pred("diff", {ep.atom("blue"), ep.atom("green")}), {}});  // idx 8
 
         const expr* A = ep.var(seq());
         const expr* B = ep.var(seq());
         const expr* C = ep.var(seq());
 
         goals goals;
-        goals.push_back(ep.cons(ep.atom("color"), A));                 // goal 0: color(A)
-        goals.push_back(ep.cons(ep.atom("color"), B));                 // goal 1: color(B)
-        goals.push_back(ep.cons(ep.atom("color"), C));                 // goal 2: color(C)
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), A), B));      // goal 3: diff(A,B)
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), A), C));      // goal 4: diff(A,C)
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), B), C));      // goal 5: diff(B,C)
+        goals.push_back(ep.pred("color", {A}));                 // goal 0: color(A)
+        goals.push_back(ep.pred("color", {B}));                 // goal 1: color(B)
+        goals.push_back(ep.pred("color", {C}));                 // goal 2: color(C)
+        goals.push_back(ep.pred("diff", {A, B}));      // goal 3: diff(A,B)
+        goals.push_back(ep.pred("diff", {A, C}));      // goal 4: diff(A,C)
+        goals.push_back(ep.pred("diff", {B, C}));      // goal 5: diff(B,C)
 
         // Interned atoms from ep — same pointer as those embedded in the rules
         const expr* red   = ep.atom("red");
@@ -26096,39 +26109,39 @@ void test_ridge() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("true")),  {}});  // idx 0: bool(true).
-        db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("false")), {}});  // idx 1: bool(false).
+        db.push_back(rule{ep.pred("bool", {ep.atom("true")}), {}});  // idx 0: bool(true).
+        db.push_back(rule{ep.pred("bool", {ep.atom("false")})});  // idx 1: bool(false).
 
         // or(true, X, true) :- bool(X).
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("or"), ep.atom("true")), X), ep.atom("true")),
-                {ep.cons(ep.atom("bool"), X)}
+                ep.pred("or", {ep.atom("true"), X, ep.atom("true")}),
+                {ep.pred("bool", {X})}
             });  // idx 2
         }
         // or(false, X, X) :- bool(X).
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("or"), ep.atom("false")), X), X),
-                {ep.cons(ep.atom("bool"), X)}
+                ep.pred("or", {ep.atom("false"), X, X}),
+                {ep.pred("bool", {X})}
             });  // idx 3
         }
         // and(true, X, X) :- bool(X).
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("and"), ep.atom("true")), X), X),
-                {ep.cons(ep.atom("bool"), X)}
+                ep.pred("and", {ep.atom("true"), X, X}),
+                {ep.pred("bool", {X})}
             });  // idx 4
         }
         // and(false, X, false) :- bool(X).
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("and"), ep.atom("false")), X), ep.atom("false")),
-                {ep.cons(ep.atom("bool"), X)}
+                ep.pred("and", {ep.atom("false"), X, ep.atom("false")}),
+                {ep.pred("bool", {X})}
             });  // idx 5
         }
 
@@ -26138,11 +26151,11 @@ void test_ridge() {
         const expr* QR = ep.var(seq());
 
         goals goals;
-        goals.push_back(ep.cons(ep.atom("bool"), P));                                           // goal 0: bool(P)
-        goals.push_back(ep.cons(ep.atom("bool"), Q));                                           // goal 1: bool(Q)
-        goals.push_back(ep.cons(ep.atom("bool"), R));                                           // goal 2: bool(R)
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("or"),  Q), R),  QR));                 // goal 3: or(Q,R,QR)
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("and"), P), QR), ep.atom("true")));    // goal 4: and(P,QR,true)
+        goals.push_back(ep.pred("bool", {P}));                                           // goal 0: bool(P)
+        goals.push_back(ep.pred("bool", {Q}));                                           // goal 1: bool(Q)
+        goals.push_back(ep.pred("bool", {R}));                                           // goal 2: bool(R)
+        goals.push_back(ep.pred("or", {Q, R, QR}));                 // goal 3: or(Q,R,QR)
+        goals.push_back(ep.pred("and", {P, QR, ep.atom("true")}));    // goal 4: and(P,QR,true)
 
         const expr* T_ = ep.atom("true");
         const expr* F_ = ep.atom("false");
@@ -26184,16 +26197,16 @@ void test_ridge() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("red")),   {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("green")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.atom("color"), ep.atom("blue")),  {}});  // idx 2
+        db.push_back(rule{ep.pred("color", {ep.atom("red")}), {}});  // idx 0
+        db.push_back(rule{ep.pred("color", {ep.atom("green")})});  // idx 1
+        db.push_back(rule{ep.pred("color", {ep.atom("blue")}), {}});  // idx 2
         // All 6 ordered diff pairs among {red, green, blue}
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("red")),   ep.atom("green")), {}});  // idx 3
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("red")),   ep.atom("blue")),  {}});  // idx 4
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("green")), ep.atom("red")),   {}});  // idx 5
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("green")), ep.atom("blue")),  {}});  // idx 6
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("blue")),  ep.atom("red")),   {}});  // idx 7
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("diff"), ep.atom("blue")),  ep.atom("green")), {}});  // idx 8
+        db.push_back(rule{ep.pred("diff", {ep.atom("red"), ep.atom("green")}), {}});  // idx 3
+        db.push_back(rule{ep.pred("diff", {ep.atom("red"),   ep.atom("blue")}),  {}});  // idx 4
+        db.push_back(rule{ep.pred("diff", {ep.atom("green"), ep.atom("red")}),   {}});  // idx 5
+        db.push_back(rule{ep.pred("diff", {ep.atom("green"), ep.atom("blue")}),  {}});  // idx 6
+        db.push_back(rule{ep.pred("diff", {ep.atom("blue"),  ep.atom("red")}),   {}});  // idx 7
+        db.push_back(rule{ep.pred("diff", {ep.atom("blue"), ep.atom("green")}), {}});  // idx 8
 
         const expr* A = ep.var(seq());
         const expr* B = ep.var(seq());
@@ -26201,14 +26214,14 @@ void test_ridge() {
         const expr* D = ep.var(seq());
 
         goals goals;
-        goals.push_back(ep.cons(ep.atom("color"), A));                 // goal 0: color(A)
-        goals.push_back(ep.cons(ep.atom("color"), B));                 // goal 1: color(B)
-        goals.push_back(ep.cons(ep.atom("color"), C));                 // goal 2: color(C)
-        goals.push_back(ep.cons(ep.atom("color"), D));                 // goal 3: color(D)
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), A), B));      // goal 4: diff(A,B)
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), A), C));      // goal 5: diff(A,C)
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), B), C));      // goal 6: diff(B,C)
-        goals.push_back(ep.cons(ep.cons(ep.atom("diff"), A), D));      // goal 7: diff(A,D)
+        goals.push_back(ep.pred("color", {A}));                 // goal 0: color(A)
+        goals.push_back(ep.pred("color", {B}));                 // goal 1: color(B)
+        goals.push_back(ep.pred("color", {C}));                 // goal 2: color(C)
+        goals.push_back(ep.pred("color", {D}));                 // goal 3: color(D)
+        goals.push_back(ep.pred("diff", {A, B}));      // goal 4: diff(A,B)
+        goals.push_back(ep.pred("diff", {A, C}));      // goal 5: diff(A,C)
+        goals.push_back(ep.pred("diff", {B, C}));      // goal 6: diff(B,C)
+        goals.push_back(ep.pred("diff", {A, D}));      // goal 7: diff(A,D)
 
         const expr* R_ = ep.atom("red");
         const expr* G_ = ep.atom("green");
@@ -26263,40 +26276,40 @@ void test_ridge() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("true")),  {}});  // idx 0
-        db.push_back(rule{ep.cons(ep.atom("bool"), ep.atom("false")), {}});  // idx 1
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("not"), ep.atom("true")),  ep.atom("false")), {}});  // idx 2
-        db.push_back(rule{ep.cons(ep.cons(ep.atom("not"), ep.atom("false")), ep.atom("true")),  {}});  // idx 3
+        db.push_back(rule{ep.pred("bool", {ep.atom("true")}), {}});  // idx 0
+        db.push_back(rule{ep.pred("bool", {ep.atom("false")})});  // idx 1
+        db.push_back(rule{ep.pred("not", {ep.atom("true"),  ep.atom("false")}), {}});  // idx 2
+        db.push_back(rule{ep.pred("not", {ep.atom("false"), ep.atom("true")}),  {}});  // idx 3
         // or(true, X, true) :- bool(X).
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("or"), ep.atom("true")), X), ep.atom("true")),
-                {ep.cons(ep.atom("bool"), X)}
+                ep.pred("or", {ep.atom("true"), X, ep.atom("true")}),
+                {ep.pred("bool", {X})}
             });  // idx 4
         }
         // or(false, X, X) :- bool(X).
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("or"), ep.atom("false")), X), X),
-                {ep.cons(ep.atom("bool"), X)}
+                ep.pred("or", {ep.atom("false"), X, X}),
+                {ep.pred("bool", {X})}
             });  // idx 5
         }
         // and(true, X, X) :- bool(X).
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("and"), ep.atom("true")), X), X),
-                {ep.cons(ep.atom("bool"), X)}
+                ep.pred("and", {ep.atom("true"), X, X}),
+                {ep.pred("bool", {X})}
             });  // idx 6
         }
         // and(false, X, false) :- bool(X).
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("and"), ep.atom("false")), X), ep.atom("false")),
-                {ep.cons(ep.atom("bool"), X)}
+                ep.pred("and", {ep.atom("false"), X, ep.atom("false")}),
+                {ep.pred("bool", {X})}
             });  // idx 7
         }
 
@@ -26314,17 +26327,17 @@ void test_ridge() {
         const expr* PQ_RS = ep.var(seq());   // (P∨Q) ∧ (R∨S)
 
         goals goals;
-        goals.push_back(ep.cons(ep.atom("bool"), P));                                               // goal  0: bool(P)
-        goals.push_back(ep.cons(ep.atom("bool"), Q));                                               // goal  1: bool(Q)
-        goals.push_back(ep.cons(ep.atom("bool"), R));                                               // goal  2: bool(R)
-        goals.push_back(ep.cons(ep.atom("bool"), S));                                               // goal  3: bool(S)
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("or"),  P),  Q),  PQ));                    // goal  4: or(P,Q,PQ)
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("or"),  R),  S),  RS));                    // goal  5: or(R,S,RS)
-        goals.push_back(ep.cons(ep.cons(ep.atom("not"), P), NP));                                   // goal  6: not(P,NP)
-        goals.push_back(ep.cons(ep.cons(ep.atom("not"), R), NR));                                   // goal  7: not(R,NR)
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("or"),  NP), NR), NPR));                   // goal  8: or(NP,NR,NPR)
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("and"), PQ), RS),  PQ_RS));                // goal  9: and(PQ,RS,PQ_RS)
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("and"), PQ_RS), NPR), ep.atom("true")));   // goal 10: and(PQ_RS,NPR,true)
+        goals.push_back(ep.pred("bool", {P}));                                               // goal  0: bool(P)
+        goals.push_back(ep.pred("bool", {Q}));                                               // goal  1: bool(Q)
+        goals.push_back(ep.pred("bool", {R}));                                               // goal  2: bool(R)
+        goals.push_back(ep.pred("bool", {S}));                                               // goal  3: bool(S)
+        goals.push_back(ep.pred("or", {P, Q, PQ}));                    // goal  4: or(P,Q,PQ)
+        goals.push_back(ep.pred("or", {R, S, RS}));                    // goal  5: or(R,S,RS)
+        goals.push_back(ep.pred("not", {P, NP}));                                   // goal  6: not(P,NP)
+        goals.push_back(ep.pred("not", {R, NR}));                                   // goal  7: not(R,NR)
+        goals.push_back(ep.pred("or", {NP, NR, NPR}));                   // goal  8: or(NP,NR,NPR)
+        goals.push_back(ep.pred("and", {PQ, RS, PQ_RS}));                // goal  9: and(PQ,RS,PQ_RS)
+        goals.push_back(ep.pred("and", {PQ_RS, NPR, ep.atom("true")}));   // goal 10: and(PQ_RS,NPR,true)
 
         const expr* T_ = ep.atom("true");
         const expr* F_ = ep.atom("false");
@@ -26378,23 +26391,23 @@ void test_ridge() {
 
         // Build the Peano numeral for n: suc^n(zero)
         auto peano = [&](int n) -> const expr* {
-            const expr* result = ep.atom("zero");
+            const expr* result = ep.pred("zero", {});
             for (int i = 0; i < n; ++i)
-                result = ep.cons(ep.atom("suc"), result);
+                result = ep.pred("suc", {result});
             return result;
         };
 
         database db;
 
         // idx 0: nat(zero).
-        db.push_back(rule{ep.cons(ep.atom("nat"), ep.atom("zero")), {}});
+        db.push_back(rule{ep.pred("nat", {ep.atom("zero")})});
 
         // idx 1: nat(suc(X)) :- nat(X).
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.atom("nat"), ep.cons(ep.atom("suc"), X)),
-                {ep.cons(ep.atom("nat"), X)}
+                ep.pred("nat", {ep.cons(ep.atom("suc"), X)}),
+                {ep.pred("nat", {X})}
             });
         }
 
@@ -26402,8 +26415,8 @@ void test_ridge() {
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.atom("lt"), ep.atom("zero")), ep.cons(ep.atom("suc"), X)),
-                {ep.cons(ep.atom("nat"), X)}
+                ep.pred("lt", {ep.atom("zero"), ep.pred("suc", {X})}),
+                {ep.pred("nat", {X})}
             });
         }
 
@@ -26412,8 +26425,8 @@ void test_ridge() {
             const expr* X = ep.var(seq());
             const expr* Y = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.atom("lt"), ep.cons(ep.atom("suc"), X)), ep.cons(ep.atom("suc"), Y)),
-                {ep.cons(ep.cons(ep.atom("lt"), X), Y)}
+                ep.pred("lt", {ep.cons(ep.atom("suc"), X), ep.pred("suc", {Y})}),
+                {ep.pred("lt", {X, Y})}
             });
         }
 
@@ -26421,7 +26434,7 @@ void test_ridge() {
         const expr* seven = peano(7);
 
         goals goals;
-        goals.push_back(ep.cons(ep.cons(ep.atom("lt"), N), seven));  // goal 0: lt(N, seven)
+        goals.push_back(ep.pred("lt", {N, seven}));  // goal 0: lt(N, seven)
 
         // All 7 Peano naturals strictly less than 7
         std::set<solution> expected = {
@@ -26466,23 +26479,23 @@ void test_ridge() {
         sequencer seq(t);
 
         auto peano = [&](int n) -> const expr* {
-            const expr* r = ep.atom("zero");
+            const expr* r = ep.pred("zero", {});
             for (int i = 0; i < n; ++i)
-                r = ep.cons(ep.atom("suc"), r);
+                r = ep.pred("suc", {r});
             return r;
         };
 
         database db;
 
         // idx 0: nat(zero).
-        db.push_back(rule{ep.cons(ep.atom("nat"), ep.atom("zero")), {}});
+        db.push_back(rule{ep.pred("nat", {ep.atom("zero")})});
 
         // idx 1: nat(suc(X)) :- nat(X).
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.atom("nat"), ep.cons(ep.atom("suc"), X)),
-                {ep.cons(ep.atom("nat"), X)}
+                ep.pred("nat", {ep.cons(ep.atom("suc"), X)}),
+                {ep.pred("nat", {X})}
             });
         }
 
@@ -26490,8 +26503,8 @@ void test_ridge() {
         {
             const expr* Y = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("add"), ep.atom("zero")), Y), Y),
-                {ep.cons(ep.atom("nat"), Y)}
+                ep.pred("add", {ep.atom("zero"), Y, Y}),
+                {ep.pred("nat", {Y})}
             });
         }
 
@@ -26501,8 +26514,8 @@ void test_ridge() {
             const expr* Y = ep.var(seq());
             const expr* Z = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("add"), ep.cons(ep.atom("suc"), X)), Y), ep.cons(ep.atom("suc"), Z)),
-                {ep.cons(ep.cons(ep.cons(ep.atom("add"), X), Y), Z)}
+                ep.pred("add", {ep.cons(ep.atom("suc"), X), Y, ep.pred("suc", {Z})}),
+                {ep.pred("add", {X, Y, Z})}
             });
         }
 
@@ -26510,8 +26523,8 @@ void test_ridge() {
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.atom("lt"), ep.atom("zero")), ep.cons(ep.atom("suc"), X)),
-                {ep.cons(ep.atom("nat"), X)}
+                ep.pred("lt", {ep.atom("zero"), ep.pred("suc", {X})}),
+                {ep.pred("nat", {X})}
             });
         }
 
@@ -26520,8 +26533,8 @@ void test_ridge() {
             const expr* X = ep.var(seq());
             const expr* Y = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.atom("lt"), ep.cons(ep.atom("suc"), X)), ep.cons(ep.atom("suc"), Y)),
-                {ep.cons(ep.cons(ep.atom("lt"), X), Y)}
+                ep.pred("lt", {ep.cons(ep.atom("suc"), X), ep.pred("suc", {Y})}),
+                {ep.pred("lt", {X, Y})}
             });
         }
 
@@ -26531,8 +26544,8 @@ void test_ridge() {
         const expr* ten = peano(10);
 
         goals goals;
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("add"), X), Y), S));  // goal 0: add(X, Y, S)
-        goals.push_back(ep.cons(ep.cons(ep.atom("lt"), S), ten));              // goal 1: lt(S, ten)
+        goals.push_back(ep.pred("add", {X, Y, S}));  // goal 0: add(X, Y, S)
+        goals.push_back(ep.pred("lt", {S, ten}));              // goal 1: lt(S, ten)
 
         // All 55 pairs (x, y) with x + y < 10
         std::set<solution> expected;
@@ -26570,23 +26583,23 @@ void test_ridge() {
         sequencer seq(t);
 
         auto peano = [&](int n) -> const expr* {
-            const expr* r = ep.atom("zero");
+            const expr* r = ep.pred("zero", {});
             for (int i = 0; i < n; ++i)
-                r = ep.cons(ep.atom("suc"), r);
+                r = ep.pred("suc", {r});
             return r;
         };
 
         database db;
 
         // idx 0: nat(zero).
-        db.push_back(rule{ep.cons(ep.atom("nat"), ep.atom("zero")), {}});
+        db.push_back(rule{ep.pred("nat", {ep.atom("zero")})});
 
         // idx 1: nat(suc(X)) :- nat(X).
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.atom("nat"), ep.cons(ep.atom("suc"), X)),
-                {ep.cons(ep.atom("nat"), X)}
+                ep.pred("nat", {ep.cons(ep.atom("suc"), X)}),
+                {ep.pred("nat", {X})}
             });
         }
 
@@ -26594,8 +26607,8 @@ void test_ridge() {
         {
             const expr* Y = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("add"), ep.atom("zero")), Y), Y),
-                {ep.cons(ep.atom("nat"), Y)}
+                ep.pred("add", {ep.atom("zero"), Y, Y}),
+                {ep.pred("nat", {Y})}
             });
         }
 
@@ -26605,8 +26618,8 @@ void test_ridge() {
             const expr* Y = ep.var(seq());
             const expr* Z = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("add"), ep.cons(ep.atom("suc"), X)), Y), ep.cons(ep.atom("suc"), Z)),
-                {ep.cons(ep.cons(ep.cons(ep.atom("add"), X), Y), Z)}
+                ep.pred("add", {ep.cons(ep.atom("suc"), X), Y, ep.pred("suc", {Z})}),
+                {ep.pred("add", {X, Y, Z})}
             });
         }
 
@@ -26615,7 +26628,7 @@ void test_ridge() {
         const expr* ten = peano(10);
 
         goals goals;
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("add"), X), Y), ten));  // goal 0: add(X, Y, ten)
+        goals.push_back(ep.pred("add", {X, Y, ten}));  // goal 0: add(X, Y, ten)
 
         // All 11 pairs (x, y) with x + y = 10
         std::set<solution> expected;
@@ -26655,23 +26668,23 @@ void test_ridge() {
         sequencer seq(t);
 
         auto peano = [&](int n) -> const expr* {
-            const expr* r = ep.atom("zero");
+            const expr* r = ep.pred("zero", {});
             for (int i = 0; i < n; ++i)
-                r = ep.cons(ep.atom("suc"), r);
+                r = ep.pred("suc", {r});
             return r;
         };
 
         database db;
 
         // idx 0: nat(zero).
-        db.push_back(rule{ep.cons(ep.atom("nat"), ep.atom("zero")), {}});
+        db.push_back(rule{ep.pred("nat", {ep.atom("zero")})});
 
         // idx 1: nat(suc(X)) :- nat(X).
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.atom("nat"), ep.cons(ep.atom("suc"), X)),
-                {ep.cons(ep.atom("nat"), X)}
+                ep.pred("nat", {ep.cons(ep.atom("suc"), X)}),
+                {ep.pred("nat", {X})}
             });
         }
 
@@ -26679,8 +26692,8 @@ void test_ridge() {
         {
             const expr* Y = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("add"), ep.atom("zero")), Y), Y),
-                {ep.cons(ep.atom("nat"), Y)}
+                ep.pred("add", {ep.atom("zero"), Y, Y}),
+                {ep.pred("nat", {Y})}
             });
         }
 
@@ -26690,8 +26703,8 @@ void test_ridge() {
             const expr* Y = ep.var(seq());
             const expr* Z = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("add"), ep.cons(ep.atom("suc"), X)), Y), ep.cons(ep.atom("suc"), Z)),
-                {ep.cons(ep.cons(ep.cons(ep.atom("add"), X), Y), Z)}
+                ep.pred("add", {ep.cons(ep.atom("suc"), X), Y, ep.pred("suc", {Z})}),
+                {ep.pred("add", {X, Y, Z})}
             });
         }
 
@@ -26699,8 +26712,8 @@ void test_ridge() {
         {
             const expr* Y = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("mul"), ep.atom("zero")), Y), ep.atom("zero")),
-                {ep.cons(ep.atom("nat"), Y)}
+                ep.pred("mul", {ep.atom("zero"), Y, ep.atom("zero")}),
+                {ep.pred("nat", {Y})}
             });
         }
 
@@ -26711,10 +26724,10 @@ void test_ridge() {
             const expr* Z = ep.var(seq());
             const expr* W = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("mul"), ep.cons(ep.atom("suc"), X)), Y), Z),
+                ep.pred("mul", {ep.cons(ep.atom("suc"), X), Y, Z}),
                 {
-                    ep.cons(ep.cons(ep.cons(ep.atom("mul"), X), Y), W),
-                    ep.cons(ep.cons(ep.cons(ep.atom("add"), W), Y), Z)
+                    ep.pred("mul", {X, Y, W}),
+                    ep.pred("add", {W, Y, Z})
                 }
             });
         }
@@ -26724,7 +26737,7 @@ void test_ridge() {
         const expr* eight = peano(8);
 
         goals goals;
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("mul"), X), Y), eight));  // goal 0: mul(X, Y, eight)
+        goals.push_back(ep.pred("mul", {X, Y, eight}));  // goal 0: mul(X, Y, eight)
 
         // All 4 factor pairs of 8
         std::set<solution> expected = {
@@ -26758,29 +26771,29 @@ void test_ridge() {
         sequencer seq(t);
 
         auto peano = [&](int n) -> const expr* {
-            const expr* r = ep.atom("zero");
+            const expr* r = ep.pred("zero", {});
             for (int i = 0; i < n; ++i)
-                r = ep.cons(ep.atom("suc"), r);
+                r = ep.pred("suc", {r});
             return r;
         };
 
         database db;
 
-        db.push_back(rule{ep.cons(ep.atom("nat"), ep.atom("zero")), {}});
+        db.push_back(rule{ep.pred("nat", {ep.atom("zero")})});
 
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.atom("nat"), ep.cons(ep.atom("suc"), X)),
-                {ep.cons(ep.atom("nat"), X)}
+                ep.pred("nat", {ep.cons(ep.atom("suc"), X)}),
+                {ep.pred("nat", {X})}
             });
         }
 
         {
             const expr* Y = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("add"), ep.atom("zero")), Y), Y),
-                {ep.cons(ep.atom("nat"), Y)}
+                ep.pred("add", {ep.atom("zero"), Y, Y}),
+                {ep.pred("nat", {Y})}
             });
         }
 
@@ -26789,16 +26802,16 @@ void test_ridge() {
             const expr* Y = ep.var(seq());
             const expr* Z = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("add"), ep.cons(ep.atom("suc"), X)), Y), ep.cons(ep.atom("suc"), Z)),
-                {ep.cons(ep.cons(ep.cons(ep.atom("add"), X), Y), Z)}
+                ep.pred("add", {ep.cons(ep.atom("suc"), X), Y, ep.pred("suc", {Z})}),
+                {ep.pred("add", {X, Y, Z})}
             });
         }
 
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.atom("lt"), ep.atom("zero")), ep.cons(ep.atom("suc"), X)),
-                {ep.cons(ep.atom("nat"), X)}
+                ep.pred("lt", {ep.atom("zero"), ep.pred("suc", {X})}),
+                {ep.pred("nat", {X})}
             });
         }
 
@@ -26806,8 +26819,8 @@ void test_ridge() {
             const expr* X = ep.var(seq());
             const expr* Y = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.atom("lt"), ep.cons(ep.atom("suc"), X)), ep.cons(ep.atom("suc"), Y)),
-                {ep.cons(ep.cons(ep.atom("lt"), X), Y)}
+                ep.pred("lt", {ep.cons(ep.atom("suc"), X), ep.pred("suc", {Y})}),
+                {ep.pred("lt", {X, Y})}
             });
         }
 
@@ -26819,10 +26832,10 @@ void test_ridge() {
         const expr* B = peano(4);
 
         goals goals;
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("add"), X), Y), S));
-        goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("add"), X), Z), T));
-        goals.push_back(ep.cons(ep.cons(ep.atom("lt"), S), B));
-        goals.push_back(ep.cons(ep.cons(ep.atom("lt"), T), B));
+        goals.push_back(ep.pred("add", {X, Y, S}));
+        goals.push_back(ep.pred("add", {X, Z, T}));
+        goals.push_back(ep.pred("lt", {S, B}));
+        goals.push_back(ep.pred("lt", {T, B}));
 
         std::set<solution> expected;
         for (int x = 0; x < 4; ++x)
@@ -26855,33 +26868,33 @@ void test_ridge() {
         sequencer seq(t);
 
         auto peano = [&](int n) -> const expr* {
-            const expr* r = ep.atom("zero");
+            const expr* r = ep.pred("zero", {});
             for (int i = 0; i < n; ++i)
-                r = ep.cons(ep.atom("suc"), r);
+                r = ep.pred("suc", {r});
             return r;
         };
 
         auto B = [&](const expr* L, const expr* R) -> const expr* {
-            return ep.cons(ep.cons(ep.atom("bin"), L), R);
+            return ep.pred("bin", {L, R});
         };
 
         database db;
 
-        db.push_back(rule{ep.cons(ep.atom("nat"), ep.atom("zero")), {}});
+        db.push_back(rule{ep.pred("nat", {ep.atom("zero")})});
 
         {
             const expr* X = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.atom("nat"), ep.cons(ep.atom("suc"), X)),
-                {ep.cons(ep.atom("nat"), X)}
+                ep.pred("nat", {ep.cons(ep.atom("suc"), X)}),
+                {ep.pred("nat", {X})}
             });
         }
 
         {
             const expr* Y = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("add"), ep.atom("zero")), Y), Y),
-                {ep.cons(ep.atom("nat"), Y)}
+                ep.pred("add", {ep.atom("zero"), Y, Y}),
+                {ep.pred("nat", {Y})}
             });
         }
 
@@ -26890,28 +26903,28 @@ void test_ridge() {
             const expr* Y = ep.var(seq());
             const expr* Z = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.cons(ep.cons(ep.atom("add"), ep.cons(ep.atom("suc"), X)), Y), ep.cons(ep.atom("suc"), Z)),
-                {ep.cons(ep.cons(ep.cons(ep.atom("add"), X), Y), Z)}
+                ep.pred("add", {ep.cons(ep.atom("suc"), X), Y, ep.pred("suc", {Z})}),
+                {ep.pred("add", {X, Y, Z})}
             });
         }
 
-        db.push_back(rule{ep.cons(ep.atom("wf"), ep.atom("nil")), {}});
+        db.push_back(rule{ep.pred("wf", {ep.atom("nil")})});
 
         {
             const expr* L = ep.var(seq());
             const expr* R = ep.var(seq());
             db.push_back(rule{
-                ep.cons(ep.atom("wf"), ep.cons(ep.cons(ep.atom("bin"), L), R)),
+                ep.pred("wf", {ep.pred("bin", {L, R})}),
                 {
-                    ep.cons(ep.atom("wf"), L),
-                    ep.cons(ep.atom("wf"), R),
+                    ep.pred("wf", {L}),
+                    ep.pred("wf", {R}),
                 }
             });
         }
 
         db.push_back(rule{
-            ep.cons(ep.cons(ep.atom("nodes"), ep.atom("nil")), ep.atom("zero")),
-            {},
+            ep.pred("nodes", {ep.atom("nil"), ep.atom("zero")}),
+            {}
         });
 
         {
@@ -26923,17 +26936,17 @@ void test_ridge() {
             const expr* Tmp = ep.var(seq());
             const expr* one = peano(1);
             db.push_back(rule{
-                ep.cons(ep.cons(ep.atom("nodes"), ep.cons(ep.cons(ep.atom("bin"), L), R)), S),
+                ep.pred("nodes", {ep.pred("bin", {L, R}), S}),
                 {
-                    ep.cons(ep.cons(ep.atom("nodes"), L), NL),
-                    ep.cons(ep.cons(ep.atom("nodes"), R), NR),
-                    ep.cons(ep.cons(ep.cons(ep.atom("add"), NL), NR), Tmp),
-                    ep.cons(ep.cons(ep.cons(ep.atom("add"), one), Tmp), S),
+                    ep.pred("nodes", {L, NL}),
+                    ep.pred("nodes", {R, NR}),
+                    ep.pred("add", {NL, NR, Tmp}),
+                    ep.pred("add", {one, Tmp, S}),
                 }
             });
         }
 
-        const expr* N  = ep.atom("nil");
+        const expr* N  = ep.pred("nil", {});
         const expr* s1 = B(N, N);                 // 1 node
         const expr* s2_left_chain  = B(N, s1);    // 2 nodes (spine left)
         const expr* s2_right_chain = B(s1, N);    // 2 nodes (spine right)
@@ -26966,8 +26979,8 @@ void test_ridge() {
         const expr* five = peano(5);
 
         goals goals;
-        goals.push_back(ep.cons(ep.atom("wf"), T));
-        goals.push_back(ep.cons(ep.cons(ep.atom("nodes"), T), five));
+        goals.push_back(ep.pred("wf", {T}));
+        goals.push_back(ep.pred("nodes", {T, five}));
 
         // Expected trees must be interned *before* ridge's ctor runs: ridge() calls t.push(),
         // and the first sim_one() does t.pop() for that frame, undoing all expr_pool inserts

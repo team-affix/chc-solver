@@ -1,19 +1,27 @@
 #include "../hpp/candidate_store.hpp"
-    
+
+// Return the predicate name of an expression if it is a pred, else nullopt.
+static const std::string* pred_name(const expr* e) {
+    if (const expr::pred* p = std::get_if<expr::pred>(&e->content))
+        return &p->name;
+    return nullptr;
+}
+
 candidate_store::candidate_store(
     const database& db,
     const goals& goals,
     lineage_pool& lp) :
     frontier<std::vector<size_t>>(db, lp),
     db(db),
-    lp(lp)
+    lp(lp),
+    pi(db)
 {
-    // make the initial candidates
-    for (int i = 0; i < db.size(); ++i)
-        initial_candidates.push_back(i);
-    // make the initial members
-    for (int i = 0; i < goals.size(); ++i)
-        insert(lp.goal(nullptr, i), initial_candidates);
+    for (int i = 0; i < goals.size(); ++i) {
+        const std::string* name = pred_name(goals.at(i));
+        const std::vector<size_t>& candidates =
+            name ? pi.at(*name) : predicate_index::empty_candidates;
+        insert(lp.goal(nullptr, i), candidates);
+    }
 }
 
 size_t candidate_store::eliminate(const std::function<bool(const goal_lineage*, size_t)>& pred) {
@@ -55,9 +63,11 @@ bool candidate_store::conflicted() const {
         [](const auto& e) { return e.second.size() == 0; });
 }
 
-std::vector<std::vector<size_t>> candidate_store::expand(const std::vector<size_t>& candidates, const rule& r) {
+std::vector<std::vector<size_t>> candidate_store::expand(const std::vector<size_t>&, const rule& r) {
     std::vector<std::vector<size_t>> result;
-    for (int i = 0; i < r.body.size(); ++i)
-        result.push_back(initial_candidates);
+    for (const expr* body_lit : r.body) {
+        const std::string* name = pred_name(body_lit);
+        result.push_back(name ? pi.at(*name) : predicate_index::empty_candidates);
+    }
     return result;
 }

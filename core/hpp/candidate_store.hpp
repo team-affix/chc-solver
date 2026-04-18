@@ -3,6 +3,7 @@
 
 #include "lineage.hpp"
 #include "frontier.hpp"
+#include "predicate_index.hpp"
 #include "defs.hpp"
 
 struct candidate_store : frontier<std::vector<size_t>> {
@@ -22,7 +23,7 @@ private:
     const database& db;
     lineage_pool& lp;
 
-    std::vector<size_t> initial_candidates;
+    predicate_index pi;
 };
 
 #endif
