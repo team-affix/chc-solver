@@ -17917,7 +17917,7 @@ void test_sim_derive_one() {
     }
 }
 
-void test_sim_on_resolve() {
+void test_sim_resolve() {
     // Test 1: Resolve goal with fact (empty body) → gs and cs become empty
     {
         trail t;
@@ -27111,7 +27111,7 @@ void unit_test_main() {
     TEST(test_sim_solved);
     TEST(test_sim_conflicted);
     TEST(test_sim_derive_one);
-    TEST(test_sim_on_resolve);
+    TEST(test_sim_resolve);
     TEST(test_sim);
     TEST(test_ridge_sim_constructor);
     TEST(test_ridge_sim_decide_one);
