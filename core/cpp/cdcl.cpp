@@ -9,9 +9,9 @@ cdcl::cdcl() :
 
 }
 
-void cdcl::learn(const decisions& ds) {
-    // 1. reduce the decision store to a set of leaf resolutions
-    avoidance av = reduce(ds);
+void cdcl::learn(const lemma& l) {
+    // 1. copy the already-trimmed resolutions into a local avoidance
+    avoidance av = l.get_resolutions();
 
     // 2. get a new id for the avoidance
     size_t id = next_avoidance_id++;
@@ -82,45 +82,6 @@ void cdcl::erase(size_t id) {
     
     // 3. remove the avoidance from the store
     avoidances.erase(id);
-}
-
-avoidance cdcl::reduce(const decisions& ds) {
-    // 1. create sets of visited lineages
-    std::set<const resolution_lineage*> visited;
-
-    // 2. create result avoidance
-    avoidance av = ds;
-
-    // 3. iterate over ds, and for each entry, remove all ancestors from av
-    for (const resolution_lineage* rl : ds)
-        remove_ancestors(rl, av, visited);
-
-    // 4. return the avoidance
-    return av;
-    
-}
-
-void cdcl::remove_ancestors(const resolution_lineage* rl, avoidance& av, std::set<const resolution_lineage*>& visited) {
-    while (rl) {
-        // 1. get grandparent
-        //    (double-dereference safe because resolutions should
-        //     never have null parent goals)
-        const resolution_lineage* grandparent = rl->parent->parent;
-        
-        // 2. check grandparent visited
-        if (visited.contains(grandparent))
-            break;
-
-        // 3. visit grandparent
-        visited.insert(grandparent);
-
-        // 4. remove grandparent from av
-        av.erase(grandparent);
-
-        // 5. rl = grandparent
-        rl = grandparent;
-
-    }
 }
 
 bool cdcl::refuted() const {
