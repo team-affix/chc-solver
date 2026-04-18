@@ -70,6 +70,13 @@
   - Comprehensive assertions catch bugs that might otherwise go unnoticed
 - **Example:** When testing `expr_pool` with nested frames, assert `pool.exprs.size()` after every operation, even if you're not 100% sure what the size should be. If it fails, investigate why, then fix the assertion to match the correct behavior.
 
+## Building and Debugging
+
+- To build for testing, use the fast debug variants: `make core_debug_fast`, `make cli_debug_fast`, etc.
+- To run the test binary: `./build/core_debug_fast`
+- Always prefer the `_fast` targets over plain debug targets to avoid timeouts during iterative testing.
+- The fast variants compile with `-O3` and `-DDEBUG`, giving full member access for assertions while still running quickly.
+
 ## Communication
 
 - Do not be overly verbose or use unnecessary superlatives
