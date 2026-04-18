@@ -8,14 +8,7 @@
 
 struct horizon_sim : sim {
     horizon_sim(
-        size_t,
-        const database&,
-        const goals&,
-        trail&,
-        sequencer&,
-        expr_pool&,
-        bind_map&,
-        lineage_pool&,
+        sim_context,
         cdcl,
         monte_carlo::simulation<mcts_decider::choice, std::mt19937>&
     );

@@ -17438,10 +17438,8 @@ void test_cdcl_eliminated() {
 // ---------------------------------------------------------------------------
 
 struct sim_mock : sim {
-    sim_mock(size_t mr, const database& db_, const goals& gs_,
-             trail& t_, sequencer& seq_, expr_pool& ep_,
-             bind_map& bm_, lineage_pool& lp_, cdcl c_)
-        : sim(mr, db_, gs_, t_, seq_, ep_, bm_, lp_, c_) {}
+    sim_mock(sim_context ctx, cdcl c_)
+        : sim(ctx, c_) {}
 
     std::vector<const resolution_lineage*> scripted;
     size_t decision_idx   = 0;
@@ -17464,7 +17462,7 @@ void test_sim_constructor() {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db; goals gs; cdcl c;
-        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{10, db, gs, t, seq, ep, bm, lp}, c);
 
         assert(s.max_resolutions == 10);
         assert(s.rs.size() == 0);
@@ -17486,7 +17484,7 @@ void test_sim_constructor() {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db; goals gs; cdcl c;
-        sim_mock s(0, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{0, db, gs, t, seq, ep, bm, lp}, c);
 
         assert(s.max_resolutions == 0);
         assert(s.rs.size() == 0);
@@ -17498,7 +17496,7 @@ void test_sim_constructor() {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db; goals gs; cdcl c;
-        sim_mock s(SIZE_MAX, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{SIZE_MAX, db, gs, t, seq, ep, bm, lp}, c);
 
         assert(s.max_resolutions == SIZE_MAX);
     }
@@ -17512,7 +17510,7 @@ void test_sim_constructor() {
         goals gs;
         gs.push_back(ep.atom("p"));
         cdcl c;
-        sim_mock s(100, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{100, db, gs, t, seq, ep, bm, lp}, c);
 
         assert(s.gs.size() == 1);
         assert(s.cs.size() == 1);
@@ -17531,7 +17529,7 @@ void test_sim_constructor() {
         avoidance av; av.insert(rl);
         c.learn(av);
         size_t c_size = c.avoidances.size();
-        sim_mock s(100, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{100, db, gs, t, seq, ep, bm, lp}, c);
 
         assert(&s.c != &c);
         assert(c.avoidances.size() == c_size);   // original unchanged
@@ -17545,7 +17543,7 @@ void test_sim_get_resolutions() {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db; goals gs; cdcl c;
-        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{10, db, gs, t, seq, ep, bm, lp}, c);
 
         const resolutions& r = s.get_resolutions();
         assert(r.size() == 0);
@@ -17557,7 +17555,7 @@ void test_sim_get_resolutions() {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db; goals gs; cdcl c;
-        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{10, db, gs, t, seq, ep, bm, lp}, c);
 
         const resolutions& r = s.get_resolutions();
         const goal_lineage* gl = lp.goal(nullptr, 0);
@@ -17575,7 +17573,7 @@ void test_sim_get_decisions() {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db; goals gs; cdcl c;
-        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{10, db, gs, t, seq, ep, bm, lp}, c);
 
         const decisions& d = s.get_decisions();
         assert(d.size() == 0);
@@ -17587,7 +17585,7 @@ void test_sim_get_decisions() {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db; goals gs; cdcl c;
-        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{10, db, gs, t, seq, ep, bm, lp}, c);
 
         const decisions& d = s.get_decisions();
         const goal_lineage* gl = lp.goal(nullptr, 0);
@@ -17614,7 +17612,7 @@ void test_sim_solved() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(sim.solved() == true);
         assert(sim.gs.empty() == true);
@@ -17636,7 +17634,7 @@ void test_sim_solved() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(sim.solved() == false);
         assert(sim.gs.size() == 1);
@@ -17660,7 +17658,7 @@ void test_sim_solved() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(sim.solved() == false);
         assert(sim.gs.size() == 2);
@@ -17684,7 +17682,7 @@ void test_sim_conflicted() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(sim.conflicted() == false);
         // Rule 0 still present for gl0
@@ -17708,7 +17706,7 @@ void test_sim_conflicted() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(sim.conflicted() == true);
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
@@ -17731,7 +17729,7 @@ void test_sim_conflicted() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(sim.conflicted() == true);
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
@@ -17763,7 +17761,7 @@ void test_sim_conflicted() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(sim.conflicted() == true);
         assert(sim.cs.at(gl0).empty());
@@ -17786,7 +17784,7 @@ void test_sim_conflicted() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(sim.conflicted() == true);
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
@@ -17810,7 +17808,7 @@ void test_sim_conflicted() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(sim.conflicted() == true);
         assert(sim.conflicted() == true); // second call same result
@@ -17835,7 +17833,7 @@ void test_sim_derive_one() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(sim.derive_one() == nullptr);
     }
@@ -17856,7 +17854,7 @@ void test_sim_derive_one() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* expected = lp.resolution(gl0, 0);
@@ -17879,7 +17877,7 @@ void test_sim_derive_one() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(sim.derive_one() == nullptr);
     }
@@ -17901,7 +17899,7 @@ void test_sim_derive_one() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         // Initially, derive_one() returns nullptr
         assert(sim.derive_one() == nullptr);
@@ -17935,7 +17933,7 @@ void test_sim_on_resolve() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(sim.gs.size() == 1);
         assert(sim.cs.size() == 1);
@@ -17965,7 +17963,7 @@ void test_sim_on_resolve() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl = lp.resolution(gl0, 0);
@@ -18015,7 +18013,7 @@ void test_sim_on_resolve() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         // on_resolve(rl0) calls sim.c.constrain(rl0) → {rl0, rl1} reduces to {rl1} → rl1 eliminated
         sim.on_resolve(rl0);
@@ -18038,7 +18036,7 @@ void test_sim_on_resolve() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(sim.gs.size() == 1);
 
@@ -18063,7 +18061,7 @@ void test_sim() {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db; goals gs; cdcl c;
-        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{10, db, gs, t, seq, ep, bm, lp}, c);
 
         bool result = s();
         assert(result == true);
@@ -18082,7 +18080,7 @@ void test_sim() {
         goals gs;
         gs.push_back(ep.atom("p"));            // goal is p: no matching rule
         cdcl c;
-        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{10, db, gs, t, seq, ep, bm, lp}, c);
 
         bool result = s();
         assert(result == false);
@@ -18101,7 +18099,7 @@ void test_sim() {
         goals gs;
         gs.push_back(ep.atom("p"));
         cdcl c;
-        sim_mock s(0, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{0, db, gs, t, seq, ep, bm, lp}, c);
 
         bool result = s();
         assert(result == false);  // solved() = false: p still pending
@@ -18120,7 +18118,7 @@ void test_sim() {
         goals gs;
         gs.push_back(ep.atom("p"));
         cdcl c;
-        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{10, db, gs, t, seq, ep, bm, lp}, c);
 
         bool result = s();
         assert(result == true);
@@ -18144,7 +18142,7 @@ void test_sim() {
         cdcl c;
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{10, db, gs, t, seq, ep, bm, lp}, c);
         s.scripted.push_back(lp.resolution(gl0, 1));  // choose rule 1 (the fact)
 
         bool result = s();
@@ -18167,7 +18165,7 @@ void test_sim() {
         goals gs;
         gs.push_back(ep.atom("p"));
         cdcl c;
-        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{10, db, gs, t, seq, ep, bm, lp}, c);
 
         bool result = s();
         assert(result == true);
@@ -18188,7 +18186,7 @@ void test_sim() {
         goals gs;
         gs.push_back(ep.atom("p"));
         cdcl c;
-        sim_mock s(2, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{2, db, gs, t, seq, ep, bm, lp}, c);
 
         bool result = s();
         // Resolves p→q then q→r (2 steps hits cap); r still pending → not solved
@@ -18214,7 +18212,7 @@ void test_sim() {
         cdcl c;
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
-        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{10, db, gs, t, seq, ep, bm, lp}, c);
         s.scripted.push_back(lp.resolution(gl0, 1));  // decide: choose rule 1
 
         bool result = s();
@@ -18238,7 +18236,7 @@ void test_sim() {
         goals gs;
         gs.push_back(ep.atom("p"));
         cdcl c;
-        sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+        sim_mock s(sim_context{10, db, gs, t, seq, ep, bm, lp}, c);
 
         s();
 
@@ -18271,7 +18269,7 @@ void test_ridge_sim_constructor() {
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
         {
-            ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+            ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
             
             // Verify max_resolutions stored
             assert(simulation.max_resolutions == 100);
@@ -18330,7 +18328,7 @@ void test_ridge_sim_constructor() {
 
         {
 
-            ridge_sim simulation(50, db, goals, t, seq, ep, bm, lp, c, sim);
+            ridge_sim simulation(sim_context{50, db, goals, t, seq, ep, bm, lp}, c, sim);
             
             // CRITICAL: Goal added to goal_store with index 0
             assert(simulation.gs.size() == 1);
@@ -18383,7 +18381,7 @@ void test_ridge_sim_constructor() {
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
 
-        ridge_sim simulation(200, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{200, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // CRITICAL: Three goals added with indices 0, 1, 2
         assert(simulation.gs.size() == 3);
@@ -18464,7 +18462,7 @@ void test_ridge_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // CRITICAL: All goals added to goal_store
         assert(simulation.gs.size() == 3);
@@ -18526,7 +18524,7 @@ void test_ridge_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Goal added
         assert(simulation.gs.size() == 1);
@@ -18579,7 +18577,7 @@ void test_ridge_sim_constructor() {
         resolution_store rs;
         decision_store ds;
         size_t c_size_before = c.avoidances.size();
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // CRITICAL: cdcl is passed by value — simulation.c is a separate copy
         assert(&simulation.c != &c);
@@ -18621,7 +18619,7 @@ void test_ridge_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(75, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{75, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // CRITICAL: 4 goals added
         assert(simulation.gs.size() == 4);
@@ -18729,7 +18727,7 @@ void test_ridge_sim_constructor() {
         resolution_store rs;
         decision_store ds;
         size_t c_size_before = c.avoidances.size();
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // CRITICAL: cdcl copy has same content but is a distinct object
         assert(&simulation.c != &c);
@@ -18763,7 +18761,7 @@ void test_ridge_sim_constructor() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Verify copier references match (via members)
         assert(&simulation.cp.expr_pool_ref == &ep);
@@ -18793,21 +18791,21 @@ void test_ridge_sim_constructor() {
         {
             resolution_store rs;
             decision_store ds;
-            ridge_sim sim1(1, db, goals, t, seq, ep, bm, lp, c, sim);
+            ridge_sim sim1(sim_context{1, db, goals, t, seq, ep, bm, lp}, c, sim);
             assert(sim1.max_resolutions == 1);
         }
         
         {
             resolution_store rs;
             decision_store ds;
-            ridge_sim sim2(1000, db, goals, t, seq, ep, bm, lp, c, sim);
+            ridge_sim sim2(sim_context{1000, db, goals, t, seq, ep, bm, lp}, c, sim);
             assert(sim2.max_resolutions == 1000);
         }
         
         {
             resolution_store rs;
             decision_store ds;
-            ridge_sim sim3(999999, db, goals, t, seq, ep, bm, lp, c, sim);
+            ridge_sim sim3(sim_context{999999, db, goals, t, seq, ep, bm, lp}, c, sim);
             assert(sim3.max_resolutions == 999999);
         }
     }
@@ -18832,7 +18830,7 @@ void test_ridge_sim_constructor() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
     }
     
     // Test 14: Verify component initialization with non-empty avoidance store
@@ -18865,7 +18863,7 @@ void test_ridge_sim_constructor() {
         resolution_store rs;
         decision_store ds;
         size_t c_size_before = c.avoidances.size();
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // CRITICAL: Verify cdcl copy is distinct and has expected content
         assert(&simulation.c != &c);
@@ -18901,7 +18899,7 @@ void test_ridge_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(500, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{500, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // CRITICAL: 5 goals added
         assert(simulation.gs.size() == 5);
@@ -18951,7 +18949,7 @@ void test_ridge_sim_constructor() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // CRITICAL: Verify ordering - idx matches position in list
         const goal_lineage* gl_idx0 = nullptr;
@@ -19017,7 +19015,7 @@ void test_ridge_sim_decide_one() {
         root.m_children[mcts_decider::choice{gl0}].m_children[mcts_decider::choice{(size_t)1}].m_visits = 5;
         root.m_children[mcts_decider::choice{gl0}].m_children[mcts_decider::choice{(size_t)1}].m_value  = 1.0;
 
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         const resolution_lineage* result = sim.decide_one();
         assert(result != nullptr);
@@ -19061,7 +19059,7 @@ void test_ridge_sim_decide_one() {
         root.m_children[mcts_decider::choice{gl1}].m_children[mcts_decider::choice{(size_t)1}].m_visits = 5;
         root.m_children[mcts_decider::choice{gl1}].m_children[mcts_decider::choice{(size_t)1}].m_value  = 80.0;
 
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         const resolution_lineage* result = sim.decide_one();
         assert(result != nullptr);
@@ -19087,7 +19085,7 @@ void test_ridge_sim_decide_one() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
 
-        ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        ridge_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* result = sim.decide_one();
@@ -19115,7 +19113,7 @@ void test_horizon_sim_reward() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        horizon_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(near(sim.reward(), 0.0));
         assert(near(sim.ws.cgw, 0.0));
@@ -19137,7 +19135,7 @@ void test_horizon_sim_reward() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        horizon_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(near(sim.reward(), 0.0));
     }
@@ -19160,7 +19158,7 @@ void test_horizon_sim_reward() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        horizon_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(near(sim.reward(), 0.0));
     }
@@ -19179,7 +19177,7 @@ void test_horizon_sim_reward() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        horizon_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         sim.ws.cgw = 0.5;
         assert(near(sim.reward(), 0.5));
@@ -19214,7 +19212,7 @@ void test_horizon_sim_on_resolve() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        horizon_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(near(sim.reward(), 0.0));
 
@@ -19246,7 +19244,7 @@ void test_horizon_sim_on_resolve() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        horizon_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl = lp.resolution(gl0, 0);
@@ -19281,7 +19279,7 @@ void test_horizon_sim_on_resolve() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        horizon_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         assert(near(sim.reward(), 0.0));
 
@@ -19311,7 +19309,7 @@ void test_horizon_sim_on_resolve() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        horizon_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const goal_lineage* gl1 = lp.goal(nullptr, 1);
@@ -19340,7 +19338,7 @@ void test_horizon_sim_on_resolve() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        horizon_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl = lp.resolution(gl0, 0);
@@ -19375,7 +19373,7 @@ void test_horizon_sim_on_resolve() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        horizon_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl_p = lp.resolution(gl0, 0); // resolve p with rule 0
@@ -19411,7 +19409,7 @@ void test_horizon_sim_on_resolve() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        horizon_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl_p = lp.resolution(gl0, 0);
@@ -19452,7 +19450,7 @@ void test_horizon_sim_on_resolve() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        horizon_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl_p = lp.resolution(gl0, 0);
@@ -19495,7 +19493,7 @@ void test_horizon_sim_on_resolve() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        horizon_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         const goal_lineage* gl_a = lp.goal(nullptr, 0);
         const resolution_lineage* rl_a = lp.resolution(gl_a, 0);
@@ -19533,7 +19531,7 @@ void test_horizon_sim_on_resolve() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        horizon_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl_p = lp.resolution(gl0, 0);
@@ -19579,7 +19577,7 @@ void test_horizon_sim_on_resolve() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        horizon_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const goal_lineage* gl1 = lp.goal(nullptr, 1);
@@ -19632,7 +19630,7 @@ void test_horizon_sim_on_resolve() {
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
-        horizon_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
+        horizon_sim sim(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, mc);
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl_p = lp.resolution(gl0, 0);
@@ -19678,7 +19676,7 @@ void test_horizon() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         std::optional<resolution_store> soln;
         soln = std::nullopt;
@@ -19709,7 +19707,7 @@ void test_horizon() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         std::optional<resolution_store> soln;
         bool result = solver(soln);
@@ -19752,7 +19750,7 @@ void test_horizon() {
         goals.push_back(ep.cons(ep.atom("answer"), X));
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         std::optional<resolution_store> soln;
         bool result = solver(soln);
@@ -19784,7 +19782,7 @@ void test_horizon() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         std::optional<resolution_store> soln;
         bool result;
@@ -19818,7 +19816,7 @@ void test_horizon() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         std::optional<resolution_store> soln;
 
@@ -19863,7 +19861,7 @@ void test_horizon() {
         goals.push_back(ep.cons(ep.atom("is_b"), X));  // goal 1: is_b(X)
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
         std::optional<resolution_store> soln;
@@ -19920,7 +19918,7 @@ void test_horizon() {
         goals.push_back(ep.cons(ep.cons(ep.atom("parent"), X), ep.atom("alice")));
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
         std::optional<resolution_store> soln;
@@ -19992,7 +19990,7 @@ void test_horizon() {
         goals.push_back(ep.cons(ep.cons(ep.atom("diff"), B), C));  // goal 4: diff(B, C)
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
         std::optional<resolution_store> soln;
@@ -20091,7 +20089,7 @@ void test_horizon() {
         goals.push_back(ep.cons(ep.cons(ep.atom("grandparent"), G), ep.atom("dave")));
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
         std::optional<resolution_store> soln;
@@ -20263,7 +20261,7 @@ void test_horizon() {
         };
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -20352,7 +20350,7 @@ void test_horizon() {
         };
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -20423,7 +20421,7 @@ void test_horizon() {
         };
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -20492,7 +20490,7 @@ void test_horizon() {
         };
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -20558,7 +20556,7 @@ void test_horizon() {
         };
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -20658,7 +20656,7 @@ void test_horizon() {
         };
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -20706,7 +20704,7 @@ void test_horizon() {
         goals.push_back(ep.cons(ep.atom("p"), ep.atom("a")));
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         next_until_refuted(solver, {}, [&]() -> solution { return {}; });
     }
@@ -20750,7 +20748,7 @@ void test_horizon() {
         };
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -20803,7 +20801,7 @@ void test_horizon() {
         };
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -20879,7 +20877,7 @@ void test_horizon() {
         assert(expected.size() == 6);
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -21007,7 +21005,7 @@ void test_horizon() {
         assert(expected.size() == 12);
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -21169,7 +21167,7 @@ void test_horizon() {
         };
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -21323,7 +21321,7 @@ void test_horizon() {
         const std::set<solution> expected = {{d3, d3, d2, d2, d3, d3, d2}};
 
         std::mt19937 rng(42);
-        horizon solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        horizon solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
         normalizer norm(ep, bm);
 
         enumerate_all_solutions(solver, expected, [&]() -> solution {
@@ -21363,7 +21361,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Execute simulation
         bool result = simulation();
@@ -21420,7 +21418,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -21466,7 +21464,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -21527,7 +21525,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -21583,7 +21581,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -21646,7 +21644,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // CRITICAL: Pre-populate MCTS tree to force decision on (gl0, idx 1)
         // Get the actual goal pointer from simulation.gs
@@ -21721,7 +21719,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Note: With only 1 candidate per goal, both will be unit props
         
@@ -21779,7 +21777,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Pre-populate MCTS to force decision on idx 0
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -21855,7 +21853,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(3, db, goals, t, seq, ep, bm, lp, c, sim);  // Max 3 resolutions!
+        ridge_sim simulation(sim_context{3, db, goals, t, seq, ep, bm, lp}, c, sim);  // Max 3 resolutions!
         
         bool result = simulation();
         
@@ -21925,7 +21923,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Before execution, verify 5 candidates added
         const goal_lineage* gl0_for_check = lp.goal(nullptr, 0);
@@ -21996,7 +21994,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Verify avoidance copied
         assert(simulation.c.avoidances.size() == 1);
@@ -22056,7 +22054,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Pre-populate MCTS to force decision on (gl0, idx 0)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -22125,7 +22123,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -22171,7 +22169,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -22235,7 +22233,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -22292,7 +22290,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -22356,7 +22354,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -22418,7 +22416,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Force decision on idx 0
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -22485,7 +22483,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Initial state: 20 candidates
         const goal_lineage* gl0_for_check = lp.goal(nullptr, 0);
@@ -22537,7 +22535,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -22604,7 +22602,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Force decision on idx 1
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -22676,7 +22674,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -22734,7 +22732,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Force first decision on (gl0, idx 0)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -22825,7 +22823,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -22889,7 +22887,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Verify 30 candidates initially
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
@@ -22953,7 +22951,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Pre-populate MCTS to force decision on idx 0
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -23015,7 +23013,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -23059,7 +23057,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -23104,7 +23102,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -23146,7 +23144,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -23206,7 +23204,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -23273,7 +23271,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -23340,7 +23338,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -23385,7 +23383,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -23473,7 +23471,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -23550,7 +23548,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Force decision on idx 0 (q path -> apple)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -23617,7 +23615,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Pre-populate MCTS to force base case (idx 2)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -23704,7 +23702,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -23776,7 +23774,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -23825,7 +23823,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Pre-populate MCTS to force idx 2 (NOT idx 0, to prove MCTS works!)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -23888,7 +23886,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -23940,7 +23938,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -23999,7 +23997,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -24068,7 +24066,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -24156,7 +24154,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -24231,7 +24229,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -24281,7 +24279,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Pre-populate MCTS to force idx 1 (bob)
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -24355,7 +24353,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -24413,7 +24411,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -24468,7 +24466,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(5, db, goals, t, seq, ep, bm, lp, c, sim);  // Low max_resolutions
+        ridge_sim simulation(sim_context{5, db, goals, t, seq, ep, bm, lp}, c, sim);  // Low max_resolutions
         
         bool result = simulation();
         
@@ -24512,7 +24510,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -24554,7 +24552,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -24621,7 +24619,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -24711,7 +24709,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -24761,7 +24759,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -24808,7 +24806,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -24864,7 +24862,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(5, db, goals, t, seq, ep, bm, lp, c, sim);  // Max 5
+        ridge_sim simulation(sim_context{5, db, goals, t, seq, ep, bm, lp}, c, sim);  // Max 5
         
         bool result = simulation();
         
@@ -24904,7 +24902,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -24953,7 +24951,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         // Pre-populate MCTS to force idx 2
         const goal_lineage* gl0_for_mcts = lp.goal(nullptr, 0);
@@ -25018,7 +25016,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -25062,7 +25060,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -25124,7 +25122,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -25164,7 +25162,7 @@ void test_ridge_sim() {
         
         resolution_store rs;
         decision_store ds;
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -25206,7 +25204,7 @@ void test_ridge_sim() {
         std::mt19937 rng(42);
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> sim(root, 1.414, rng);
         
-        ridge_sim simulation(100, db, goals, t, seq, ep, bm, lp, c, sim);
+        ridge_sim simulation(sim_context{100, db, goals, t, seq, ep, bm, lp}, c, sim);
         
         bool result = simulation();
         
@@ -25249,7 +25247,7 @@ void test_ridge_constructor_and_destructor() {
         assert(depth_before == 1);
 
         {
-            ridge solver(db, goals, t, seq, bm, 100, 1.414, rng);
+            ridge solver(solver_context{db, goals, t, seq, bm, 100}, mcts_params{1.414, rng});
 
             // CRITICAL: Constructor pushes one trail frame
             assert(t.depth() == depth_before + 1);
@@ -25289,7 +25287,7 @@ void test_ridge_constructor_and_destructor() {
         assert(t.depth() == 0);
 
         {
-            ridge solver(db, goals, t, seq, bm, 1, 0.0, rng);
+            ridge solver(solver_context{db, goals, t, seq, bm, 1}, mcts_params{0.0, rng});
 
             // CRITICAL: Depth goes 0 → 1
             assert(t.depth() == 1);
@@ -25318,7 +25316,7 @@ void test_ridge_constructor_and_destructor() {
         size_t boundary_size_before = t.frame_boundary_stack.size();
 
         {
-            ridge solver(db, goals, t, seq, bm, 100, 1.414, rng);
+            ridge solver(solver_context{db, goals, t, seq, bm, 100}, mcts_params{1.414, rng});
 
             // CRITICAL: Only a frame boundary is pushed, not any undo action
             assert(t.undo_stack.size() == undo_size_before);
@@ -25346,7 +25344,7 @@ void test_ridge_constructor_and_destructor() {
         bool undone = false;
 
         {
-            ridge solver(db, goals, t, seq, bm, 100, 1.414, rng);
+            ridge solver(solver_context{db, goals, t, seq, bm, 100}, mcts_params{1.414, rng});
 
             // Log an undo action into the a01's frame
             t.log([&undone]() { undone = true; });
@@ -25375,7 +25373,7 @@ void test_ridge_constructor_and_destructor() {
         t.log([&caller_undone]() { caller_undone = true; });
 
         {
-            ridge solver(db, goals, t, seq, bm, 100, 1.414, rng);
+            ridge solver(solver_context{db, goals, t, seq, bm, 100}, mcts_params{1.414, rng});
 
             // a01's frame is stacked on top of the caller's frame
             assert(t.depth() == 2);
@@ -25407,7 +25405,7 @@ void test_ridge_constructor_and_destructor() {
         size_t depth_before = t.depth();
 
         {
-            ridge solver(db, goals, t, seq, bm, 50, 1.0, rng);
+            ridge solver(solver_context{db, goals, t, seq, bm, 50}, mcts_params{1.0, rng});
 
             // CRITICAL: Frame pushed
             assert(t.depth() == depth_before + 1);
@@ -25448,7 +25446,7 @@ void test_ridge() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         std::optional<resolution_store> soln;
         soln = std::nullopt;
@@ -25478,7 +25476,7 @@ void test_ridge() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         std::optional<resolution_store> soln;
         bool result = solver(soln);
@@ -25518,7 +25516,7 @@ void test_ridge() {
         goals.push_back(ep.cons(ep.atom("answer"), X));
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         std::optional<resolution_store> soln;
         bool result = solver(soln);
@@ -25553,7 +25551,7 @@ void test_ridge() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         std::optional<resolution_store> soln;
         bool result;
@@ -25588,7 +25586,7 @@ void test_ridge() {
         goals.push_back(ep.atom("a"));
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         std::optional<resolution_store> soln;
 
@@ -25640,7 +25638,7 @@ void test_ridge() {
         goals.push_back(ep.cons(ep.atom("is_b"), X));  // goal 1: is_b(X)
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
         std::optional<resolution_store> soln;
@@ -25704,7 +25702,7 @@ void test_ridge() {
         goals.push_back(ep.cons(ep.cons(ep.atom("parent"), X), ep.atom("alice")));
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
         std::optional<resolution_store> soln;
@@ -25800,7 +25798,7 @@ void test_ridge() {
         goals.push_back(ep.cons(ep.cons(ep.cons(ep.atom("or"), NP), Q), ep.atom("true")));
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
         std::optional<resolution_store> soln;
@@ -25891,7 +25889,7 @@ void test_ridge() {
         goals.push_back(ep.cons(ep.cons(ep.atom("diff"), B), C));      // goal 4: diff(B, C)
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
         std::optional<resolution_store> soln;
@@ -26055,7 +26053,7 @@ void test_ridge() {
         };
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -26154,7 +26152,7 @@ void test_ridge() {
         };
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -26225,7 +26223,7 @@ void test_ridge() {
         };
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -26339,7 +26337,7 @@ void test_ridge() {
         };
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -26435,7 +26433,7 @@ void test_ridge() {
         };
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -26542,7 +26540,7 @@ void test_ridge() {
         assert(expected.size() == 55);
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -26624,7 +26622,7 @@ void test_ridge() {
         assert(expected.size() == 11);
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -26735,7 +26733,7 @@ void test_ridge() {
         };
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -26832,7 +26830,7 @@ void test_ridge() {
         assert(expected.size() == 30);
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 1000, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 1000}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
@@ -27026,7 +27024,7 @@ void test_ridge() {
         assert(expected.size() == 42);
 
         std::mt19937 rng(42);
-        ridge solver(db, goals, t, seq, bm, 70, 1.414, rng);
+        ridge solver(solver_context{db, goals, t, seq, bm, 70}, mcts_params{1.414, rng});
 
         normalizer norm(ep, bm);
 
