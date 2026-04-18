@@ -25,7 +25,7 @@ struct expr_pool {
     const expr* atom(const std::string&);
     const expr* var(uint32_t);
     const expr* cons(const expr*, const expr*);
-    const expr::pred* pred(const std::string&, std::vector<const expr*>);
+    const expr* pred(const std::string&, std::vector<const expr*>);
     const expr* import(const expr*);
     size_t size() const;
 #ifndef DEBUG

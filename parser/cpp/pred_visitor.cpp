@@ -13,5 +13,5 @@ antlrcpp::Any pred_visitor::visitPred(CHCParser::PredContext* ctx) {
     for (auto* e : ctx->expr())
         args.push_back(std::any_cast<const expr*>(ev.visitExpr(e)));
 
-    return pool.pred(name, std::move(args));
+    return &std::get<expr::pred>(pool.pred(name, std::move(args))->content);
 }

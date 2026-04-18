@@ -17,8 +17,8 @@ const expr* expr_pool::cons(const expr* l, const expr* r) {
     return intern(expr{expr::cons{l, r}});
 }
 
-const expr::pred* expr_pool::pred(const std::string& name, std::vector<const expr*> args) {
-    return &std::get<expr::pred>(intern(expr{expr::pred{name, std::move(args)}})->content);
+const expr* expr_pool::pred(const std::string& name, std::vector<const expr*> args) {
+    return intern(expr{expr::pred{name, std::move(args)}});
 }
 
 const expr* expr_pool::import(const expr* e) {
