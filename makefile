@@ -40,6 +40,9 @@ CLI_BIN            = build/cli
 CLI_DEBUG_BIN      = build/cli_debug
 CLI_DEBUG_FAST_BIN = build/cli_debug_fast
 
+CLI_TEST_DEBUG_BIN      = build/cli_test_debug
+CLI_TEST_DEBUG_FAST_BIN = build/cli_test_debug_fast
+
 CLI_SRC = $(wildcard cli/cpp/*.cpp)
 
 # ==============================================================================
@@ -76,10 +79,12 @@ PARSER_DEBUG_FAST_OBJ = \
 # ==============================================================================
 
 .PHONY: all core core_debug core_debug_fast parser parser_debug parser_debug_fast \
-        cli cli_debug cli_debug_fast clean
+        cli cli_debug cli_debug_fast \
+        cli_test_debug cli_test_debug_fast clean
 
 all: core core_debug core_debug_fast parser parser_debug parser_debug_fast \
-     cli cli_debug cli_debug_fast
+     cli cli_debug cli_debug_fast \
+     cli_test_debug cli_test_debug_fast
 
 core: $(CORE_LIB)
 
@@ -145,6 +150,26 @@ cli_debug_fast: $(CORE_DEBUG_FAST_LIB)
 	    -Lbuild -latlas_parser_debug_fast -latlas_core_debug_fast \
 	    -L$(ANTLR4_LIB) -lantlr4-runtime \
 	    -o $(CLI_DEBUG_FAST_BIN)
+
+cli_test_debug: $(CORE_DEBUG_LIB)
+	$(MAKE) parser/generated
+	$(MAKE) $(PARSER_DEBUG_LIB)
+	$(CXX) $(CXXFLAGS) -DDEBUG -g \
+	    -I$(ANTLR4_INC) -I$(CLI11_INC) \
+	    cli/test/main.cpp $(CLI_SRC) \
+	    -Lbuild -latlas_parser_debug -latlas_core_debug \
+	    -L$(ANTLR4_LIB) -lantlr4-runtime \
+	    -o $(CLI_TEST_DEBUG_BIN)
+
+cli_test_debug_fast: $(CORE_DEBUG_FAST_LIB)
+	$(MAKE) parser/generated
+	$(MAKE) $(PARSER_DEBUG_FAST_LIB)
+	$(CXX) $(CXXFLAGS) -DDEBUG -g -O3 \
+	    -I$(ANTLR4_INC) -I$(CLI11_INC) \
+	    cli/test/main.cpp $(CLI_SRC) \
+	    -Lbuild -latlas_parser_debug_fast -latlas_core_debug_fast \
+	    -L$(ANTLR4_LIB) -lantlr4-runtime \
+	    -o $(CLI_TEST_DEBUG_FAST_BIN)
 
 clean:
 	rm -rf build
