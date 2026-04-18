@@ -3,7 +3,6 @@
 
 #include <cstdint>
 #include <cstddef>
-#include <optional>
 #include <random>
 #include "solver_cli_interface.hpp"
 #include "../../core/hpp/horizon.hpp"
@@ -19,7 +18,6 @@ struct horizon_command_handler : solver_cli_interface {
 protected:
     bool advance() override;
 private:
-    std::optional<resolutions> res;
     std::mt19937 rng;
     horizon solver;
 };
