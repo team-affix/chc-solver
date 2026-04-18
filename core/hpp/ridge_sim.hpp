@@ -8,7 +8,6 @@
 struct ridge_sim : sim {
     ridge_sim(
         sim_context,
-        cdcl,
         monte_carlo::simulation<mcts_decider::choice, std::mt19937>&
     );
 #ifndef DEBUG

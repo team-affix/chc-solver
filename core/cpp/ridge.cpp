@@ -12,7 +12,7 @@ ridge::ridge(solver_context ctx, mcts_params mp) :
 std::unique_ptr<sim> ridge::construct_sim() {
     mc_sim.emplace(root, exploration_constant, rng);
     return std::make_unique<ridge_sim>(
-        sim_context{max_resolutions, db, gl, t, vars, ep, bm, lp}, c, *mc_sim);
+        sim_context{max_resolutions, db, gl, t, vars, ep, bm, lp, c}, *mc_sim);
 }
 
 void ridge::terminate(sim& s) {

@@ -2,10 +2,9 @@
 
 ridge_sim::ridge_sim(
     sim_context ctx,
-    cdcl c,
     monte_carlo::simulation<mcts_decider::choice, std::mt19937>& mc_sim
 ) :
-    sim(ctx, c),
+    sim(ctx),
     dec(cs, mc_sim)
 {}
 

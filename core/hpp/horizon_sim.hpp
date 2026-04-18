@@ -9,7 +9,6 @@
 struct horizon_sim : sim {
     horizon_sim(
         sim_context,
-        cdcl,
         monte_carlo::simulation<mcts_decider::choice, std::mt19937>&
     );
     double reward();

@@ -1,13 +1,13 @@
 #include "../hpp/sim.hpp"
 
-sim::sim(sim_context ctx, cdcl c) :
+sim::sim(sim_context ctx) :
     db(ctx.db),
     t(ctx.t),
     lp(ctx.lp),
     gs(ctx.db, ctx.gl, ctx.t, cp, ctx.bm, ctx.lp),
     cs(ctx.db, ctx.gl, ctx.lp),
     cp(ctx.vars, ctx.ep),
-    c(c),
+    c(ctx.c),
     max_resolutions(ctx.max_resolutions),
     rs({}),
     ds({})

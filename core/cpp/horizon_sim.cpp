@@ -2,10 +2,9 @@
 
 horizon_sim::horizon_sim(
     sim_context ctx,
-    cdcl c,
     monte_carlo::simulation<mcts_decider::choice, std::mt19937>& mc_sim
 ) :
-    sim(ctx, c),
+    sim(ctx),
     dec(cs, mc_sim),
     ws(ctx.gl, ctx.db, ctx.lp)
 {}

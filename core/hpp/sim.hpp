@@ -17,10 +17,11 @@ struct sim_context {
     expr_pool&      ep;
     bind_map&       bm;
     lineage_pool&   lp;
+    cdcl            c;
 };
 
 struct sim {
-    sim(sim_context, cdcl);
+    sim(sim_context);
     bool operator()();
     const resolutions& get_resolutions() const;
     const decisions& get_decisions() const;
