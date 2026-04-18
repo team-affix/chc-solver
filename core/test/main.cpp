@@ -17943,6 +17943,9 @@ void test_sim_resolve() {
         const resolution_lineage* rl = lp.resolution(gl0, 0);
         sim.resolve(rl);
 
+        // resolution recorded in rs
+        assert(sim.rs.size() == 1);
+        assert(sim.rs.count(rl) == 1);
         // Empty body → no sub-goals added; both stores now empty
         assert(sim.gs.empty());
         assert(sim.cs.empty());
@@ -17970,6 +17973,9 @@ void test_sim_resolve() {
         const resolution_lineage* rl = lp.resolution(gl0, 0);
         sim.resolve(rl);
 
+        // resolution recorded in rs
+        assert(sim.rs.size() == 1);
+        assert(sim.rs.count(rl) == 1);
         // p removed, q added as sub-goal
         assert(sim.gs.size() == 1);
         assert(!sim.gs.empty());
@@ -18018,10 +18024,12 @@ void test_sim_resolve() {
 
         // resolve(rl0) calls sim.c.constrain(rl0) → {rl0, rl1} reduces to {rl1} → rl1 eliminated
         sim.resolve(rl0);
+        assert(sim.rs.size() == 1);
+        assert(sim.rs.count(rl0) == 1);
         assert(sim.c.eliminated(rl1));
     }
 
-    // Test 4: resolve with two-level chain - verify gs and cs sizes at each step
+    // Test 4: resolve with two-level chain - verify gs, cs, and rs sizes at each step
     {
         trail t;
         t.push();
@@ -18040,11 +18048,14 @@ void test_sim_resolve() {
         ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
 
         assert(sim.gs.size() == 1);
+        assert(sim.rs.size() == 0);
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl = lp.resolution(gl0, 0);
         sim.resolve(rl);
 
+        assert(sim.rs.size() == 1);
+        assert(sim.rs.count(rl) == 1);
         // p removed; q and r added (body has 2 sub-goals)
         assert(sim.gs.size() == 2);
         assert(sim.cs.size() == 2);
