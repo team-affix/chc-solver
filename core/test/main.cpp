@@ -16467,279 +16467,9 @@ void test_cdcl_erase() {
     }
 }
 
-void test_cdcl_remove_ancestors() {
-    // Test 1: Root-level rl — grandparent is nullptr, av unchanged
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-
-        avoidance av;
-        av.insert(rl0);
-        std::set<const resolution_lineage*> visited;
-
-        cdcl::remove_ancestors(rl0, av, visited);
-
-        // No ancestors to remove
-        assert(av.size() == 1);
-        assert(av.count(rl0) == 1);
-        // nullptr visited to mark the root boundary
-        assert(visited.count(nullptr) == 1);
-    }
-
-    // Test 2: One-level chain — single ancestor removed
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const goal_lineage* g1 = lp.goal(rl0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-
-        avoidance av;
-        av.insert(rl0);
-        av.insert(rl1);
-        std::set<const resolution_lineage*> visited;
-
-        cdcl::remove_ancestors(rl1, av, visited);
-
-        // rl0 is ancestor of rl1 — removed; rl1 stays
-        assert(av.size() == 1);
-        assert(av.count(rl0) == 0);
-        assert(av.count(rl1) == 1);
-        assert(visited.count(rl0) == 1);
-        assert(visited.count(nullptr) == 1);
-    }
-
-    // Test 3: Two-level chain — both ancestors removed
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const goal_lineage* g1 = lp.goal(rl0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-        const goal_lineage* g2 = lp.goal(rl1, 0);
-        const resolution_lineage* rl2 = lp.resolution(g2, 0);
-
-        avoidance av;
-        av.insert(rl0);
-        av.insert(rl1);
-        av.insert(rl2);
-        std::set<const resolution_lineage*> visited;
-
-        cdcl::remove_ancestors(rl2, av, visited);
-
-        // Both ancestors removed; only leaf rl2 remains
-        assert(av.size() == 1);
-        assert(av.count(rl2) == 1);
-        assert(av.count(rl1) == 0);
-        assert(av.count(rl0) == 0);
-        assert(visited.count(rl1) == 1);
-        assert(visited.count(rl0) == 1);
-        assert(visited.count(nullptr) == 1);
-    }
-
-    // Test 4: Ancestor not in av — walk still completes correctly, av unchanged
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const goal_lineage* g1 = lp.goal(rl0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-
-        avoidance av;
-        av.insert(rl1); // rl0 NOT in av
-        std::set<const resolution_lineage*> visited;
-
-        cdcl::remove_ancestors(rl1, av, visited);
-
-        // rl0 was absent — no change to av, but walk still traversed it
-        assert(av.size() == 1);
-        assert(av.count(rl1) == 1);
-        assert(visited.count(rl0) == 1);
-    }
-
-    // Test 5: Pre-visited ancestor stops walk early — shared ancestor removed only once
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl_root = lp.resolution(g0, 0);
-        const goal_lineage* g1 = lp.goal(rl_root, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-        const goal_lineage* g2 = lp.goal(rl_root, 1);
-        const resolution_lineage* rl2 = lp.resolution(g2, 0);
-
-        avoidance av;
-        av.insert(rl_root);
-        av.insert(rl1);
-        av.insert(rl2);
-        std::set<const resolution_lineage*> visited;
-
-        // First call: rl1's ancestor (rl_root) removed and marked visited
-        cdcl::remove_ancestors(rl1, av, visited);
-        assert(av.count(rl_root) == 0);
-        assert(visited.count(rl_root) == 1);
-
-        // Second call: rl2's ancestor is also rl_root, but already visited → early break
-        cdcl::remove_ancestors(rl2, av, visited);
-
-        // Both leaves remain; shared ancestor not double-removed
-        assert(av.size() == 2);
-        assert(av.count(rl1) == 1);
-        assert(av.count(rl2) == 1);
-    }
-}
-
-void test_cdcl_reduce() {
-    // Test 1: Empty decision store → empty avoidance
-    {
-        decision_store ds;
-        avoidance av = cdcl::reduce(ds);
-        assert(av.empty());
-    }
-
-    // Test 2: Single root-level rl — no ancestors to strip, returned as-is
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-
-        decision_store ds;
-        ds.insert(rl0);
-        avoidance av = cdcl::reduce(ds);
-
-        assert(av.size() == 1);
-        assert(av.count(rl0) == 1);
-    }
-
-    // Test 3: Two unrelated root-level rls — both kept (no predecessor relationship)
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const goal_lineage* g1 = lp.goal(nullptr, 1);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-
-        decision_store ds;
-        ds.insert(rl0);
-        ds.insert(rl1);
-        avoidance av = cdcl::reduce(ds);
-
-        assert(av.size() == 2);
-        assert(av.count(rl0) == 1);
-        assert(av.count(rl1) == 1);
-    }
-
-    // Test 4: Two-element chain {rl0, rl1} — ancestor rl0 removed, leaf rl1 kept
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const goal_lineage* g1 = lp.goal(rl0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-
-        decision_store ds;
-        ds.insert(rl0);
-        ds.insert(rl1);
-        avoidance av = cdcl::reduce(ds);
-
-        assert(av.size() == 1);
-        assert(av.count(rl0) == 0);
-        assert(av.count(rl1) == 1);
-    }
-
-    // Test 5: Three-element chain {rl0, rl1, rl2} — only deepest leaf rl2 kept
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const goal_lineage* g1 = lp.goal(rl0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-        const goal_lineage* g2 = lp.goal(rl1, 0);
-        const resolution_lineage* rl2 = lp.resolution(g2, 0);
-
-        decision_store ds;
-        ds.insert(rl0);
-        ds.insert(rl1);
-        ds.insert(rl2);
-        avoidance av = cdcl::reduce(ds);
-
-        assert(av.size() == 1);
-        assert(av.count(rl2) == 1);
-        assert(av.count(rl1) == 0);
-        assert(av.count(rl0) == 0);
-    }
-
-    // Test 6: Two independent chains — each chain's leaf kept, ancestors stripped
-    {
-        lineage_pool lp;
-        // Chain A
-        const goal_lineage* ga0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rla0 = lp.resolution(ga0, 0);
-        const goal_lineage* ga1 = lp.goal(rla0, 0);
-        const resolution_lineage* rla1 = lp.resolution(ga1, 0);
-        // Chain B
-        const goal_lineage* gb0 = lp.goal(nullptr, 1);
-        const resolution_lineage* rlb0 = lp.resolution(gb0, 0);
-        const goal_lineage* gb1 = lp.goal(rlb0, 0);
-        const resolution_lineage* rlb1 = lp.resolution(gb1, 0);
-
-        decision_store ds;
-        ds.insert(rla0);
-        ds.insert(rla1);
-        ds.insert(rlb0);
-        ds.insert(rlb1);
-        avoidance av = cdcl::reduce(ds);
-
-        assert(av.size() == 2);
-        assert(av.count(rla1) == 1);
-        assert(av.count(rlb1) == 1);
-        assert(av.count(rla0) == 0);
-        assert(av.count(rlb0) == 0);
-    }
-
-    // Test 7: Two siblings share one ancestor — ancestor removed, both siblings kept
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const goal_lineage* g1 = lp.goal(rl0, 0); // first body goal of rl0
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-        const goal_lineage* g2 = lp.goal(rl0, 1); // second body goal of rl0
-        const resolution_lineage* rl2 = lp.resolution(g2, 0);
-
-        decision_store ds;
-        ds.insert(rl0);
-        ds.insert(rl1);
-        ds.insert(rl2);
-        avoidance av = cdcl::reduce(ds);
-
-        // rl0 is ancestor of both rl1 and rl2 — removed; both leaves kept
-        assert(av.size() == 2);
-        assert(av.count(rl1) == 1);
-        assert(av.count(rl2) == 1);
-        assert(av.count(rl0) == 0);
-    }
-
-    // Test 8: Only the leaf in ds, ancestors absent — leaf preserved unchanged
-    {
-        lineage_pool lp;
-        const goal_lineage* g0 = lp.goal(nullptr, 0);
-        const resolution_lineage* rl0 = lp.resolution(g0, 0);
-        const goal_lineage* g1 = lp.goal(rl0, 0);
-        const resolution_lineage* rl1 = lp.resolution(g1, 0);
-
-        decision_store ds;
-        ds.insert(rl1); // rl0 absent
-        avoidance av = cdcl::reduce(ds);
-
-        assert(av.size() == 1);
-        assert(av.count(rl1) == 1);
-    }
-}
-
 void test_cdcl_learn() {
     // Test 1: Learn two-element decision store — avoidances and watched_goals populated at id 0
-    //         (root-level rls have no ancestors, so reduce is a no-op; stored avoidance == input)
+    //         (root-level rls have no ancestors, so lemma is identical to input)
     {
         lineage_pool lp;
         cdcl c;
@@ -16753,7 +16483,7 @@ void test_cdcl_learn() {
         ds.insert(rl1);
         ds.insert(rl2);
 
-        c.learn(ds);
+        c.learn(lemma(ds));
 
         assert(c.avoidances.size() == 1);
         assert(c.avoidances.at(0) == ds);
@@ -16777,8 +16507,8 @@ void test_cdcl_learn() {
         decision_store ds2;
         ds2.insert(rl2);
 
-        c.learn(ds1);
-        c.learn(ds2);
+        c.learn(lemma(ds1));
+        c.learn(lemma(ds2));
 
         assert(c.avoidances.size() == 2);
         assert(c.avoidances.at(0) == ds1);
@@ -16792,7 +16522,7 @@ void test_cdcl_learn() {
         cdcl c;
 
         decision_store empty_ds;
-        c.learn(empty_ds);
+        c.learn(lemma(empty_ds));
 
         assert(c.is_refuted);
         assert(c.avoidances.size() == 1);
@@ -16810,7 +16540,7 @@ void test_cdcl_learn() {
         decision_store ds;
         ds.insert(rl1);
 
-        c.learn(ds);
+        c.learn(lemma(ds));
 
         assert(c.eliminated_resolutions.size() == 1);
         assert(c.eliminated_resolutions.count(rl1) == 1);
@@ -16831,8 +16561,8 @@ void test_cdcl_learn() {
         decision_store ds2;
         ds2.insert(rl2);
 
-        c.learn(ds1);
-        c.learn(ds2);
+        c.learn(lemma(ds1));
+        c.learn(lemma(ds2));
 
         // g1 watches both avoidances
         assert(c.watched_goals.at(g1).size() == 2);
@@ -16854,9 +16584,9 @@ void test_cdcl_learn() {
         ds.insert(rl0); // ancestor
         ds.insert(rl1); // leaf (successor of rl0)
 
-        c.learn(ds);
+        c.learn(lemma(ds));
 
-        // reduce() removes rl0; stored avoidance is {rl1} only
+        // lemma trims rl0; stored avoidance is {rl1} only
         assert(c.avoidances.size() == 1);
         assert(c.avoidances.at(0).size() == 1);
         assert(c.avoidances.at(0).count(rl1) == 1);
@@ -16884,9 +16614,9 @@ void test_cdcl_learn() {
         decision_store ds2; ds2.insert(rl2);
         decision_store ds3; ds3.insert(rl3);
 
-        c.learn(ds1);
-        c.learn(ds2);
-        c.learn(ds3);
+        c.learn(lemma(ds1));
+        c.learn(lemma(ds2));
+        c.learn(lemma(ds3));
 
         assert(c.avoidances.size() == 3);
         assert(c.avoidances.count(0) == 1);
@@ -16915,7 +16645,7 @@ void test_cdcl_learn() {
         decision_store ds;
         ds.insert(rl0);
         ds.insert(rl1);
-        c.learn(ds); // stored avoidance = {rl1}; g0 not watched
+        c.learn(lemma(ds)); // stored avoidance = {rl1}; g0 not watched
 
         // Constrain with a sibling of rl0 — g0 is not watched, so no avoidance is affected
         const resolution_lineage* rl0_alt = lp.resolution(g0, 1);
@@ -16940,8 +16670,8 @@ void test_cdcl_learn() {
         ds.insert(rl1);
         ds.insert(rl2);
 
-        c.learn(ds);
-        c.learn(ds);
+        c.learn(lemma(ds));
+        c.learn(lemma(ds));
 
         // Two distinct avoidance entries with the same content
         assert(c.avoidances.size() == 2);
@@ -16962,12 +16692,12 @@ void test_cdcl_learn() {
         const resolution_lineage* rl1 = lp.resolution(g1, 0);
 
         decision_store empty_ds;
-        c.learn(empty_ds); // triggers refutation
+        c.learn(lemma(empty_ds)); // triggers refutation
         assert(c.is_refuted);
 
         decision_store ds;
         ds.insert(rl1);
-        c.learn(ds); // additional learn after refutation
+        c.learn(lemma(ds)); // additional learn after refutation
 
         assert(c.is_refuted); // still refuted
         assert(c.avoidances.size() == 2);
@@ -16990,7 +16720,7 @@ void test_cdcl_learn() {
         ds.insert(rl1);
         ds.insert(rl2);
 
-        c.learn(ds);
+        c.learn(lemma(ds));
 
         // Only rl2 survives reduction
         assert(c.avoidances.at(0).size() == 1);
@@ -17018,7 +16748,7 @@ void test_cdcl_learn() {
 
         decision_store ds;
         ds.insert(rl1);
-        c.learn(ds); // singleton → rl1 eliminated, avoidance watched by g1
+        c.learn(lemma(ds)); // singleton → rl1 eliminated, avoidance watched by g1
 
         assert(c.eliminated_resolutions.count(rl1) == 1);
         assert(c.avoidances.size() == 1);
@@ -17059,8 +16789,8 @@ void test_cdcl_learn() {
         decision_store ds2; ds2.insert(rl2);
         decision_store ds3; ds3.insert(rl3);
 
-        c.learn(ds1); // avoidances = {0: {rl1}}
-        c.learn(ds2); // avoidances = {0: {rl1}, 1: {rl2}}
+        c.learn(lemma(ds1)); // avoidances = {0: {rl1}}
+        c.learn(lemma(ds2)); // avoidances = {0: {rl1}, 1: {rl2}}
 
         assert(c.avoidances.size() == 2);
 
@@ -17073,7 +16803,7 @@ void test_cdcl_learn() {
         assert(c.avoidances.at(1).count(rl2) == 1); // av1 intact
 
         // Third learn — must get a fresh id (2) and must NOT overwrite av1 at id 1
-        c.learn(ds3);
+        c.learn(lemma(ds3));
 
         assert(c.avoidances.size() == 2);                   // av1 + av2
         assert(c.avoidances.at(1).count(rl2) == 1);         // av1 untouched
@@ -17098,7 +16828,7 @@ void test_cdcl_constrain() {
         avoidance av;
         av.insert(rl1);
         av.insert(rl2);
-        c.learn(av);
+        c.learn(lemma(av));
 
         assert(c.avoidances.at(0).size() == 2);
         assert(c.eliminated_resolutions.empty());
@@ -17126,7 +16856,7 @@ void test_cdcl_constrain() {
 
         avoidance av;
         av.insert(rl1);
-        c.learn(av);
+        c.learn(lemma(av));
 
         // Singleton insert already marks rl1 eliminated
         assert(c.eliminated_resolutions.count(rl1) == 1);
@@ -17154,7 +16884,7 @@ void test_cdcl_constrain() {
         avoidance av;
         av.insert(rl1);
         av.insert(rl2);
-        c.learn(av);
+        c.learn(lemma(av));
 
         assert(c.avoidances.size() == 1);
         assert(c.watched_goals.at(g1).count(0) == 1);
@@ -17185,12 +16915,12 @@ void test_cdcl_constrain() {
         avoidance av0;
         av0.insert(rl1);
         av0.insert(rl2);
-        c.learn(av0);
+        c.learn(lemma(av0));
 
         // av1 = {rl3}: watched only by g2; constrain(rl1) does not touch g2-only avoidances
         avoidance av1;
         av1.insert(rl3);
-        c.learn(av1);
+        c.learn(lemma(av1));
 
         assert(c.avoidances.size() == 2);
 
@@ -17221,7 +16951,7 @@ void test_cdcl_constrain() {
         avoidance av;
         av.insert(rl1);
         av.insert(rl2);
-        c.learn(av);
+        c.learn(lemma(av));
 
         assert(c.watched_goals.at(g1).count(0) == 1);
         assert(c.watched_goals.at(g2).count(0) == 1);
@@ -17287,7 +17017,7 @@ void test_cdcl_constrain() {
         decision_store ds;
         ds.insert(rl1);
         ds.insert(rl2);
-        c.learn(ds); // av0 = {rl1, rl2}, watched by g1 and g2
+        c.learn(lemma(ds)); // av0 = {rl1, rl2}, watched by g1 and g2
 
         // Step 1: constrain(rl1) — reduces av0 to {rl2}; watched_goals[g1] goes stale
         c.constrain(rl1);
@@ -17318,7 +17048,7 @@ void test_cdcl_refuted() {
 
         avoidance av;
         av.insert(rl1);
-        c.learn(av);
+        c.learn(lemma(av));
 
         assert(!c.refuted());
     }
@@ -17328,7 +17058,7 @@ void test_cdcl_refuted() {
         cdcl c;
 
         avoidance empty_av;
-        c.learn(empty_av);
+        c.learn(lemma(empty_av));
 
         assert(c.refuted());
     }
@@ -17343,11 +17073,11 @@ void test_cdcl_refuted() {
 
         avoidance av;
         av.insert(rl1);
-        c.learn(av);
+        c.learn(lemma(av));
         assert(!c.refuted());
 
         avoidance empty_av;
-        c.learn(empty_av);
+        c.learn(lemma(empty_av));
         assert(c.refuted());
     }
 }
@@ -17366,7 +17096,7 @@ void test_cdcl_eliminated() {
         avoidance av;
         av.insert(rl1);
         av.insert(rl2);
-        c.learn(av);
+        c.learn(lemma(av));
 
         assert(!c.eliminated(rl1));
         assert(!c.eliminated(rl2));
@@ -17382,7 +17112,7 @@ void test_cdcl_eliminated() {
 
         avoidance av;
         av.insert(rl1);
-        c.learn(av);
+        c.learn(lemma(av));
 
         assert(c.eliminated(rl1));
     }
@@ -17399,7 +17129,7 @@ void test_cdcl_eliminated() {
 
         avoidance av;
         av.insert(rl1);
-        c.learn(av);
+        c.learn(lemma(av));
 
         // rl1 is eliminated (singleton), rl2 was never inserted
         assert(c.eliminated(rl1));
@@ -17419,7 +17149,7 @@ void test_cdcl_eliminated() {
         avoidance av;
         av.insert(rl1);
         av.insert(rl2);
-        c.learn(av);
+        c.learn(lemma(av));
 
         assert(!c.eliminated(rl1));
         assert(!c.eliminated(rl2));
@@ -17821,7 +17551,7 @@ void test_sim_constructor() {
         cdcl c;
         const resolution_lineage* rl = lp.resolution(lp.goal(nullptr, 0), 0);
         avoidance av; av.insert(rl);
-        c.learn(av);
+        c.learn(lemma(av));
         size_t c_size = c.avoidances.size();
         sim_mock s(100, db, gs, t, seq, ep, bm, lp, c);
 
@@ -18049,7 +17779,7 @@ void test_sim_conflicted() {
         cdcl c;
         avoidance av;
         av.insert(rl);
-        c.learn(av);
+        c.learn(lemma(av));
         assert(c.eliminated(rl));
 
         monte_carlo::tree_node<mcts_decider::choice> root;
@@ -18300,7 +18030,7 @@ void test_sim_on_resolve() {
         avoidance av;
         av.insert(rl0);
         av.insert(rl1);
-        c.learn(av);
+        c.learn(lemma(av));
         assert(!c.eliminated(rl0));
         assert(!c.eliminated(rl1));
 
@@ -18862,7 +18592,7 @@ void test_ridge_sim_constructor() {
         avoid1.insert(rl1);
         avoid1.insert(rl2);
         
-        c.learn(avoid1);
+        c.learn(lemma(avoid1));
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -19011,8 +18741,8 @@ void test_ridge_sim_constructor() {
         decision_store avoid2;
         avoid2.insert(rl3);
         
-        c.learn(avoid1);
-        c.learn(avoid2);
+        c.learn(lemma(avoid1));
+        c.learn(lemma(avoid2));
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -19148,7 +18878,7 @@ void test_ridge_sim_constructor() {
         decision_store avoid;
         avoid.insert(rl1);
         avoid.insert(rl2);
-        c.learn(avoid);
+        c.learn(lemma(avoid));
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -21813,7 +21543,7 @@ void test_ridge_sim() {
         avoid.insert(rl0_avoid);
         
         cdcl c;
-        c.learn(avoid);
+        c.learn(lemma(avoid));
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -22282,7 +22012,7 @@ void test_ridge_sim() {
         avoid.insert(rl_dummy);
         
         cdcl c;
-        c.learn(avoid);
+        c.learn(lemma(avoid));
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -22890,7 +22620,7 @@ void test_ridge_sim() {
         avoid.insert(rl_b_pre);
         
         cdcl c;
-        c.learn(avoid);
+        c.learn(lemma(avoid));
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -24641,7 +24371,7 @@ void test_ridge_sim() {
         decision_store avoidance;
         avoidance.insert(rl_avoid);
         cdcl c;
-        c.learn(avoidance);
+        c.learn(lemma(avoidance));
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -24994,8 +24724,8 @@ void test_ridge_sim() {
         avoidance2.insert(rl1);
         
         cdcl c;
-        c.learn(avoidance1);
-        c.learn(avoidance2);
+        c.learn(lemma(avoidance1));
+        c.learn(lemma(avoidance2));
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -25407,8 +25137,8 @@ void test_ridge_sim() {
         av2.insert(rl1);
         
         cdcl c;
-        c.learn(av1);
-        c.learn(av2);
+        c.learn(lemma(av1));
+        c.learn(lemma(av2));
         
         monte_carlo::tree_node<mcts_decider::choice> root;
         std::mt19937 rng(42);
@@ -27392,8 +27122,6 @@ void unit_test_main() {
     TEST(test_cdcl_constructor);
     TEST(test_cdcl_upsert);
     TEST(test_cdcl_erase);
-    TEST(test_cdcl_remove_ancestors);
-    TEST(test_cdcl_reduce);
     TEST(test_cdcl_learn);
     TEST(test_cdcl_constrain);
     TEST(test_cdcl_refuted);

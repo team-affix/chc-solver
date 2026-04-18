@@ -48,7 +48,7 @@ bool solver::operator()(std::optional<resolutions>& soln) {
     // learn to avoid the exact derivation path taken this iteration;
     // this guarantees we never revisit the same decisions regardless of outcome
     const decisions& ds = managed_sim->get_decisions();
-    c.learn(ds);
+    c.learn(lemma(ds));
 
     // pin decision lineages so they survive the next lp.trim()
     for (const resolution_lineage* rl : ds)
