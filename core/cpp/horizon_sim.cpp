@@ -27,6 +27,5 @@ const resolution_lineage* horizon_sim::decide_one() {
 }
 
 void horizon_sim::on_resolve(const resolution_lineage* rl) {
-    sim::on_resolve(rl);
     ws.resolve(rl);
 }

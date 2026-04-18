@@ -29,8 +29,9 @@ protected:
     bool solved();
     bool conflicted();
     const resolution_lineage* derive_one();
+    void resolve(const resolution_lineage*);
     virtual const resolution_lineage* decide_one() = 0;
-    virtual void on_resolve(const resolution_lineage*);
+    virtual void on_resolve(const resolution_lineage*) = 0;
 
     const database& db;
     trail& t;
