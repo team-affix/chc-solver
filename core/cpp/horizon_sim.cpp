@@ -12,7 +12,8 @@ horizon_sim::horizon_sim(
     cdcl c,
     monte_carlo::simulation<mcts_decider::choice, std::mt19937>& mc_sim
 ) :
-    ridge_sim(max_resolutions, db, goals, t, seq, ep, bm, lp, c, mc_sim),
+    sim(max_resolutions, db, goals, t, seq, ep, bm, lp, c),
+    dec(cs, mc_sim),
     ws(goals, db, lp)
 {}
 
@@ -20,7 +21,12 @@ double horizon_sim::reward() {
     return ws.total();
 }
 
+const resolution_lineage* horizon_sim::decide_one() {
+    auto [chosen_goal, chosen_candidate] = dec();
+    return lp.resolution(chosen_goal, chosen_candidate);
+}
+
 void horizon_sim::on_resolve(const resolution_lineage* rl) {
-    ridge_sim::on_resolve(rl);
+    sim::on_resolve(rl);
     ws.resolve(rl);
 }
