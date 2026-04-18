@@ -22,6 +22,7 @@ struct ridge_sim : sim {
 protected:
 #endif
     const resolution_lineage* decide_one() override;
+    void on_resolve(const resolution_lineage*) override;
 
     mcts_decider dec;
 };

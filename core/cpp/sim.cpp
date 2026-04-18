@@ -29,7 +29,7 @@ bool sim::operator()() {
         // continue until fixpoint
         if (const resolution_lineage* rl = derive_one()) {
             rs.insert(rl);
-            on_resolve(rl);
+            resolve(rl);
             continue;
         }
 
@@ -39,7 +39,7 @@ bool sim::operator()() {
         // mark this resolution as a decision
         rs.insert(rl);
         ds.insert(rl);
-        on_resolve(rl);
+        resolve(rl);
     }
 
     // return whether a solution was found
@@ -82,8 +82,9 @@ const resolution_lineage* sim::derive_one() {
     return nullptr;
 }
 
-void sim::on_resolve(const resolution_lineage* rl) {
+void sim::resolve(const resolution_lineage* rl) {
     gs.resolve(rl);
     cs.resolve(rl);
     c.constrain(rl);
+    on_resolve(rl);
 }

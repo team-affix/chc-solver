@@ -17450,9 +17450,8 @@ struct sim_mock : sim {
     const resolution_lineage* decide_one() override {
         return scripted.at(decision_idx++);
     }
-    void on_resolve(const resolution_lineage* rl) override {
+    void on_resolve(const resolution_lineage*) override {
         ++on_resolve_cnt;
-        sim::on_resolve(rl);
     }
 };
 
@@ -17942,7 +17941,7 @@ void test_sim_on_resolve() {
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl = lp.resolution(gl0, 0);
-        sim.on_resolve(rl);
+        sim.resolve(rl);
 
         // Empty body → no sub-goals added; both stores now empty
         assert(sim.gs.empty());
@@ -17969,7 +17968,7 @@ void test_sim_on_resolve() {
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl = lp.resolution(gl0, 0);
-        sim.on_resolve(rl);
+        sim.resolve(rl);
 
         // p removed, q added as sub-goal
         assert(sim.gs.size() == 1);
@@ -18017,12 +18016,12 @@ void test_sim_on_resolve() {
         monte_carlo::simulation<mcts_decider::choice, std::mt19937> mc(root, 1.414, rng);
         ridge_sim sim(100, db, goals, t, seq, ep, bm, lp, c, mc);
 
-        // on_resolve(rl0) calls sim.c.constrain(rl0) → {rl0, rl1} reduces to {rl1} → rl1 eliminated
-        sim.on_resolve(rl0);
+        // resolve(rl0) calls sim.c.constrain(rl0) → {rl0, rl1} reduces to {rl1} → rl1 eliminated
+        sim.resolve(rl0);
         assert(sim.c.eliminated(rl1));
     }
 
-    // Test 4: on_resolve with two-level chain - verify gs and cs sizes at each step
+    // Test 4: resolve with two-level chain - verify gs and cs sizes at each step
     {
         trail t;
         t.push();
@@ -18044,7 +18043,7 @@ void test_sim_on_resolve() {
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl = lp.resolution(gl0, 0);
-        sim.on_resolve(rl);
+        sim.resolve(rl);
 
         // p removed; q and r added (body has 2 sub-goals)
         assert(sim.gs.size() == 2);
@@ -19220,7 +19219,7 @@ void test_horizon_sim_on_resolve() {
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl = lp.resolution(gl0, 0);
-        sim.on_resolve(rl);
+        sim.resolve(rl);
 
         // ws: fact rule → full weight accumulated
         assert(near(sim.ws.cgw, 1.0));
@@ -19250,7 +19249,7 @@ void test_horizon_sim_on_resolve() {
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl = lp.resolution(gl0, 0);
-        sim.on_resolve(rl);
+        sim.resolve(rl);
 
         // Non-fact: cgw unchanged
         assert(near(sim.ws.cgw, 0.0));
@@ -19287,7 +19286,7 @@ void test_horizon_sim_on_resolve() {
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl0 = lp.resolution(gl0, 0);
-        sim.on_resolve(rl0);
+        sim.resolve(rl0);
 
         assert(near(sim.ws.cgw, 0.5));
         assert(near(sim.reward(), 0.5));
@@ -19315,9 +19314,9 @@ void test_horizon_sim_on_resolve() {
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const goal_lineage* gl1 = lp.goal(nullptr, 1);
-        sim.on_resolve(lp.resolution(gl0, 0)); // resolve p with rule 0
+        sim.resolve(lp.resolution(gl0, 0)); // resolve p with rule 0
         assert(near(sim.reward(), 0.5));
-        sim.on_resolve(lp.resolution(gl1, 1)); // resolve q with rule 1
+        sim.resolve(lp.resolution(gl1, 1)); // resolve q with rule 1
         assert(near(sim.reward(), 1.0));
         assert(near(sim.ws.cgw, 1.0));
         assert(sim.gs.empty());
@@ -19344,7 +19343,7 @@ void test_horizon_sim_on_resolve() {
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl = lp.resolution(gl0, 0);
-        sim.on_resolve(rl);
+        sim.resolve(rl);
 
         // 2-body rule: weight 1.0 split into 0.5 each, cgw unchanged
         assert(near(sim.ws.cgw, 0.0));
@@ -19358,7 +19357,7 @@ void test_horizon_sim_on_resolve() {
     }
 
     // Test 6: Chain resolution - p resolved with "p :- q", then q resolved with fact
-    // → total reward accumulates to 1.0 across two on_resolve calls
+    // → total reward accumulates to 1.0 across two resolve calls
     {
         trail t;
         t.push();
@@ -19380,14 +19379,14 @@ void test_horizon_sim_on_resolve() {
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl_p = lp.resolution(gl0, 0); // resolve p with rule 0
 
-        sim.on_resolve(rl_p);
+        sim.resolve(rl_p);
         assert(near(sim.reward(), 0.0));    // weight transferred to q sub-goal
         assert(sim.gs.size() == 1);
 
         // Now resolve q (the sub-goal) with rule 1 (fact)
         const goal_lineage* sub_gl = lp.goal(rl_p, 0);
         const resolution_lineage* rl_q = lp.resolution(sub_gl, 1); // resolve q with rule 1
-        sim.on_resolve(rl_q);
+        sim.resolve(rl_q);
 
         assert(near(sim.reward(), 1.0)); // full weight accumulated
         assert(near(sim.ws.cgw, 1.0));
@@ -19415,7 +19414,7 @@ void test_horizon_sim_on_resolve() {
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl_p = lp.resolution(gl0, 0);
-        sim.on_resolve(rl_p); // p :- q, r → q=0.5, r=0.5
+        sim.resolve(rl_p); // p :- q, r → q=0.5, r=0.5
 
         assert(near(sim.reward(), 0.0));
         const goal_lineage* sub_q = lp.goal(rl_p, 0);
@@ -19425,7 +19424,7 @@ void test_horizon_sim_on_resolve() {
 
         // Ground q → cgw += 0.5; r still pending
         const resolution_lineage* rl_q = lp.resolution(sub_q, 1);
-        sim.on_resolve(rl_q);
+        sim.resolve(rl_q);
 
         assert(near(sim.ws.cgw, 0.5));
         assert(near(sim.reward(), 0.5));
@@ -19456,21 +19455,21 @@ void test_horizon_sim_on_resolve() {
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl_p = lp.resolution(gl0, 0);
-        sim.on_resolve(rl_p); // p → q, weight 1.0 passes to q
+        sim.resolve(rl_p); // p → q, weight 1.0 passes to q
         assert(near(sim.reward(), 0.0));
         assert(sim.gs.size() == 1);
 
         const goal_lineage* sub_q = lp.goal(rl_p, 0);
         assert(near(sim.ws.members.at(sub_q), 1.0));
         const resolution_lineage* rl_q = lp.resolution(sub_q, 1);
-        sim.on_resolve(rl_q); // q → r, weight 1.0 passes to r
+        sim.resolve(rl_q); // q → r, weight 1.0 passes to r
         assert(near(sim.reward(), 0.0));
         assert(sim.gs.size() == 1);
 
         const goal_lineage* sub_r = lp.goal(rl_q, 0);
         assert(near(sim.ws.members.at(sub_r), 1.0));
         const resolution_lineage* rl_r = lp.resolution(sub_r, 2);
-        sim.on_resolve(rl_r); // r :- (fact) → cgw += 1.0
+        sim.resolve(rl_r); // r :- (fact) → cgw += 1.0
         assert(near(sim.reward(), 1.0));
         assert(sim.gs.empty());
     }
@@ -19499,7 +19498,7 @@ void test_horizon_sim_on_resolve() {
 
         const goal_lineage* gl_a = lp.goal(nullptr, 0);
         const resolution_lineage* rl_a = lp.resolution(gl_a, 0);
-        sim.on_resolve(rl_a); // a :- x, y → x=1/6, y=1/6
+        sim.resolve(rl_a); // a :- x, y → x=1/6, y=1/6
         assert(near(sim.reward(), 0.0));
 
         const goal_lineage* sub_x = lp.goal(rl_a, 0);
@@ -19508,7 +19507,7 @@ void test_horizon_sim_on_resolve() {
         assert(near(sim.ws.members.at(sub_y), 1.0 / 6.0));
 
         const resolution_lineage* rl_x = lp.resolution(sub_x, 1);
-        sim.on_resolve(rl_x); // ground x → cgw += 1/6
+        sim.resolve(rl_x); // ground x → cgw += 1/6
         assert(near(sim.reward(), 1.0 / 6.0));
         // y, b, c still pending; total unresolved = 1/6 + 1/3 + 1/3 = 5/6
         assert(sim.gs.size() == 3); // y, b, c
@@ -19537,7 +19536,7 @@ void test_horizon_sim_on_resolve() {
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl_p = lp.resolution(gl0, 0);
-        sim.on_resolve(rl_p); // p :- q, r, s → each gets 1/3
+        sim.resolve(rl_p); // p :- q, r, s → each gets 1/3
 
         const goal_lineage* sub_q = lp.goal(rl_p, 0);
         const goal_lineage* sub_r = lp.goal(rl_p, 1);
@@ -19547,13 +19546,13 @@ void test_horizon_sim_on_resolve() {
         assert(near(sim.ws.members.at(sub_s), 1.0 / 3.0));
         assert(near(sim.reward(), 0.0));
 
-        sim.on_resolve(lp.resolution(sub_q, 1)); // ground q
+        sim.resolve(lp.resolution(sub_q, 1)); // ground q
         assert(near(sim.reward(), 1.0 / 3.0));
 
-        sim.on_resolve(lp.resolution(sub_r, 2)); // ground r
+        sim.resolve(lp.resolution(sub_r, 2)); // ground r
         assert(near(sim.reward(), 2.0 / 3.0));
 
-        sim.on_resolve(lp.resolution(sub_s, 3)); // ground s
+        sim.resolve(lp.resolution(sub_s, 3)); // ground s
         assert(near(sim.reward(), 1.0));
         assert(sim.gs.empty());
     }
@@ -19586,18 +19585,18 @@ void test_horizon_sim_on_resolve() {
 
         // a :- c → c gets 0.5
         const resolution_lineage* rl_a = lp.resolution(gl0, 0);
-        sim.on_resolve(rl_a);
+        sim.resolve(rl_a);
         assert(near(sim.reward(), 0.0));
         const goal_lineage* sub_c = lp.goal(rl_a, 0);
         assert(near(sim.ws.members.at(sub_c), 0.5));
 
         // Ground c → cgw = 0.5
-        sim.on_resolve(lp.resolution(sub_c, 1));
+        sim.resolve(lp.resolution(sub_c, 1));
         assert(near(sim.reward(), 0.5));
 
         // b :- d, e → d=0.25, e=0.25
         const resolution_lineage* rl_b = lp.resolution(gl1, 2);
-        sim.on_resolve(rl_b);
+        sim.resolve(rl_b);
         assert(near(sim.reward(), 0.5)); // unchanged until a leaf is grounded
         const goal_lineage* sub_d = lp.goal(rl_b, 0);
         const goal_lineage* sub_e = lp.goal(rl_b, 1);
@@ -19605,11 +19604,11 @@ void test_horizon_sim_on_resolve() {
         assert(near(sim.ws.members.at(sub_e), 0.25));
 
         // Ground d
-        sim.on_resolve(lp.resolution(sub_d, 3));
+        sim.resolve(lp.resolution(sub_d, 3));
         assert(near(sim.reward(), 0.75));
 
         // Ground e
-        sim.on_resolve(lp.resolution(sub_e, 4));
+        sim.resolve(lp.resolution(sub_e, 4));
         assert(near(sim.reward(), 1.0));
         assert(sim.gs.empty());
     }
@@ -19636,14 +19635,14 @@ void test_horizon_sim_on_resolve() {
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         const resolution_lineage* rl_p = lp.resolution(gl0, 0);
-        sim.on_resolve(rl_p); // p :- q, r → q=0.5, r=0.5
+        sim.resolve(rl_p); // p :- q, r → q=0.5, r=0.5
         assert(near(sim.reward(), 0.0));
 
         const goal_lineage* sub_q = lp.goal(rl_p, 0);
         const goal_lineage* sub_r = lp.goal(rl_p, 1);
 
         const resolution_lineage* rl_q = lp.resolution(sub_q, 1);
-        sim.on_resolve(rl_q); // q :- s, t → s=0.25, t=0.25
+        sim.resolve(rl_q); // q :- s, t → s=0.25, t=0.25
         assert(near(sim.reward(), 0.0));
 
         const goal_lineage* sub_s = lp.goal(rl_q, 0);
@@ -19653,7 +19652,7 @@ void test_horizon_sim_on_resolve() {
         assert(near(sim.ws.members.at(sub_r), 0.5));
 
         // Ground only s → cgw = 0.25
-        sim.on_resolve(lp.resolution(sub_s, 2));
+        sim.resolve(lp.resolution(sub_s, 2));
         assert(near(sim.reward(), 0.25));
         // r=0.5 and t=0.25 still unresolved, total pending = 0.75
         assert(sim.gs.size() == 2); // r and t remain
