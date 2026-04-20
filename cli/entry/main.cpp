@@ -8,7 +8,7 @@
 
 int main(int argc, char** argv) {
     CLI::App app{"Atlas CHC Solver"};
-    app.name("atlas " ATLAS_GIT_TAG);
+    app.name("atlas");
     app.set_version_flag("-v,--version", ATLAS_GIT_TAG);
     app.require_subcommand(1);
 
