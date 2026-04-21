@@ -96,6 +96,15 @@ bool bind_map::occurs_check(uint32_t index, const expr* key) {
     return false;
 }
 
+void bind_map::watch(uint32_t index) {
+    if (watched_vars.insert(index).second)
+        trail_ref.log([this, index]{ watched_vars.erase(index); });
+}
+
+std::set<uint32_t> bind_map::flush() {
+    return std::move(watched_var_updates);
+}
+
 void bind_map::bind(uint32_t index, const expr* value) {
     // look up the entry for the index
     auto it = bindings.find(index);
@@ -104,6 +113,12 @@ void bind_map::bind(uint32_t index, const expr* value) {
         // if the value is not found, insert it
         trail_ref.log([this, index]{bindings.erase(index);});
         it = bindings.insert({index, value}).first;
+
+        // new binding: record a backtrackable update for watched variables
+        if (watched_vars.contains(index)) {
+            if (watched_var_updates.insert(index).second)
+                trail_ref.log([this, index]{ watched_var_updates.erase(index); });
+        }
     }
     else {
         // Get the old value
@@ -116,7 +131,7 @@ void bind_map::bind(uint32_t index, const expr* value) {
         // If the new value is different from the old value, insert it
         trail_ref.log([it, old_value]{it->second = old_value;});
 
-        // Update the value
+        // Update the value (path compression — no notification)
         it->second = value;
     }
     
