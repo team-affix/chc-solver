@@ -102,7 +102,9 @@ void bind_map::watch(uint32_t index) {
 }
 
 std::set<uint32_t> bind_map::flush() {
-    return std::move(watched_var_updates);
+    std::set<uint32_t> result;
+    result.swap(watched_var_updates);
+    return result;
 }
 
 void bind_map::bind(uint32_t index, const expr* value) {
