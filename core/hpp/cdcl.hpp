@@ -2,7 +2,6 @@
 #define AVOIDANCE_HPP
 
 #include "lineage.hpp"
-#include "defs.hpp"
 #include "lemma.hpp"
 
 using avoidance = std::unordered_set<const resolution_lineage*>;
