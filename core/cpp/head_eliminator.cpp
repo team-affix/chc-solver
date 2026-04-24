@@ -1,12 +1,16 @@
 #include "../hpp/head_eliminator.hpp"
 
+head_eliminator::~head_eliminator() {
+    bm.set_rep_changed_callback([](uint32_t){});
+}
+
 head_eliminator::head_eliminator(
     const database& db,
     bind_map& bm,
     expr_pool& ep,
     goal_store& gs,
     candidate_store& cs) : db(db), bm(bm), ep(ep), gs(gs), cs(cs) {
-
+    bm.set_rep_changed_callback(slot());
 }
 
 void head_eliminator::extract_rep_vars(const expr* e, std::unordered_set<uint32_t>& reps) {
@@ -55,9 +59,10 @@ std::unordered_set<uint32_t> head_eliminator::unwatch(const goal_lineage* gl) {
 }
 
 void head_eliminator::execute() {
+    // unlink the slot temporarily for temp bindings
+    bm.set_rep_changed_callback([](uint32_t){});
+    
     std::unordered_set<const goal_lineage*> touched_goals;
-
-    auto& changed_reps = bm.changed_reps;
     
     while (!changed_reps.empty()) {
         // pop the changed rep
@@ -70,10 +75,8 @@ void head_eliminator::execute() {
         if (it == rep_to_goals.end())
             continue;
         
-        // basic deduplication per pipe() call
-        for (const goal_lineage* gl : it->second) {
-            touched_goals.insert(gl);
-        }
+        // basic deduplication
+        touched_goals.insert(it->second.begin(), it->second.end());
 
         // update the watches given the rep update
         update_rep_watches(rep);
@@ -81,6 +84,15 @@ void head_eliminator::execute() {
 
     for (const goal_lineage* gl : touched_goals)
         visit_goal_lineage(gl);
+
+    // re-link the slot
+    bm.set_rep_changed_callback(slot());
+}
+
+std::function<void(uint32_t)> head_eliminator::slot() {
+    return [this](uint32_t rep) {
+        changed_reps.push(rep);
+    };
 }
 
 void head_eliminator::update_rep_watches(uint32_t rep) {

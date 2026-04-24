@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
+#include <queue>
 #include "lineage.hpp"
 #include "expr.hpp"
 #include "bind_map.hpp"
@@ -11,6 +12,7 @@
 #include "candidate_store.hpp"
 
 struct head_eliminator {
+    ~head_eliminator();
     head_eliminator(const database&, bind_map&, expr_pool&, goal_store&, candidate_store&);
     void extract_rep_vars(const expr*, std::unordered_set<uint32_t>&);
     void watch(const std::unordered_set<uint32_t>&, const std::unordered_set<const goal_lineage*>&);
@@ -20,6 +22,7 @@ struct head_eliminator {
 #ifndef DEBUG
 private:
 #endif
+    std::function<void(uint32_t)> slot();
     void update_rep_watches(uint32_t);
     void visit_goal_lineage(const goal_lineage*);
 
@@ -29,6 +32,7 @@ private:
     goal_store& gs;
     candidate_store& cs;
 
+    std::queue<uint32_t> changed_reps;
     std::unordered_map<uint32_t, std::unordered_set<const goal_lineage*>> rep_to_goals;
     std::unordered_map<const goal_lineage*, std::unordered_set<uint32_t>> goal_to_reps;
 };
