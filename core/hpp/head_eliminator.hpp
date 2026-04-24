@@ -11,7 +11,7 @@
 #include "candidate_store.hpp"
 
 struct head_eliminator {
-    head_eliminator(bind_map&, expr_pool&, goal_store&, candidate_store&);
+    head_eliminator(const database&, bind_map&, expr_pool&, goal_store&, candidate_store&);
     void extract_rep_vars(const expr*, std::unordered_set<uint32_t>&);
     void watch(const std::unordered_set<uint32_t>&, const std::unordered_set<const goal_lineage*>&);
     std::unordered_set<const goal_lineage*> unwatch(uint32_t);
@@ -21,8 +21,9 @@ struct head_eliminator {
 private:
 #endif
     void update_rep_watches(uint32_t);
-    void 
+    void visit_goal_lineage(const goal_lineage*);
 
+    const database& db;
     bind_map& bm;
     expr_pool& ep;
     goal_store& gs;

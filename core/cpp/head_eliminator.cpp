@@ -1,10 +1,11 @@
 #include "../hpp/head_eliminator.hpp"
 
 head_eliminator::head_eliminator(
+    const database& db,
     bind_map& bm,
     expr_pool& ep,
     goal_store& gs,
-    candidate_store& cs) : bm(bm), ep(ep), gs(gs), cs(cs) {
+    candidate_store& cs) : db(db), bm(bm), ep(ep), gs(gs), cs(cs) {
 
 }
 
@@ -76,22 +77,10 @@ void head_eliminator::execute() {
 
         // update the watches given the rep update
         update_rep_watches(rep);
-        
     }
 
-    for (const goal_lineage* gl : touched_goals) {
-        // get the candidates for this goal
-        const std::vector<size_t>& candidates = cs.at(gl);
-
-        for (size_t c : candidates) {
-            
-        }
-        const std::vector<rule>& rules = db.rules(gl);
-        // get the new candidates for this goal
-        std::vector<size_t> new_candidates = expand(candidates, rules);
-        // update the candidates for this goal
-        cs.at(gl) = new_candidates;
-    }
+    for (const goal_lineage* gl : touched_goals)
+        visit_goal_lineage(gl);
 }
 
 void head_eliminator::update_rep_watches(uint32_t rep) {
@@ -102,4 +91,17 @@ void head_eliminator::update_rep_watches(uint32_t rep) {
     std::unordered_set<uint32_t> new_reps;
     extract_rep_vars(ep.var(rep), new_reps);
     watch(new_reps, goals);
+}
+
+void head_eliminator::visit_goal_lineage(const goal_lineage* gl) {
+    // get the candidates for this goal
+    std::unordered_set<size_t>& candidates = cs.at(gl);
+
+    // get the expr for this goal
+    const expr* e = gs.at(gl);
+
+    std::erase_if(candidates, [this, e](size_t c) {
+        const rule& r = db.at(c);
+        return !gs.applicable(e, r);
+    });
 }
