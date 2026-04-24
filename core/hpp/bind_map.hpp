@@ -2,14 +2,14 @@
 #define BIND_MAP_HPP
 
 #include <map>
-#include <queue>
+#include <functional>
 #include "expr.hpp"
 
 struct bind_map {
     bind_map(trail&);
     const expr* whnf(const expr*);
     bool unify(const expr*, const expr*);
-    std::queue<uint32_t> changed_reps;
+    void set_rep_changed_callback(const std::function<void(uint32_t)>&);
 #ifndef DEBUG
 private:
 #endif
@@ -17,6 +17,7 @@ private:
     void bind(uint32_t, const expr*);
     std::map<uint32_t, const expr*> bindings;
     trail& trail_ref;
+    std::function<void(uint32_t)> changed_rep_callback;
 };
 
 #endif
