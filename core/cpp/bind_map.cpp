@@ -1,7 +1,8 @@
 #include "../hpp/bind_map.hpp"
 
 bind_map::bind_map(trail& trail_ref) :
-    trail_ref(trail_ref) {
+    trail_ref(trail_ref),
+    changed_rep_callback([](uint32_t) {}) {
 
 }
 
