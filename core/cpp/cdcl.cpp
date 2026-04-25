@@ -5,7 +5,8 @@ cdcl::cdcl() :
     watched_goals(),
     is_refuted(false),
     eliminated_resolutions(),
-    next_avoidance_id(0) {
+    next_avoidance_id(0),
+    new_eliminated_resolution_callback([](const resolution_lineage*) {}) {
 
 }
 
