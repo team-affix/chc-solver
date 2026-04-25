@@ -6,11 +6,22 @@ head_eliminator::~head_eliminator() {
 
 head_eliminator::head_eliminator(
     const database& db,
+    const goals& goals,
     bind_map& bm,
     expr_pool& ep,
     goal_store& gs,
-    candidate_store& cs) : db(db), bm(bm), ep(ep), gs(gs), cs(cs) {
-    bm.set_rep_changed_callback(slot());
+    candidate_store& cs,
+    lineage_pool& lp) : 
+    db(db),
+    bm(bm),
+    ep(ep),
+    gs(gs),
+    cs(cs),
+    fw(db, lp) {
+    bm.set_rep_changed_callback(rep_changed_callback());
+    fw.set_insert_callback(goal_inserted_callback());
+    fw.set_resolve_callback(goal_resolved_callback());
+    fw.initialize(goals);
 }
 
 void head_eliminator::extract_rep_vars(const expr* e, std::unordered_set<uint32_t>& reps) {
@@ -87,9 +98,23 @@ void head_eliminator::execute() {
     changed_reps = {};
 }
 
-std::function<void(uint32_t)> head_eliminator::slot() {
+std::function<void(uint32_t)> head_eliminator::rep_changed_callback() {
     return [this](uint32_t rep) {
         changed_reps.push(rep);
+    };
+}
+
+std::function<void(const goal_lineage*)> head_eliminator::goal_inserted_callback() {
+    return [this](const goal_lineage* gl) {
+        std::unordered_set<uint32_t> reps;
+        extract_rep_vars(gs.at(gl), reps);
+        watch(reps, {gl});
+    };
+}
+
+std::function<void(const resolution_lineage*)> head_eliminator::goal_resolved_callback() {
+    return [this](const resolution_lineage* r) {
+        unwatch(r->parent);
     };
 }
 
