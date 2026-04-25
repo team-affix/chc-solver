@@ -15,8 +15,6 @@ struct frontier {
     void resolve(const resolution_lineage*);
     
     virtual Expander make_expander(const T&, const rule&) = 0;
-    virtual void on_insert(const goal_lineage*, const T&);
-    virtual void on_resolve(const resolution_lineage*);
 
     T& at(const goal_lineage*);
     const T& at(const goal_lineage*) const;
@@ -38,7 +36,6 @@ frontier<T, Expander>::frontier(
 template<typename T, typename Expander>
 void frontier<T, Expander>::insert(const goal_lineage* gl, const T& value) {
     members.insert({gl, value});
-    on_insert(gl, value);
 }
 
 template<typename T, typename Expander>
@@ -61,17 +58,6 @@ void frontier<T, Expander>::resolve(const resolution_lineage* r) {
 
     // erase the parent from the frontier
     members.erase(parent);
-
-    // notify the subclass
-    on_resolve(r);
-}
-
-template<typename T, typename Expander>
-void frontier<T, Expander>::on_insert(const goal_lineage* gl, const T& value) {
-}
-
-template<typename T, typename Expander>
-void frontier<T, Expander>::on_resolve(const resolution_lineage* r) {
 }
 
 template<typename T, typename Expander>
