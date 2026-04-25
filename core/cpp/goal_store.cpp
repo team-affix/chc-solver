@@ -9,8 +9,7 @@ goal_store::goal_store(
     bind_map& bm,
     lineage_pool& lp)
     :
-    frontier<const expr*>(db, lp),
-    db(db),
+    frontier<const expr*, goal_expander>(db, lp),
     t(t),
     cp(cp),
     bm(bm),
@@ -21,43 +20,20 @@ goal_store::goal_store(
         insert(lp.goal(nullptr, i), goals.at(i));
 }
 
-bool goal_store::try_unify_head(const expr* const& e, const rule& r, std::map<uint32_t, uint32_t>& translation_map) {
-    // copy the head of the rule
-    const expr* copied_head = cp(r.head, translation_map);
-
-    // unify the head with the goal
-    return bm.unify(copied_head, e);
-}
-
 bool goal_store::applicable(const expr* const& e, const rule& r) {
     // push a temporary frame since bindings must be temporary
     t.push();
 
-    // create the translation map for copying the rule
-    std::map<uint32_t, uint32_t> translation_map;
-
     // try to unify the head with the goal
-    bool applicable = try_unify_head(e, r, translation_map);
+    bool result = bm.unify(e, r.head);
 
     // pop the temporary frame
     t.pop();
 
     // return the result
-    return applicable;
+    return result;
 }
 
-std::vector<const expr*> goal_store::expand(const expr* const& e, const rule& r) {
-    // create the translation map for copying the rule
-    std::map<uint32_t, uint32_t> translation_map;
-
-    // try to unify the head with the goal
-    if (!try_unify_head(e, r, translation_map))
-        throw std::runtime_error("Failed to unify the head with the goal");
-
-    // copy the body of the rule
-    std::vector<const expr*> copied_body;
-    for (const expr* e : r.body)
-        copied_body.push_back(cp(e, translation_map));
-
-    return copied_body;
+goal_expander goal_store::make_expander(const expr* const& e, const rule& r) {
+    return goal_expander(e, r, cp, bm);
 }

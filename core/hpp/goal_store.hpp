@@ -6,8 +6,9 @@
 #include "bind_map.hpp"
 #include "lineage.hpp"
 #include "frontier.hpp"
+#include "goal_expander.hpp"
 
-struct goal_store : frontier<const expr*> {
+struct goal_store : frontier<const expr*, goal_expander> {
     goal_store(
         const database&,
         const goals&,
@@ -16,13 +17,11 @@ struct goal_store : frontier<const expr*> {
         bind_map&,
         lineage_pool&
     );
-    bool try_unify_head(const expr* const&, const rule&, std::map<uint32_t, uint32_t>&);
     bool applicable(const expr* const&, const rule&);
-    std::vector<const expr*> expand(const expr* const&, const rule&) override;
+    goal_expander make_expander(const expr* const&, const rule&) override;
 #ifndef DEBUG
 private:
 #endif
-    const database& db;
     trail& t;
     copier& cp;
     bind_map& bm;
