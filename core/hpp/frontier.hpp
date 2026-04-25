@@ -17,8 +17,7 @@ struct frontier {
     virtual Expander make_expander(const T&, const rule&) = 0;
 
     T& at(const goal_lineage*);
-    const T& at(const goal_lineage*) const;
-    bool empty() const;
+    const std::unordered_map<const goal_lineage*, T>& get() const;
 #ifndef DEBUG
 private:
 #endif
@@ -66,13 +65,8 @@ T& frontier<T, Expander>::at(const goal_lineage* gl) {
 }
 
 template<typename T, typename Expander>
-const T& frontier<T, Expander>::at(const goal_lineage* gl) const {
-    return members.at(gl);
-}
-
-template<typename T, typename Expander>
-bool frontier<T, Expander>::empty() const {
-    return members.empty();
+const std::unordered_map<const goal_lineage*, T>& frontier<T, Expander>::get() const {
+    return members;
 }
 
 #endif

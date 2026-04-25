@@ -46,7 +46,7 @@ const decisions& sim::get_decisions() const {
 }
 
 bool sim::solved() {
-    return gs.empty();
+    return gs.get().empty();
 }
 
 bool sim::conflicted() {
