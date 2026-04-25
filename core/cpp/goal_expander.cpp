@@ -4,7 +4,7 @@
 #include "../hpp/copier.hpp"
 
 goal_expander::goal_expander(
-    const expr*& goal,
+    const expr* const& goal,
     const rule& r,
     copier& cp,
     bind_map& bm) : cp(cp), subgoal_index(0) {
