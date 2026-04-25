@@ -15,7 +15,8 @@ struct cdcl_eliminator {
         candidate_store&,
         lineage_pool&,
         cdcl&,
-        std::queue<const resolution_lineage*>&
+        std::queue<const resolution_lineage*>&,
+        frontier_watch&
     );
     bool operator()();
 #ifndef DEBUG
@@ -32,8 +33,8 @@ private:
     lineage_pool& lp;
     candidate_store& cs;
     std::queue<const resolution_lineage*>& unit_queue;
+    frontier_watch& fw;
 
-    frontier_watch fw;
     std::unordered_set<const goal_lineage*> active_goals;
     std::unordered_set<const goal_lineage*> resolved_goals;
     std::queue<const resolution_lineage*> new_eliminated_resolutions;
