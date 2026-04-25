@@ -2,10 +2,7 @@
 
 frontier_watch::frontier_watch(
     const database& db,
-    lineage_pool& lp,
-    std::function<void(const goal_lineage*)> insert_callback,
-    std::function<void(const resolution_lineage*)> resolve_callback
-) : db(db), lp(lp), insert_callback(insert_callback), resolve_callback(resolve_callback) {
+    lineage_pool& lp) : db(db), lp(lp) {
 }
 
 void frontier_watch::initialize(const goals& goals) {
@@ -34,4 +31,12 @@ void frontier_watch::resolve(const resolution_lineage* r) {
 
     // notify the callback
     resolve_callback(r);
+}
+
+void frontier_watch::set_insert_callback(std::function<void(const goal_lineage*)> callback) {
+    insert_callback = callback;
+}
+
+void frontier_watch::set_resolve_callback(std::function<void(const resolution_lineage*)> callback) {
+    resolve_callback = callback;
 }
