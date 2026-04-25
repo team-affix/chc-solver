@@ -7,13 +7,14 @@ cdcl_eliminator::cdcl_eliminator(
     candidate_store& cs,
     lineage_pool& lp,
     cdcl& c,
+    bool& conflict_register,
     std::queue<const resolution_lineage*>& unit_queue
 ) :
     lp(lp),
     cs(cs),
+    conflict_register(conflict_register),
     unit_queue(unit_queue),
-    fw(db, lp),
-    conflict_register(false) {
+    fw(db, lp) {
     c.set_new_eliminated_resolution_callback(new_eliminated_resolution_callback());
     fw.set_insert_callback(goal_inserted_callback());
     fw.set_resolve_callback(goal_resolved_callback());
@@ -23,8 +24,7 @@ cdcl_eliminator::cdcl_eliminator(
         route_elimination(rl);
 }
 
-bool cdcl_eliminator::operator()() {
-
+void cdcl_eliminator::operator()() {
     // fill the elimination backlog with the new eliminated resolutions
     while (!conflict_register && !new_eliminated_resolutions.empty()) {
         // get the next eliminated resolution
@@ -34,9 +34,6 @@ bool cdcl_eliminator::operator()() {
         // route the elimination properly
         route_elimination(rl);
     }
-
-    // return whether a conflict was found
-    return conflict_register;
 }
 
 void cdcl_eliminator::resolve(const resolution_lineage* r) {
