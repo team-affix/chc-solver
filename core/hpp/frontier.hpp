@@ -13,6 +13,7 @@ struct frontier {
     );
     void insert(const goal_lineage*, const T&);
     void resolve(const resolution_lineage*);
+    virtual Expander make_expander(const T&) = 0;
     virtual void on_insert(const goal_lineage*, const T&);
     virtual void on_resolve(const resolution_lineage*);
 
@@ -51,7 +52,7 @@ void frontier<T, Expander>::resolve(const resolution_lineage* r) {
     const rule& db_rule = db.at(r->idx);
     
     // create the expander for the parent
-    Expander exp(parent_value);
+    Expander exp{make_expander(parent_value)};
     
     // add the children to the frontier
     for (int i = 0; i < db_rule.body.size(); ++i)
