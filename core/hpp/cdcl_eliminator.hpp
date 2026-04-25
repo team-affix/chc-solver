@@ -4,19 +4,35 @@
 #include "cdcl.hpp"
 #include "lineage.hpp"
 #include "candidate_store.hpp"
+#include "frontier_watch.hpp"
+#include <queue>
 
 struct cdcl_eliminator {
-    cdcl_eliminator(cdcl&, lineage_pool&);
-    void add_frontier_goal(const goal_lineage*);
-    void remove_frontier_goal(const goal_lineage*);
-    void pipe();
+    cdcl_eliminator(
+        const database&,
+        const goals&,
+        expr_pool&,
+        candidate_store&,
+        lineage_pool&,
+        cdcl&);
+    void execute();
 #ifndef DEBUG
 private:
 #endif
-    cdcl& c;
+    void route_elimination(const resolution_lineage*);
+    void flush_backlog_for_goal(const goal_lineage*);
+    void eliminate(const goal_lineage*, size_t);
+    
+    std::function<void(const goal_lineage*)> goal_inserted_callback();
+    std::function<void(const resolution_lineage*)> goal_resolved_callback();
+
     lineage_pool& lp;
     candidate_store& cs;
 
+    frontier_watch fw;
+    std::unordered_set<const goal_lineage*> active_goals;
+    std::unordered_set<const goal_lineage*> resolved_goals;
+    std::queue<const resolution_lineage*> new_eliminated_resolutions;
     std::unordered_map<const goal_lineage*, std::unordered_set<size_t>> elimination_backlog;
 };
 
