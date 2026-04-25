@@ -7,13 +7,12 @@ cdcl_eliminator::cdcl_eliminator(
     candidate_store& cs,
     lineage_pool& lp,
     cdcl& c,
-    std::queue<const resolution_lineage*>& unit_queue,
-    frontier_watch& fw
+    std::queue<const resolution_lineage*>& unit_queue
 ) :
     lp(lp),
     cs(cs),
     unit_queue(unit_queue),
-    fw(fw),
+    fw(db, lp),
     flush_produced_conflict(false) {
     c.set_new_eliminated_resolution_callback(new_eliminated_resolution_callback());
     fw.set_insert_callback(goal_inserted_callback());
