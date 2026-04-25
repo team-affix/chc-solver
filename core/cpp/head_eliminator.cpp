@@ -12,6 +12,7 @@ head_eliminator::head_eliminator(
     goal_store& gs,
     candidate_store& cs,
     lineage_pool& lp,
+    bool& conflict_register,
     std::queue<const resolution_lineage*>& unit_queue) : 
     db(db),
     bm(bm),
@@ -20,6 +21,7 @@ head_eliminator::head_eliminator(
     cs(cs),
     lp(lp),
     fw(db, lp),
+    conflict_register(conflict_register),
     unit_queue(unit_queue) {
     bm.set_rep_changed_callback(rep_changed_callback());
     fw.set_insert_callback(goal_inserted_callback());
@@ -27,7 +29,7 @@ head_eliminator::head_eliminator(
     fw.initialize(goals);
 }
 
-bool head_eliminator::operator()() {
+void head_eliminator::operator()() {
     std::unordered_set<const goal_lineage*> touched_goals;
     
     while (!changed_reps.empty()) {
@@ -50,16 +52,14 @@ bool head_eliminator::operator()() {
 
     // visit the goals that were touched, and if any has no candidates, return conflict.
     for (const goal_lineage* gl : touched_goals) {
-        if (visit_goal_lineage(gl))
-            return true;
+        visit_goal_lineage(gl);
+        if (conflict_register)
+            return;
     }
 
     // clear the queue since there will be invalid rep changes from
     // the temporary frames
     changed_reps = {};
-
-    // no conflict found
-    return false;
 }
 
 void head_eliminator::resolve(const resolution_lineage* r) {
@@ -142,7 +142,7 @@ void head_eliminator::update_rep_watches(uint32_t rep) {
     watch(new_reps, goals);
 }
 
-bool head_eliminator::visit_goal_lineage(const goal_lineage* gl) {
+void head_eliminator::visit_goal_lineage(const goal_lineage* gl) {
     // get the candidates for this goal
     std::unordered_set<size_t>& candidates = cs.at(gl);
 
@@ -161,5 +161,6 @@ bool head_eliminator::visit_goal_lineage(const goal_lineage* gl) {
     if (!was_unit && candidates.size() == 1)
         unit_queue.push(lp.resolution(gl, *candidates.begin()));
 
-    return candidates.empty();
+    if (candidates.empty())
+        conflict_register = true;
 }

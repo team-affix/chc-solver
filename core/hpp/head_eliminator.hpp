@@ -22,9 +22,10 @@ struct head_eliminator {
         goal_store&,
         candidate_store&,
         lineage_pool&,
+        bool&,
         std::queue<const resolution_lineage*>&
     );
-    bool operator()();
+    void operator()();
     void resolve(const resolution_lineage*);
 #ifndef DEBUG
 private:
@@ -37,7 +38,7 @@ private:
     std::function<void(const goal_lineage*)> goal_inserted_callback();
     std::function<void(const resolution_lineage*)> goal_resolved_callback();
     void update_rep_watches(uint32_t);
-    bool visit_goal_lineage(const goal_lineage*);
+    void visit_goal_lineage(const goal_lineage*);
 
     const database& db;
     bind_map& bm;
@@ -45,6 +46,7 @@ private:
     goal_store& gs;
     candidate_store& cs;
     lineage_pool& lp;
+    bool& conflict_register;
     std::queue<const resolution_lineage*>& unit_queue;
 
     frontier_watch fw;

@@ -88,21 +88,11 @@ void cdcl_eliminator::eliminate(const goal_lineage* gl, size_t idx) {
     candidates.erase(idx);
 
     // if newly unit, push the resolution to the unit queue
-    if (!was_unit)
-        check_unit(gl);
+    if (!was_unit && candidates.size() == 1)
+        unit_queue.push(lp.resolution(gl, *candidates.begin()));
 
     // if the goal has no candidates, return conflict
-    check_conflict(gl);
-}
-
-void cdcl_eliminator::check_unit(const goal_lineage* gl) {
-    const auto& candidates = cs.at(gl);
-    if (candidates.size() == 1)
-        unit_queue.push(lp.resolution(gl, *candidates.begin()));
-}
-
-void cdcl_eliminator::check_conflict(const goal_lineage* gl) {
-    if (cs.at(gl).empty())
+    if (candidates.empty())
         conflict_register = true;
 }
 
@@ -114,8 +104,6 @@ std::function<void(const resolution_lineage*)> cdcl_eliminator::new_eliminated_r
 
 std::function<void(const goal_lineage*)> cdcl_eliminator::goal_inserted_callback() {
     return [this](const goal_lineage* gl) {
-        check_unit(gl);
-        check_conflict(gl);
         active_goals.insert(gl);
         flush_backlog_for_goal(gl);
     };
