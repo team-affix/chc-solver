@@ -6,8 +6,14 @@ cdcl_eliminator::cdcl_eliminator(
     expr_pool& ep,
     candidate_store& cs,
     lineage_pool& lp,
-    cdcl& c
-) : lp(lp), cs(cs), fw(db, lp), flush_produced_conflict(false) {
+    cdcl& c,
+    std::queue<const resolution_lineage*>& unit_queue
+) :
+    lp(lp),
+    cs(cs),
+    unit_queue(unit_queue),
+    fw(db, lp),
+    flush_produced_conflict(false) {
     c.set_new_eliminated_resolution_callback(new_eliminated_resolution_callback());
     fw.set_insert_callback(goal_inserted_callback());
     fw.set_resolve_callback(goal_resolved_callback());
@@ -69,8 +75,15 @@ bool cdcl_eliminator::eliminate(const goal_lineage* gl, size_t idx) {
     // get the candidates for the goal
     auto& candidates = cs.at(gl);
 
+    // get if the goal WAS unit
+    bool was_unit = candidates.size() == 1;
+    
     // eliminate the candidate
     candidates.erase(idx);
+
+    // if newly unit, push the resolution to the unit queue
+    if (!was_unit && candidates.size() == 1)
+        unit_queue.push(lp.resolution(gl, *candidates.begin()));
 
     // if the goal has no candidates, return conflict
     return candidates.empty();
