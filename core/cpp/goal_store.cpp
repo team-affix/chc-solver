@@ -1,4 +1,3 @@
-#include <stdexcept>
 #include "../hpp/goal_store.hpp"
 
 goal_store::goal_store(
