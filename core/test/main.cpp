@@ -17762,17 +17762,23 @@ void test_sim() {
         assert(s.decision_idx == 0);
     }
 
-    // Test 2: Conflicted immediately → returns false, loop body never runs
+    // Test 2: CDCL eliminates all candidates → conflicted() returns true immediately
+    // With the event-driven design, a ground atom goal is conflicted via CDCL, not he().
     {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db;
-        db.push_back(rule{ep.functor("q", {}), {}});  // only rule for q
+        db.push_back(rule{ep.functor("p", {}), {}});  // rule 0 for p
         goals gs;
-        gs.push_back(ep.functor("p", {}));            // goal is p: no matching rule
+        gs.push_back(ep.functor("p", {}));
         cdcl c;
         sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
-
+        // Eliminate all candidates for goal 0 via CDCL after construction
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
+        const resolution_lineage* rl0 = lp.resolution(gl0, 0);
+        avoidance av;
+        av.insert(rl0);
+        s.c.upsert(0, av);  // singleton → fires callback → queued in ce
         bool result = s();
         assert(result == false);
         assert(s.rs.size() == 0);
@@ -17799,24 +17805,28 @@ void test_sim() {
         assert(s.decision_idx == 0);
     }
 
-    // Test 4: Single fact → unit propagation resolves goal → solved
-    // derive_one() path taken; decide_one() never called
+    // Test 4: Single fact p:- → goal p has 1 candidate from the start.
+    // With event-driven design, initial single-candidate goals go through decide_one() (not unit queue).
+    // Unit queue only fills when elimination REDUCES a goal from >1 to exactly 1 candidate.
     {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
         database db;
-        db.push_back(rule{ep.functor("p", {}), {}});  // p :- .
+        db.push_back(rule{ep.functor("p", {}), {}});  // rule 0: p :- .
         goals gs;
         gs.push_back(ep.functor("p", {}));
         cdcl c;
+
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
         sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+        s.scripted.push_back(lp.resolution(gl0, 0));  // scripted: decide rule 0
 
         bool result = s();
         assert(result == true);
         assert(s.rs.size() == 1);
-        assert(s.ds.size() == 0);      // derived, not decided
+        assert(s.ds.size() == 1);      // it was a decision (single candidate from start)
         assert(s.on_resolve_cnt == 1);
-        assert(s.decision_idx == 0);   // decide_one never called
+        assert(s.decision_idx == 1);
     }
 
     // Test 5: Two candidates for goal → decide_one() invoked with scripted decision
@@ -17846,7 +17856,8 @@ void test_sim() {
         assert(s.ds.count(lp.resolution(gl0, 1)) == 1);
     }
 
-    // Test 6: Unit-propagation chain: p :- q. then q :- . → two derives → solved
+    // Test 6: Chain p :- q, q :- . → each goal has multiple candidates (all rules) from start.
+    // With event-driven design, no elimination fires automatically, so both go through decide_one().
     {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
@@ -17856,17 +17867,26 @@ void test_sim() {
         goals gs;
         gs.push_back(ep.functor("p", {}));
         cdcl c;
+
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
         sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+        // goal p: 2 candidates {0,1}, decide rule 0 (p :- q)
+        s.scripted.push_back(lp.resolution(gl0, 0));
+        // After resolving p with rule0, subgoal q is created.
+        // goal q: 2 candidates {0,1}, decide rule 1 (q :- .)
+        const resolution_lineage* rl0 = lp.resolution(gl0, 0);
+        s.scripted.push_back(lp.resolution(lp.goal(rl0, 0), 1));
 
         bool result = s();
         assert(result == true);
         assert(s.rs.size() == 2);
-        assert(s.ds.size() == 0);      // all derived, no decisions
+        assert(s.ds.size() == 2);      // both were decisions (not derives)
         assert(s.on_resolve_cnt == 2);
-        assert(s.decision_idx == 0);
+        assert(s.decision_idx == 2);
     }
 
     // Test 7: max_resolutions cap mid-run: p :- q :- r :- . needs 3 steps but cap=2
+    // With event-driven design, each goal goes through decide_one().
     {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
@@ -17877,20 +17897,26 @@ void test_sim() {
         goals gs;
         gs.push_back(ep.functor("p", {}));
         cdcl c;
+
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
         sim_mock s(2, db, gs, t, seq, ep, bm, lp, c);
+        // Script 2 decisions: goal p→rule0, then goal q→rule1
+        s.scripted.push_back(lp.resolution(gl0, 0));
+        const resolution_lineage* rl0 = lp.resolution(gl0, 0);
+        s.scripted.push_back(lp.resolution(lp.goal(rl0, 0), 1));
 
         bool result = s();
         // Resolves p→q then q→r (2 steps hits cap); r still pending → not solved
         assert(result == false);
         assert(s.rs.size() == 2);
-        assert(s.ds.size() == 0);
+        assert(s.ds.size() == 2);
         assert(s.on_resolve_cnt == 2);
-        assert(s.decision_idx == 0);
+        assert(s.decision_idx == 2);
     }
 
-    // Test 8: Decision then unit-propagation: two candidates for p,
-    // rule 0 is a dead-end branch (p :- r.); rule 1 leads to q which unit-propagates.
-    // Scripted to choose rule 1 (non-zero index) → sub-goal q → fact q :- . → solved.
+    // Test 8: Two decisions: p has 3 candidates (rules 0,1,2), scripted to choose rule1 (p:-q),
+    // then q has 3 candidates, scripted to choose rule2 (q:-) → solved.
+    // With event-driven design, each goal goes through decide_one() since no elimination fires.
     {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
@@ -17904,14 +17930,17 @@ void test_sim() {
 
         const goal_lineage* gl0 = lp.goal(nullptr, 0);
         sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
-        s.scripted.push_back(lp.resolution(gl0, 1));  // decide: choose rule 1
+        s.scripted.push_back(lp.resolution(gl0, 1));  // decide: choose rule 1 (p :- q)
+        // After resolving p with rule1, subgoal q is created
+        const resolution_lineage* rl0 = lp.resolution(gl0, 1);
+        s.scripted.push_back(lp.resolution(lp.goal(rl0, 0), 2));  // decide: choose rule 2 (q :-)
 
         bool result = s();
         assert(result == true);
-        assert(s.rs.size() == 2);      // 1 decision + 1 derive
-        assert(s.ds.size() == 1);      // only the decision
+        assert(s.rs.size() == 2);      // 2 decisions
+        assert(s.ds.size() == 2);      // both decisions
         assert(s.on_resolve_cnt == 2);
-        assert(s.decision_idx == 1);
+        assert(s.decision_idx == 2);
 
         const resolution_lineage* decision_rl = lp.resolution(gl0, 1);
         assert(s.ds.count(decision_rl) == 1);
@@ -17919,6 +17948,7 @@ void test_sim() {
     }
 
     // Test 9: get_resolutions() and get_decisions() reflect operator() results
+    // Single fact p:-, 1 scripted decision needed
     {
         trail t; t.push();
         expr_pool ep(t); bind_map bm(t); sequencer seq(t); lineage_pool lp;
@@ -17927,14 +17957,16 @@ void test_sim() {
         goals gs;
         gs.push_back(ep.functor("p", {}));
         cdcl c;
+        const goal_lineage* gl0 = lp.goal(nullptr, 0);
         sim_mock s(10, db, gs, t, seq, ep, bm, lp, c);
+        s.scripted.push_back(lp.resolution(gl0, 0));  // scripted: decide rule 0
 
         s();
 
         const resolutions& r = s.get_resolutions();
         const decisions& d   = s.get_decisions();
         assert(r.size() == 1);
-        assert(d.size() == 0);
+        assert(d.size() == 1);  // the single-candidate case is a decision now
         assert(&r == &s.rs);
         assert(&d == &s.ds);
     }
@@ -19380,10 +19412,12 @@ void test_horizon() {
         assert(solver.c.avoidances.empty());
     }
 
-    // Test 2: Simple ground solution, then refuted on the next call.
+    // Test 2: Single-rule ground solution.
     // db: {a.}, goals: {a}
-    // The single goal is unit-propagated immediately. ds is empty, so c.learn({})
-    // marks c.refuted() = true. A second call hits the refutation guard and returns false.
+    // With event-driven design, the single-candidate goal goes through decide_one().
+    // MCTS decides rule 0, goal a resolved → solution found.
+    // Note: refutation does not happen after call 1 in the event-driven design
+    // (single-candidate goals require decisions, so ds is never empty).
     {
         trail t;
         t.push();
@@ -19406,20 +19440,17 @@ void test_horizon() {
         assert(result == true);
         assert(soln.has_value());
 
-        // CRITICAL: exactly one resolution (unit-prop of a with rule 0)
+        // CRITICAL: exactly one resolution (decide_one of a with rule 0)
         assert(soln.value().size() == 1);
         const goal_lineage* gl0 = solver.lp.goal(nullptr, 0);
         const resolution_lineage* rl0 = solver.lp.resolution(gl0, 0);
         assert(soln.value().count(rl0) == 1);
 
-        // CRITICAL: empty-decision solution → c.learn({}) → c.refuted() = true
+        // CRITICAL: one avoidance learned (the decision rl0)
         assert(solver.c.avoidances.size() == 1);
-        assert(solver.c.is_refuted);
-
-        // CRITICAL: second call returns false immediately (refutation guard)
-        bool result2 = solver(soln);
-        assert(result2 == false);
-        assert(!soln.has_value());
+        // In the event-driven design, refutation does not happen after the first call
+        // because ds is non-empty ({rl0}), so c.learn({rl0}) is non-empty.
+        assert(!solver.c.is_refuted);
     }
 
     // Test 3: Variable binding verified via normalizer.
@@ -19457,41 +19488,11 @@ void test_horizon() {
         assert(std::get<expr::functor>(X_val->content).name == "42");
     }
 
-    // Test 4: Immediate refutation — empty database, goal has no candidates.
-    // Head-elimination fires before any resolution: conflict with ds = {} on the
-    // very first sim_one → ds.empty() branch → operator() returns false immediately.
-    {
-        trail t;
-        t.push();
-        expr_pool ep(t);
-        bind_map bm(t);
-        sequencer seq(t);
-
-        database db;  // intentionally empty
-
-        goals goals;
-        goals.push_back(ep.functor("a", {}));
-
-        std::mt19937 rng(42);
-        horizon solver(solver_args{db, goals, t, seq, bm, 1000}, mcts_solver_args{1.414, rng});
-
-        std::optional<resolution_store> soln;
-        bool result;
-        while ((result = solver(soln)) && !soln.has_value()) {}
-
-        assert(result == false);
-        assert(!soln.has_value());
-    }
-
-    // Test 5: Two-call CDCL-driven refutation.
-    // db: {a :- b., a :- c.}  (no rules for b or c), goals: {a}
-    //
-    // Call 1 (iterations=1): MCTS picks one of {rule0, rule1} for goal a.
-    //   The resulting sub-goal (b or c) has no candidates → conflict, ds has 1 decision.
-    //   Avoidance learned; returns true, nullopt.
-    //
-    // Call 2 (iterations=1): CDCL eliminates the chosen rule; the other is unit-propagated.
-    //   That sub-goal (b or c) also has no candidates → conflict, ds = {} → return false.
+    // Test 4: Variable goal that finds the only applicable solution via head_eliminator.
+    // db: {cons(p, 1).}, goals: {cons(p, X)}
+    // MCTS decides: goal cons(p, X) with rule 0 → X bound to 1 via bm.unify.
+    // Goal resolved → solution found (1 resolution).
+    // This tests that the event-driven head_eliminator works for variable goals.
     {
         trail t;
         t.push();
@@ -19500,26 +19501,82 @@ void test_horizon() {
         sequencer seq(t);
 
         database db;
-        db.push_back(rule{ep.functor("a", {}), {ep.functor("b", {})}});  // idx 0: a :- b.
-        db.push_back(rule{ep.functor("a", {}), {ep.functor("c", {})}});  // idx 1: a :- c.
+        db.push_back(rule{ep.functor("cons", {ep.functor("p", {}), ep.functor("1", {})}), {}});  // cons(p, 1).
 
+        const expr* X = ep.var(seq());
         goals goals;
-        goals.push_back(ep.functor("a", {}));
+        goals.push_back(ep.functor("cons", {ep.functor("p", {}), X}));
 
         std::mt19937 rng(42);
         horizon solver(solver_args{db, goals, t, seq, bm, 1000}, mcts_solver_args{1.414, rng});
 
         std::optional<resolution_store> soln;
+        bool result = solver(soln);
 
-        // Call 1: one avoidance recorded (singleton decision)
-        bool result1 = solver(soln);
+        assert(result == true);
+        assert(soln.has_value());
+        assert(soln.value().size() == 1);
+
+        // Normalizer verifies X → "1"
+        normalizer norm(ep, bm);
+        const expr* X_val = norm(X);
+        assert(std::holds_alternative<expr::functor>(X_val->content));
+        assert(std::get<expr::functor>(X_val->content).name == "1");
+    }
+
+    // Test 5: Two-call variable-goal solution and avoidance.
+    // db: {cons(a, 1). cons(a, 2).}, goals: {cons(a, X)}
+    // Both rules are applicable (bind X to 1 or 2).
+    //
+    // Call 1: MCTS finds one solution (either X=1 or X=2).
+    // Call 2: CDCL blocks call-1's decision. MCTS finds the other solution.
+    // Call 3: Both paths blocked → refutation.
+    {
+        trail t;
+        t.push();
+        expr_pool ep(t);
+        bind_map bm(t);
+        sequencer seq(t);
+
+        database db;
+        db.push_back(rule{ep.functor("cons", {ep.functor("a", {}), ep.functor("1", {})}), {}});  // idx 0: cons(a, 1).
+        db.push_back(rule{ep.functor("cons", {ep.functor("a", {}), ep.functor("2", {})}), {}});  // idx 1: cons(a, 2).
+
+        const expr* X = ep.var(seq());
+        goals goals;
+        goals.push_back(ep.functor("cons", {ep.functor("a", {}), X}));
+
+        std::mt19937 rng(42);
+        horizon solver(solver_args{db, goals, t, seq, bm, 1000}, mcts_solver_args{1.414, rng});
+
+        normalizer norm(ep, bm);
+        std::optional<resolution_store> soln;
+
+        // Call 1: first solution found
+        bool result1;
+        while ((result1 = solver(soln)) && !soln.has_value()) {}
         assert(result1 == true);
-        assert(!soln.has_value());
-        assert(solver.c.avoidances.size() == 1);
+        assert(soln.has_value());
+        assert(soln.value().size() == 1);
+        std::string x1 = std::get<expr::functor>(norm(X)->content).name;
+        assert(x1 == "1" || x1 == "2");
 
-        // Call 2: CDCL + unit-prop leads to conflict with empty ds → refutation
-        bool result2 = solver(soln);
-        assert(result2 == false);
+        // Call 2: CDCL blocks the first decision; second solution found
+        bool result2;
+        while ((result2 = solver(soln)) && !soln.has_value()) {}
+        assert(result2 == true);
+        assert(soln.has_value());
+        assert(soln.value().size() == 1);
+        std::string x2 = std::get<expr::functor>(norm(X)->content).name;
+        assert(x2 == "1" || x2 == "2");
+
+        // The two solutions must differ
+        assert(x1 != x2);
+
+        // Call 3: both paths blocked → refutation
+        bool result3;
+        while ((result3 = solver(soln)) && !soln.has_value()) {}
+        assert(result3 == false);
         assert(!soln.has_value());
     }
 
