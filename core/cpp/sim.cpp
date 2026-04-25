@@ -8,9 +8,11 @@ sim::sim(sim_args args) :
     cs(args.db, args.gl, args.lp),
     cp(args.vars, args.ep),
     c(args.c),
-    max_resolutions(args.max_resolutions),
+    he(args.db, args.gl, args.bm, args.ep, gs, cs, lp),
+    ce(args.db, args.gl, args.ep, cs, lp, c),
     rs({}),
-    ds({})
+    ds({}),
+    max_resolutions(args.max_resolutions)
 {}
 
 bool sim::operator()() {
@@ -47,14 +49,7 @@ bool sim::solved() {
 }
 
 bool sim::conflicted() {
-    // head elimination
-    cs.eliminate([this](const goal_lineage* gl, size_t i) { return !gs.applicable(gs.at(gl), db.at(i)); });
-
-    // cdcl elimination
-    cs.eliminate([this](const goal_lineage* gl, size_t i) { return c.eliminated(lp.resolution(gl, i)); });
-
-    // we don't need to run in a loop since elimination reaches fixpoint
-    return cs.conflicted();
+    return he() || ce();
 }
 
 const resolution_lineage* sim::derive_one() {

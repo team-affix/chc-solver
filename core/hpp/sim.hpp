@@ -4,6 +4,8 @@
 #include "sim_args.hpp"
 #include "goal_store.hpp"
 #include "candidate_store.hpp"
+#include "head_eliminator.hpp"
+#include "cdcl_eliminator.hpp"
 
 struct sim {
     sim(sim_args);
@@ -30,6 +32,9 @@ protected:
     copier cp;
 
     cdcl c;
+
+    head_eliminator he;
+    cdcl_eliminator ce;
 
     resolutions rs;
     decisions ds;
