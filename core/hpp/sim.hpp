@@ -33,6 +33,7 @@ protected:
 
     cdcl c;
 
+    std::queue<const resolution_lineage*> unit_queue;
     head_eliminator he;
     cdcl_eliminator ce;
 

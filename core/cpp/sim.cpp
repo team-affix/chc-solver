@@ -8,8 +8,9 @@ sim::sim(sim_args args) :
     cs(args.db, args.gl, args.lp),
     cp(args.vars, args.ep),
     c(args.c),
-    he(args.db, args.gl, args.bm, args.ep, gs, cs, lp),
-    ce(args.db, args.gl, args.ep, cs, lp, c),
+    unit_queue(),
+    he(args.db, args.gl, args.bm, args.ep, gs, cs, lp, unit_queue),
+    ce(args.db, args.gl, args.ep, cs, lp, c, unit_queue),
     rs({}),
     ds({}),
     max_resolutions(args.max_resolutions)
@@ -53,16 +54,13 @@ bool sim::conflicted() {
 }
 
 const resolution_lineage* sim::derive_one() {
-    // unit propagation
-    const goal_lineage* propagated_gl;
-    size_t propagated_rule_id;
+    if (unit_queue.empty())
+        return nullptr;
 
-    // if unit, return that resolution
-    if (cs.unit(propagated_gl, propagated_rule_id))
-        return lp.resolution(propagated_gl, propagated_rule_id);
-
-    // otherwise, return nullptr
-    return nullptr;
+    // get the next unit resolution
+    auto result = unit_queue.front();
+    unit_queue.pop();
+    return result;
 }
 
 void sim::resolve(const resolution_lineage* rl) {
