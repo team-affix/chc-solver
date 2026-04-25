@@ -18,6 +18,7 @@ struct cdcl_eliminator {
         std::queue<const resolution_lineage*>&
     );
     bool operator()();
+    void resolve(const resolution_lineage*);
 #ifndef DEBUG
 private:
 #endif

@@ -40,6 +40,10 @@ bool cdcl_eliminator::operator()() {
     return false;
 }
 
+void cdcl_eliminator::resolve(const resolution_lineage* r) {
+    fw.resolve(r);
+}
+
 bool cdcl_eliminator::route_elimination(const resolution_lineage* rl) {
     // get the parent goal
     const goal_lineage* gl = rl->parent;

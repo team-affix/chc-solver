@@ -62,6 +62,10 @@ bool head_eliminator::operator()() {
     return false;
 }
 
+void head_eliminator::resolve(const resolution_lineage* r) {
+    fw.resolve(r);
+}
+
 void head_eliminator::extract_rep_vars(const expr* e, std::unordered_set<uint32_t>& reps) {
     const expr* e_rep = bm.whnf(e);
 
