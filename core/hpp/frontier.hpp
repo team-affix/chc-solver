@@ -54,7 +54,7 @@ void frontier<T, Expander>::resolve(const resolution_lineage* r) {
     Expander exp(parent_value);
     
     // add the children to the frontier
-    for (int i = 0; i < db_rule.body.size(); i++)
+    for (int i = 0; i < db_rule.body.size(); ++i)
         insert(lp.goal(r, i), exp());
 
     // erase the parent from the frontier
