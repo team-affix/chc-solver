@@ -5,7 +5,6 @@
 #include "expr.hpp"
 #include "rule.hpp"
 #include "copier.hpp"
-#include "bind_map.hpp"
 
 struct goal_expander {
     goal_expander(

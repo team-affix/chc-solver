@@ -1,10 +1,8 @@
 #ifndef CANDIDATE_STORE_HPP
 #define CANDIDATE_STORE_HPP
 
-#include "lineage.hpp"
 #include "frontier.hpp"
 #include "candidate_expander.hpp"
-#include "defs.hpp"
 
 struct candidate_store : frontier<std::unordered_set<size_t>, candidate_expander> {
     candidate_store();

@@ -1,11 +1,7 @@
 #ifndef CANDIDATE_EXPANDER_HPP
 #define CANDIDATE_EXPANDER_HPP
 
-#include "defs.hpp"
-#include "expr.hpp"
-#include "rule.hpp"
-#include "copier.hpp"
-#include "bind_map.hpp"
+#include <unordered_set>
 
 struct candidate_expander {
     candidate_expander(const std::unordered_set<size_t>&);

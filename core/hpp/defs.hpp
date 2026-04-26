@@ -1,7 +1,6 @@
 #ifndef DEFS_HPP
 #define DEFS_HPP
 
-#include <list>
 #include <vector>
 #include <unordered_set>
 #include "lineage.hpp"

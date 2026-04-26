@@ -1,7 +1,6 @@
 #ifndef GOAL_STORE_HPP
 #define GOAL_STORE_HPP
 
-#include "defs.hpp"
 #include "copier.hpp"
 #include "bind_map.hpp"
 #include "lineage.hpp"
