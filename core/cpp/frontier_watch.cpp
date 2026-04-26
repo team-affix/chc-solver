@@ -2,17 +2,15 @@
 
 frontier_watch::frontier_watch(
     const database& db,
+    const goals& goals,
     lineage_pool& lp,
     topic<const goal_lineage*>& goal_inserted_topic,
     topic<const resolution_lineage*>& goal_resolved_topic)
     :
     db(db),
-    lp(lp), 
+    lp(lp),
     goal_inserted_topic(goal_inserted_topic),
     goal_resolved_topic(goal_resolved_topic) {
-}
-
-void frontier_watch::initialize(const goals& goals) {
     for (int i = 0; i < goals.size(); ++i)
         goal_inserted_topic.produce(lp.goal(nullptr, i));
 }
