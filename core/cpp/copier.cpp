@@ -1,5 +1,5 @@
 #include <stdexcept>
-#include "../hpp/data_structures/copier.hpp"
+#include "../hpp/domain/data_structures/copier.hpp"
 
 copier::copier(sequencer& seq, expr_pool& ep)
     :

@@ -2,8 +2,9 @@
 #define COPIER_HPP
 
 #include <map>
-#include "sequencer.hpp"
-#include "expr.hpp"
+#include "../value_objects/expr.hpp"
+#include "../../infrastructure/sequencer.hpp"
+#include "expr_pool.hpp"
 
 struct copier {
     copier(sequencer&, expr_pool&);
