@@ -2,7 +2,9 @@
 #define LOCATOR_HPP
 
 #include <unordered_map>
-#include <stdexcept>
+#include <cassert>
+#include <stack>
+#include <unordered_set>
 
 enum class locator_keys {
     inst_database,
@@ -23,6 +25,11 @@ enum class locator_keys {
     inst_resolution_lineage,
     inst_goal_lineage,
     inst_lineage_pool,
+    inst_rep_changed_topic,
+    inst_goal_inserted_topic,
+    inst_goal_resolved_topic,
+    inst_new_eliminated_resolution_topic,
+    inst_unit_topic,
 };
 
 struct locator {
@@ -31,11 +38,14 @@ struct locator {
     template<typename T>
     void bind(locator_keys, T& value);
     void unbind(locator_keys);
-    void purge();
+    void push_frame();
+    void pop_frame();
 #ifndef DEBUG
 private:
 #endif
     std::unordered_map<locator_keys, void*> entries;
+    std::unordered_set<locator_keys> current_frame_additions;
+    std::stack<std::unordered_set<locator_keys>> past_frames;
 };
 
 template<typename T>
@@ -45,10 +55,9 @@ T& locator::operator()(locator_keys key) {
 
 template<typename T>
 void locator::bind(locator_keys key, T& value) {
-    auto [it, success] = entries.insert({key, &value});
-
-    if (!success)
-        throw std::runtime_error("Key already bound");
+    auto [_, success] = entries.insert({key, &value});
+    assert(success);
+    current_frame_additions.insert(key);
 }
 
 #endif
