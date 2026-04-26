@@ -1,18 +1,14 @@
 #ifndef CDCL_ELIMINATOR_HPP
 #define CDCL_ELIMINATOR_HPP
 
-#include <queue>
-#include "cdcl.hpp"
 #include "lineage.hpp"
 #include "candidate_store.hpp"
-#include "frontier_watch.hpp"
 #include "topic.hpp"
 
 struct cdcl_eliminator {
     cdcl_eliminator(
         candidate_store&,
         lineage_pool&,
-        cdcl&,
         topic<const goal_lineage*>&,
         topic<const resolution_lineage*>&,
         topic<const resolution_lineage*>&,

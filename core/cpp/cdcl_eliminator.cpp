@@ -3,7 +3,6 @@
 cdcl_eliminator::cdcl_eliminator(
     candidate_store& cs,
     lineage_pool& lp,
-    cdcl& c,
     topic<const goal_lineage*>& goal_inserted_topic,
     topic<const resolution_lineage*>& goal_resolved_topic,
     topic<const resolution_lineage*>& new_eliminated_resolution_topic,
