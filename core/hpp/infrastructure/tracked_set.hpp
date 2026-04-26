@@ -1,33 +1,34 @@
 #ifndef TRACKED_SET_HPP
 #define TRACKED_SET_HPP
 
-#include <set>
-#include "tracked.hpp"
+#include <utility>
 #include "trail.hpp"
 
-template<typename T>
-struct tracked<std::set<T>> {
-    tracked<std::set<T>>(trail&);
-    void insert(const T&);
-    void erase(const T&);
-    const std::set<T>& get() const;
+template<typename S>
+struct tracked_set {
+    tracked_set(trail&);
+    std::pair<typename S::const_iterator, bool> insert(const S::value_type&);
+    std::pair<typename S::const_iterator, bool> erase(const S::value_type&);
+    const S& get() const;
 #ifndef DEBUG
 private:
 #endif
     trail& t;
-    std::set<T> members;
+    S members;
 };
 
-template<typename T>
-void tracked<std::set<T>>::insert(const T& val) {
-    auto [_, inserted] = members.insert(val);
-    if (inserted) t.log([this, val]() { members.erase(val); });
+template<typename S>
+std::pair<typename S::const_iterator, bool> tracked_set<S>::insert(const S::value_type& val) {
+    auto result = members.insert(val);
+    if (result.second) t.log([this, val]() { members.erase(val); });
+    return result;
 }
 
-template<typename T>
-void tracked<std::set<T>>::erase(const T& val) {
-    auto [_, erased] = members.erase(val);
-    if (erased) t.log([this, val]() { members.insert(val); });
+template<typename S>
+std::pair<typename S::const_iterator, bool> tracked_set<S>::erase(const S::value_type& val) {
+    auto result = members.erase(val);
+    if (result.second) t.log([this, val]() { members.insert(val); });
+    return result;
 }
 
 #endif

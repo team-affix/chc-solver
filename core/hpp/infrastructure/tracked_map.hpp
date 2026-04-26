@@ -1,44 +1,45 @@
 #ifndef TRACKED_MAP_HPP
 #define TRACKED_MAP_HPP
 
-#include <map>
-#include "tracked.hpp"
 #include "trail.hpp"
+#include <utility>
 
-template<typename K, typename V>
-struct tracked<std::map<K, V>> {
-    tracked<std::map<K, V>>(trail&);
-    void upsert(const K&, const V&);
-    void erase(const K&);
-    const std::map<K, V>& get() const;
+template<typename M>
+struct tracked_map {
+    tracked_map(trail&);
+    std::pair<typename M::const_iterator, bool> upsert(const M::key_type&, const M::value_type&);
+    std::pair<typename M::const_iterator, bool> erase(const M::key_type&);
+    const M& get() const;
 #ifndef DEBUG
 private:
 #endif
     trail& t;
-    std::map<K, V> members;
+    M members;
 };
 
-template<typename K, typename V>
-void tracked<std::map<K, V>>::upsert(const K& key, const V& value) {
+template<typename M>
+std::pair<typename M::const_iterator, bool> tracked_map<M>::upsert(const M::key_type& key, const M::value_type& value) {
     auto [it, inserted] = members.insert({key, value});
     if (inserted) {
         t.log([this, key, value]() { members.erase(key); });
     }
     else {
-        V old_value = it->second;
+        auto old_value = it->second;
         it->second = value;
         t.log([this, key, old_value]() { members.at(key) = old_value; });
     }
+    return {it, inserted};
 }
 
-template<typename K, typename V>
-void tracked<std::map<K, V>>::erase(const K& key) {
+template<typename M>
+std::pair<typename M::const_iterator, bool> tracked_map<M>::erase(const M::key_type& key) {
     auto it = members.find(key);
     if (it == members.end())
-        return;
-    V old_value = it->second;
-    members.erase(it);
+        return {it, false};
+    auto old_value = it->second;
+    auto result = members.erase(it);
     t.log([this, key, old_value]() { members.insert({key, old_value}); });
+    return result;
 }
 
 #endif
