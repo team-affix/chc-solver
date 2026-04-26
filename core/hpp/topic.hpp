@@ -9,6 +9,7 @@ struct topic {
     struct subscription {
         ~subscription();
         subscription(topic<T>&);
+        bool empty() const;
         T consume();
     #ifndef DEBUG
     private:
@@ -28,6 +29,11 @@ private:
 template <typename T>
 topic<T>::subscription::~subscription() {
     parent->mailboxes.erase(id);
+}
+
+template <typename T>
+bool topic<T>::subscription::empty() const {
+    return parent->mailboxes.at(id).empty();
 }
 
 template <typename T>
