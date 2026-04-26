@@ -1,8 +1,8 @@
-#include "../hpp/cdcl.hpp"
-#include "../hpp/locator.hpp"
+#include "../../../../hpp/domain/entities/cdcl/cdcl.hpp"
+#include "../../../../hpp/infrastructure/locator.hpp"
 
 cdcl::cdcl() :
-    new_eliminated_resolution_topic(locator::locate<topic<const resolution_lineage*>>(locator_keys::inst_new_eliminated_resolution_topic)),
+    cdcl_eliminated_candidate_topic(locator::locate<event_topic<cdcl_eliminated_candidate_event>>()),
     avoidances(),
     watched_goals(),
     is_refuted(false),
@@ -73,7 +73,7 @@ void cdcl::upsert(size_t id, const avoidance& av) {
 
         // 3. if the elimination was new, call the callback
         if (inserted)
-            new_eliminated_resolution_topic.produce(*av.begin());
+            cdcl_eliminated_candidate_topic.produce(cdcl_eliminated_candidate_event{*av.begin()});
     }
 }
 

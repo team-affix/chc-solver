@@ -1,9 +1,11 @@
 #ifndef AVOIDANCE_HPP
 #define AVOIDANCE_HPP
 
-#include "lineage.hpp"
-#include "lemma.hpp"
-#include "topic.hpp"
+#include <map>
+#include "../../value_objects/lineage.hpp"
+#include "../../data_structures/lemma.hpp"
+#include "../../../infrastructure/event_topic.hpp"
+#include "../../events/cdcl_eliminated_candidate_event.hpp"
 
 using avoidance = std::unordered_set<const resolution_lineage*>;
 
@@ -19,7 +21,7 @@ struct cdcl {
     void upsert(size_t, const avoidance&);
     void erase(size_t);
 
-    topic<const resolution_lineage*>& new_eliminated_resolution_topic;
+    event_topic<cdcl_eliminated_candidate_event>& cdcl_eliminated_candidate_topic;
 
     std::map<size_t, avoidance> avoidances;
     std::map<const goal_lineage*, std::set<size_t>> watched_goals;
