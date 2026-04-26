@@ -7,11 +7,7 @@
 #include "defs.hpp"
 
 struct candidate_store : frontier<std::unordered_set<size_t>, candidate_expander> {
-    candidate_store(
-        const database&,
-        const goals&,
-        lineage_pool&
-    );
+    candidate_store();
     candidate_expander make_expander(const std::unordered_set<size_t>&, const rule&) override;
 #ifndef DEBUG
 private:

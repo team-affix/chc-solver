@@ -6,13 +6,7 @@
 #include "topic.hpp"
 
 struct frontier_watch {
-    frontier_watch(
-        const database&,
-        const goals&,
-        lineage_pool&,
-        topic<const goal_lineage*>&,
-        topic<const resolution_lineage*>&
-    );
+    frontier_watch();
     void resolve(const resolution_lineage*);
 #ifndef DEBUG
 private:

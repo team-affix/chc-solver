@@ -30,26 +30,30 @@ enum class locator_keys {
     inst_goal_resolved_topic,
     inst_new_eliminated_resolution_topic,
     inst_unit_topic,
+    inst_mcts_decider,
+    inst_mcts_sim,
+    inst_mcts_exploration_constant,
+    inst_mcts_rng,
 };
 
 struct locator {
     template<typename T>
-    T& operator()(locator_keys);
+    static T& locate(locator_keys);
     template<typename T>
-    void bind(locator_keys, T& value);
-    void unbind(locator_keys);
-    void push_frame();
-    void pop_frame();
+    static void bind(locator_keys, T& value);
+    static void unbind(locator_keys);
+    static void push_frame();
+    static void pop_frame();
 #ifndef DEBUG
 private:
 #endif
-    std::unordered_map<locator_keys, void*> entries;
-    std::unordered_set<locator_keys> current_frame_additions;
-    std::stack<std::unordered_set<locator_keys>> past_frames;
+    static std::unordered_map<locator_keys, void*> entries;
+    static std::unordered_set<locator_keys> current_frame_additions;
+    static std::stack<std::unordered_set<locator_keys>> past_frames;
 };
 
 template<typename T>
-T& locator::operator()(locator_keys key) {
+T& locator::locate(locator_keys key) {
     return *reinterpret_cast<T*>(entries.at(key));
 }
 

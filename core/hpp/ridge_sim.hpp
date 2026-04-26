@@ -1,13 +1,11 @@
 #ifndef RIDGE_SIM_HPP
 #define RIDGE_SIM_HPP
 
-#include "../../mcts/include/mcts.hpp"
 #include "mcts_decider.hpp"
 #include "sim.hpp"
-#include "mcts_sim_args.hpp"
 
 struct ridge_sim : sim {
-    ridge_sim(sim_args, mcts_sim_args);
+    ridge_sim();
 #ifndef DEBUG
 protected:
 #endif

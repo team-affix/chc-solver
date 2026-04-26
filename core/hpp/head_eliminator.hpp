@@ -12,19 +12,7 @@
 #include "topic.hpp"
 
 struct head_eliminator {
-    head_eliminator(
-        const database&,
-        const goals&,
-        bind_map&,
-        expr_pool&,
-        goal_store&,
-        candidate_store&,
-        lineage_pool&,
-        topic<uint32_t>&,
-        topic<const goal_lineage*>&,
-        topic<const resolution_lineage*>&,
-        topic<const resolution_lineage*>&
-    );
+    head_eliminator();
     bool operator()();
 #ifndef DEBUG
 private:

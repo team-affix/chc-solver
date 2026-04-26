@@ -6,10 +6,7 @@
 
 struct mcts_decider {
     using choice = std::variant<const goal_lineage*, size_t>;
-    mcts_decider(
-        const candidate_store&,
-        monte_carlo::simulation<choice, std::mt19937>&
-    );
+    mcts_decider();
     std::pair<const goal_lineage*, size_t> operator()();
 #ifndef DEBUG
 private:

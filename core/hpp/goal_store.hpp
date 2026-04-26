@@ -9,14 +9,7 @@
 #include "goal_expander.hpp"
 
 struct goal_store : frontier<const expr*, goal_expander> {
-    goal_store(
-        const database&,
-        const goals&,
-        trail&,
-        copier&,
-        bind_map&,
-        lineage_pool&
-    );
+    goal_store();
     bool applicable(const expr* const&, const rule&);
     goal_expander make_expander(const expr* const&, const rule&) override;
 #ifndef DEBUG

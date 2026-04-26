@@ -5,7 +5,7 @@
 #include "trail.hpp"
 
 struct sequencer {
-    sequencer(trail&);
+    sequencer();
     uint32_t operator()();
 #ifndef DEBUG
 private:

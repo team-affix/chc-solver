@@ -11,10 +11,9 @@
 #include "sequencer.hpp"
 #include "cdcl.hpp"
 #include "sim.hpp"
-#include "solver_args.hpp"
 
 struct solver {
-    solver(solver_args);
+    solver();
     virtual ~solver();
     bool operator()(std::optional<resolutions>&);
 #ifndef DEBUG

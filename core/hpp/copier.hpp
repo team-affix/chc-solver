@@ -6,7 +6,7 @@
 #include "expr.hpp"
 
 struct copier {
-    copier(sequencer&, expr_pool&);
+    copier();
     const expr* operator()(const expr*, std::map<uint32_t, uint32_t>&);
 #ifndef DEBUG
 private:

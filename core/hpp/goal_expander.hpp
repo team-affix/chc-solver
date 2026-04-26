@@ -10,9 +10,7 @@
 struct goal_expander {
     goal_expander(
         const expr* const& goal,
-        const rule& r,
-        copier& cp,
-        bind_map& bm);
+        const rule& r);
     const expr* operator()();
 #ifndef DEBUG
 private:

@@ -6,7 +6,7 @@
 #include "topic.hpp"
 
 struct bind_map {
-    bind_map(trail&, topic<uint32_t>&);
+    bind_map();
     const expr* whnf(const expr*);
     bool unify(const expr*, const expr*);
 #ifndef DEBUG

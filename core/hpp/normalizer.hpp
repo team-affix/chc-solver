@@ -5,7 +5,7 @@
 #include "bind_map.hpp"
 
 struct normalizer {
-    normalizer(expr_pool&, bind_map&);
+    normalizer();
     const expr* operator()(const expr*);
 #ifndef DEBUG
 private:

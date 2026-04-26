@@ -3,14 +3,12 @@
 
 #include <unordered_map>
 #include "defs.hpp"
+#include "locator.hpp"
 
 template<typename T, typename Expander>
 struct frontier {
     virtual ~frontier() = default;
-    frontier(
-        const database&,
-        lineage_pool&
-    );
+    frontier();
     void insert(const goal_lineage*, const T&);
     void resolve(const resolution_lineage*);
     
@@ -28,9 +26,10 @@ private:
 };
 
 template<typename T, typename Expander>
-frontier<T, Expander>::frontier(
-    const database& db,
-    lineage_pool& lp) : db(db), lp(lp) {}
+frontier<T, Expander>::frontier() :
+    db(locator::locate<database>(locator_keys::inst_database)),
+    lp(locator::locate<lineage_pool>(locator_keys::inst_lineage_pool)) {
+}
 
 template<typename T, typename Expander>
 void frontier<T, Expander>::insert(const goal_lineage* gl, const T& value) {

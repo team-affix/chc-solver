@@ -8,7 +8,7 @@
 using avoidance = std::unordered_set<const resolution_lineage*>;
 
 struct cdcl {
-    cdcl(topic<const resolution_lineage*>&);
+    cdcl();
     void learn(const lemma&);
     void constrain(const resolution_lineage*);
     bool refuted() const;

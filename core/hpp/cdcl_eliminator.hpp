@@ -6,14 +6,7 @@
 #include "topic.hpp"
 
 struct cdcl_eliminator {
-    cdcl_eliminator(
-        candidate_store&,
-        lineage_pool&,
-        topic<const goal_lineage*>&,
-        topic<const resolution_lineage*>&,
-        topic<const resolution_lineage*>&,
-        topic<const resolution_lineage*>&
-    );
+    cdcl_eliminator();
     bool operator()();
 #ifndef DEBUG
 private:

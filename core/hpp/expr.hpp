@@ -23,7 +23,7 @@ struct expr {
 };
 
 struct expr_pool {
-    expr_pool(trail&);
+    expr_pool();
     const expr* functor(const std::string& name, std::vector<const expr*> args = {});
     const expr* var(uint32_t);
     const expr* import(const expr*);

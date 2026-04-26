@@ -6,12 +6,7 @@
 #include "topic.hpp"
 
 struct initial_condition_detector {
-    initial_condition_detector(
-        candidate_store&,
-        lineage_pool&,
-        topic<const goal_lineage*>&,
-        topic<const resolution_lineage*>&
-    );
+    initial_condition_detector();
     bool operator()();
 #ifndef DEBUG
 private:

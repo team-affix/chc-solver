@@ -6,11 +6,7 @@
 #include "weight_expander.hpp"
 
 struct weight_store : frontier<double, weight_expander> {
-    weight_store(
-        const goals&,
-        const database&,
-        lineage_pool&
-    );
+    weight_store();
     double total() const;
     weight_expander make_expander(const double&, const rule&) override;
 #ifndef DEBUG

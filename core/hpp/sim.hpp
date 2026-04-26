@@ -1,16 +1,16 @@
 #ifndef SIM_HPP
 #define SIM_HPP
 
-#include "sim_args.hpp"
 #include "goal_store.hpp"
 #include "candidate_store.hpp"
+#include "cdcl.hpp"
 #include "initial_condition_detector.hpp"
 #include "cdcl_eliminator.hpp"
 #include "head_eliminator.hpp"
 #include "frontier_watch.hpp"
 
 struct sim {
-    sim(sim_args);
+    sim();
     bool operator()();
     const resolutions& get_resolutions() const;
     const decisions& get_decisions() const;
