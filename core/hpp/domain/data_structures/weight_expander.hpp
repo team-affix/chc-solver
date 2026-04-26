@@ -1,7 +1,7 @@
 #ifndef WEIGHT_EXPANDER_HPP
 #define WEIGHT_EXPANDER_HPP
 
-#include "rule.hpp"
+#include "../value_objects/rule.hpp"
 
 struct weight_expander {
     weight_expander(const double& weight, const rule& r, double& cgw);

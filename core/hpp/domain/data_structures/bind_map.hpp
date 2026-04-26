@@ -3,7 +3,7 @@
 
 #include <map>
 #include "../value_objects/expr.hpp"
-#include "trail.hpp"
+#include "../../infrastructure/trail.hpp"
 #include <queue>
 
 struct bind_map {
