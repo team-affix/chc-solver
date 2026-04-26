@@ -1,5 +1,5 @@
 #include <stdexcept>
-#include "../hpp/domain/data_structures/goal_expander.hpp"
+#include "../../../hpp/domain/data_structures/goal_expander.hpp"
 
 goal_expander::goal_expander(
     const expr* const& goal,
@@ -12,8 +12,11 @@ goal_expander::goal_expander(
     // copy the head of the rule
     const expr* copied_head = cp(r.head, translation_map);
 
+    // create queue of rep changed indices
+    std::queue<uint32_t> rep_changed_queue;
+
     // unify the goal with the head of the rule
-    if (!bm.unify(goal, copied_head))
+    if (!bm.unify(goal, copied_head, rep_changed_queue))
         throw std::runtime_error("Failed to unify the goal with the head of the rule");
 
     // save the original body

@@ -1,5 +1,5 @@
 #include <stdexcept>
-#include "../hpp/domain/data_structures/expr_pool.hpp"
+#include "../../../hpp/domain/data_structures/expr_pool.hpp"
 
 expr_pool::expr_pool(trail& t) : trail_ref(t) {
 }

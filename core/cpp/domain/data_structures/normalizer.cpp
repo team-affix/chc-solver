@@ -1,5 +1,5 @@
 #include <stdexcept>
-#include "../hpp/domain/data_structures/normalizer.hpp"
+#include "../../../hpp/domain/data_structures/normalizer.hpp"
 
 normalizer::normalizer(expr_pool& ep, bind_map& bm) :
     expr_pool_ref(ep),

@@ -1,5 +1,5 @@
-#include "../hpp/domain/entities/candidate_store/candidate_store.hpp"
-#include "../hpp/infrastructure/locator.hpp"
+#include "../../../../hpp/domain/entities/candidate_store/candidate_store.hpp"
+#include "../../../../hpp/infrastructure/locator.hpp"
 
 candidate_store::candidate_store() :
     frontier<std::unordered_set<size_t>, candidate_expander>(
