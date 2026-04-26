@@ -1,13 +1,13 @@
-#ifndef INITIAL_CONDITION_DETECTOR_HPP
-#define INITIAL_CONDITION_DETECTOR_HPP
+#ifndef INITIAL_CONDITION_CHECKER_HPP
+#define INITIAL_CONDITION_CHECKER_HPP
 
-#include "lineage.hpp"
-#include "candidate_store.hpp"
-#include "topic.hpp"
+#include "../../value_objects/lineage.hpp"
+#include "../candidate_store/candidate_store.hpp"
+#include "../../../infrastructure/event_topic.hpp"
 
-struct initial_condition_detector {
-    initial_condition_detector();
-    bool operator()();
+struct initial_condition_checker {
+    initial_condition_checker();
+    void operator()(const goal_lineage*);
 #ifndef DEBUG
 private:
 #endif

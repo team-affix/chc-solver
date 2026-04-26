@@ -1,13 +1,10 @@
-#include "../hpp/cdcl_eliminator.hpp"
-#include "../hpp/locator.hpp"
+#include "../../../hpp/domain/entities/cdcl_eliminator/cdcl_eliminator.hpp"
+#include "../../../hpp/infrastructure/locator.hpp"
 
 cdcl_eliminator::cdcl_eliminator() :
-    lp(locator::locate<lineage_pool>(locator_keys::inst_lineage_pool)),
-    cs(locator::locate<candidate_store>(locator_keys::inst_candidate_store)),
-    goal_inserted_subscription(locator::locate<topic<const goal_lineage*>>(locator_keys::inst_goal_inserted_topic)),
-    goal_resolved_subscription(locator::locate<topic<const resolution_lineage*>>(locator_keys::inst_goal_resolved_topic)),
-    new_eliminated_resolution_subscription(locator::locate<topic<const resolution_lineage*>>(locator_keys::inst_new_eliminated_resolution_topic)),
-    unit_topic(locator::locate<topic<const resolution_lineage*>>(locator_keys::inst_unit_topic)) {
+    lp(locator::locate<lineage_pool>()),
+    cs(locator::locate<candidate_store>()),
+    unit_topic(locator::locate<event_topic<unit_event>>()) {
 }
 
 bool cdcl_eliminator::operator()() {
