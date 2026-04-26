@@ -10,10 +10,9 @@
 #include "bind_map.hpp"
 #include "goal_store.hpp"
 #include "candidate_store.hpp"
-#include "frontier_watch.hpp"
+#include "topic.hpp"
 
 struct head_eliminator {
-    ~head_eliminator();
     head_eliminator(
         const database&,
         const goals&,
@@ -22,11 +21,12 @@ struct head_eliminator {
         goal_store&,
         candidate_store&,
         lineage_pool&,
-        bool&,
-        std::queue<const resolution_lineage*>&
+        topic<uint32_t>&,
+        topic<const goal_lineage*>&,
+        topic<const resolution_lineage*>&,
+        topic<const resolution_lineage*>&
     );
-    void operator()();
-    void resolve(const resolution_lineage*);
+    bool operator()();
 #ifndef DEBUG
 private:
 #endif
@@ -34,11 +34,11 @@ private:
     void watch(const std::unordered_set<uint32_t>&, const std::unordered_set<const goal_lineage*>&);
     std::unordered_set<const goal_lineage*> unwatch(uint32_t);
     std::unordered_set<uint32_t> unwatch(const goal_lineage*);
-    std::function<void(uint32_t)> rep_changed_callback();
-    std::function<void(const goal_lineage*)> goal_inserted_callback();
-    std::function<void(const resolution_lineage*)> goal_resolved_callback();
+    bool flush_rep_changed();
+    bool flush_goal_inserted();
+    void flush_goal_resolved();
     void update_rep_watches(uint32_t);
-    void visit_goal_lineage(const goal_lineage*);
+    bool visit_goal_lineage(const goal_lineage*);
 
     const database& db;
     bind_map& bm;
@@ -46,11 +46,11 @@ private:
     goal_store& gs;
     candidate_store& cs;
     lineage_pool& lp;
-    bool& conflict_register;
-    std::queue<const resolution_lineage*>& unit_queue;
 
-    frontier_watch fw;
-    std::queue<uint32_t> changed_reps;
+    topic<uint32_t>::subscription rep_changed_subscription;
+    topic<const goal_lineage*>::subscription goal_inserted_subscription;
+    topic<const resolution_lineage*>::subscription goal_resolved_subscription;
+    topic<const resolution_lineage*>& unit_topic;
     std::unordered_map<uint32_t, std::unordered_set<const goal_lineage*>> rep_to_goals;
     std::unordered_map<const goal_lineage*, std::unordered_set<uint32_t>> goal_to_reps;
 };
