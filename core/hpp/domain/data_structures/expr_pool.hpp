@@ -1,6 +1,11 @@
 #ifndef EXPR_POOL_HPP
 #define EXPR_POOL_HPP
 
+#include <set>
+#include <string>
+#include "../value_objects/expr.hpp"
+#include "../../infrastructure/trail.hpp"
+
 struct expr_pool {
     expr_pool(trail&);
     const expr* functor(const std::string& name, std::vector<const expr*> args = {});
