@@ -3,26 +3,43 @@
 
 #include <queue>
 #include "command_handler.hpp"
+#include "task.hpp"
+#include "scheduler.hpp"
 
 template<typename Command>
-struct command_topic {
+struct command_topic : task {
+    command_topic(scheduler&);
     void produce(const Command&);
     void subscribe(command_handler<Command>&);
+    void execute() override;
 #ifndef DEBUG
 private:
 #endif
+    scheduler& s;
+
     std::queue<Command> commands;
     command_handler<Command>* handler;
 };
 
 template<typename Command>
+command_topic<Command>::command_topic(scheduler& s) : s(s) {
+}
+
+template<typename Command>
 void command_topic<Command>::produce(const Command& command) {
-    handler->operator()(command);
+    commands.push(command);
+    s.schedule(this);
 }
 
 template<typename Command>
 void command_topic<Command>::subscribe(command_handler<Command>& handler) {
     this->handler = &handler;
+}
+
+template<typename Command>
+void command_topic<Command>::execute() {
+    handler->operator()(commands.front());
+    commands.pop();
 }
 
 #endif
