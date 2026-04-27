@@ -2,7 +2,7 @@
 #define GOALS_HPP
 
 #include <vector>
-#include "../../value_objects/goal.hpp"
+#include "../value_objects/goal.hpp"
 
 struct goals {
     goals(const std::vector<goal>&);
