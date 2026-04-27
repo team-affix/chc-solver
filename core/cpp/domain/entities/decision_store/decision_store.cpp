@@ -1,8 +1,7 @@
 #include "../../../../hpp/domain/entities/decision_store/decision_store.hpp"
-#include "../../../../hpp/infrastructure/locator.hpp"
 
 decision_store::decision_store() :
-    decisions(locator::locate<trail>()) {
+    decisions() {
 }
 
 void decision_store::insert(const resolution_lineage* rl) {
@@ -10,5 +9,9 @@ void decision_store::insert(const resolution_lineage* rl) {
 }
 
 const std::unordered_set<const resolution_lineage*>& decision_store::get() const {
-    return decisions.get();
+    return decisions;
+}
+
+void decision_store::clear() {
+    decisions.clear();
 }

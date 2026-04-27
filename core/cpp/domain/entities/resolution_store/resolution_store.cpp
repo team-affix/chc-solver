@@ -1,8 +1,7 @@
 #include "../../../../hpp/domain/entities/resolution_store/resolution_store.hpp"
-#include "../../../../hpp/infrastructure/locator.hpp"
 
 resolution_store::resolution_store() :
-    resolutions(locator::locate<trail>()) {
+    resolutions() {
 }
 
 void resolution_store::insert(const resolution_lineage* rl) {
@@ -10,5 +9,9 @@ void resolution_store::insert(const resolution_lineage* rl) {
 }
 
 const std::unordered_set<const resolution_lineage*>& resolution_store::get() const {
-    return resolutions.get();
+    return resolutions;
+}
+
+void resolution_store::clear() {
+    resolutions.clear();
 }
