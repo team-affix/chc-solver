@@ -9,7 +9,7 @@ template<typename Event>
 struct cancellable_event_handler : event_handler<Event> {
     virtual ~cancellable_event_handler() = default;
     cancellable_event_handler();
-    virtual void execute() = 0;
+    virtual void execute(const Event&) = 0;
 #ifndef DEBUG
 private:
 #endif
@@ -27,7 +27,7 @@ template<typename Event>
 void cancellable_event_handler<Event>::operator()(const Event& event) {
     if (token.is_cancelled())
         return;
-    execute();
+    execute(event);
 }
 
 #endif
