@@ -5,6 +5,6 @@ void scheduler::schedule(task* t) {
 }
 
 void scheduler::tick() {
-    tasks.front()->execute();
+    tasks.top()->execute();
     tasks.pop();
 }

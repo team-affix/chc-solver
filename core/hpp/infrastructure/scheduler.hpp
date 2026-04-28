@@ -2,7 +2,9 @@
 #define SCHEDULER_HPP
 
 #include <queue>
+#include <vector>
 #include "task.hpp"
+#include "task_compare.hpp"
 
 struct scheduler {
     void schedule(task*);
@@ -10,7 +12,7 @@ struct scheduler {
 #ifndef DEBUG
 private:
 #endif
-    std::priority_queue<task*> tasks;
+    std::priority_queue<task*, std::vector<task*>, task_compare> tasks;
 };
 
 #endif
