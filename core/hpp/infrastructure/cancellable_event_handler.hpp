@@ -2,11 +2,12 @@
 #define CANCELLABLE_EVENT_HANDLER_HPP
 
 #include "event_handler.hpp"
-#include "cancellation_token.hpp"
-#include "../bootstrap/resolver.hpp"
 
-template<typename Event>
-struct cancellable_event_handler : event_handler<Event> {
+template<typename Event, typename CancellationEvent, typename ResetCancellationEvent>
+struct cancellable_event_handler :
+        event_handler<Event>,
+        event_handler<CancellationEvent>,
+        event_handler<ResetCancellationEvent> {
     virtual ~cancellable_event_handler() = default;
     cancellable_event_handler();
     virtual void execute(const Event&) = 0;
@@ -14,20 +15,34 @@ struct cancellable_event_handler : event_handler<Event> {
 private:
 #endif
     void operator()(const Event&) final override;
-    const cancellation_token& token;
+    void operator()(const CancellationEvent&) final override;
+    void operator()(const ResetCancellationEvent&) final override;
+    bool cancelled;
 };
 
-template<typename Event>
-cancellable_event_handler<Event>::cancellable_event_handler() :
+template<typename Event, typename CancellationEvent, typename ResetCancellationEvent>
+cancellable_event_handler<Event, CancellationEvent, ResetCancellationEvent>::cancellable_event_handler() :
     event_handler<Event>(),
-    token(resolver::resolve<cancellation_token>()) {
+    event_handler<CancellationEvent>(),
+    event_handler<ResetCancellationEvent>(),
+    cancelled(false) {
 }
 
-template<typename Event>
-void cancellable_event_handler<Event>::operator()(const Event& event) {
-    if (token.is_cancelled())
+template<typename Event, typename CancellationEvent, typename ResetCancellationEvent>
+void cancellable_event_handler<Event, CancellationEvent, ResetCancellationEvent>::operator()(const Event& event) {
+    if (cancelled)
         return;
     execute(event);
+}
+
+template<typename Event, typename CancellationEvent, typename ResetCancellationEvent>
+void cancellable_event_handler<Event, CancellationEvent, ResetCancellationEvent>::operator()(const CancellationEvent& event) {
+    cancelled = true;
+}
+
+template<typename Event, typename CancellationEvent, typename ResetCancellationEvent>
+void cancellable_event_handler<Event, CancellationEvent, ResetCancellationEvent>::operator()(const ResetCancellationEvent& event) {
+    cancelled = false;
 }
 
 #endif

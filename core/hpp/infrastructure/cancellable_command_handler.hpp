@@ -1,12 +1,14 @@
 #ifndef CANCELLABLE_EVENT_HANDLER_HPP
 #define CANCELLABLE_EVENT_HANDLER_HPP
 
-#include "cancellation_token.hpp"
 #include "command_handler.hpp"
-#include "../bootstrap/resolver.hpp"
+#include "event_handler.hpp"
 
-template<typename Command>
-struct cancellable_command_handler : command_handler<Command> {
+template<typename Command, typename CancellationEvent, typename ResetCancellationEvent>
+struct cancellable_command_handler :
+        command_handler<Command>,
+        event_handler<CancellationEvent>,
+        event_handler<ResetCancellationEvent> {
     virtual ~cancellable_command_handler() = default;
     cancellable_command_handler();
     virtual void execute(const Command&) = 0;
@@ -14,20 +16,34 @@ struct cancellable_command_handler : command_handler<Command> {
 private:
 #endif
     void operator()(const Command&) final override;
-    const cancellation_token& token;
+    void operator()(const CancellationEvent&) final override;
+    void operator()(const ResetCancellationEvent&) final override;
+    bool cancelled;
 };
 
-template<typename Command>
-cancellable_command_handler<Command>::cancellable_command_handler() :
+template<typename Command, typename CancellationEvent, typename ResetCancellationEvent>
+cancellable_command_handler<Command, CancellationEvent, ResetCancellationEvent>::cancellable_command_handler() :
     command_handler<Command>(),
-    token(resolver::resolve<cancellation_token>()) {
+    event_handler<CancellationEvent>(),
+    event_handler<ResetCancellationEvent>(),
+    cancelled(false) {
 }
 
-template<typename Command>
-void cancellable_command_handler<Command>::operator()(const Command& command) {
-    if (token.is_cancelled())
+template<typename Command, typename CancellationEvent, typename ResetCancellationEvent>
+void cancellable_command_handler<Command, CancellationEvent, ResetCancellationEvent>::operator()(const Command& command) {
+    if (cancelled)
         return;
     execute(command);
+}
+
+template<typename Command, typename CancellationEvent, typename ResetCancellationEvent>
+void cancellable_command_handler<Command, CancellationEvent, ResetCancellationEvent>::operator()(const CancellationEvent& event) {
+    cancelled = true;
+}
+
+template<typename Command, typename CancellationEvent, typename ResetCancellationEvent>
+void cancellable_command_handler<Command, CancellationEvent, ResetCancellationEvent>::operator()(const ResetCancellationEvent& event) {
+    cancelled = false;
 }
 
 #endif
