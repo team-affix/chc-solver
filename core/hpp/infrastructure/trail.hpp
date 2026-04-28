@@ -3,11 +3,12 @@
 
 #include <stack>
 #include <functional>
+#include "../domain/interfaces/i_trail.hpp"
 
-struct trail {
-    void push();
-    void pop();
-    void log(const std::function<void()>&);
+struct trail : i_trail {
+    void push() override;
+    void pop() override;
+    void log(const std::function<void()>&) override;
     size_t depth() const;
 #ifndef DEBUG
 private:

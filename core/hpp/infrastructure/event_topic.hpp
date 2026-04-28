@@ -7,11 +7,12 @@
 #include "task.hpp"
 #include "scheduler.hpp"
 #include "../bootstrap/resolver.hpp"
+#include "../domain/interfaces/i_event_bus.hpp"
 
 template <typename Event>
-struct event_topic : task {
+struct event_topic : i_event_bus<Event>, task {
     event_topic(uint32_t);
-    void produce(const Event&);
+    void produce(const Event&) override;
     void subscribe(event_handler<Event>&);
     void execute() override;
 #ifndef DEBUG
