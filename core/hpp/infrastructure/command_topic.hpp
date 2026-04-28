@@ -5,10 +5,11 @@
 #include "command_handler.hpp"
 #include "task.hpp"
 #include "scheduler.hpp"
+#include "../bootstrap/resolver.hpp"
 
 template<typename Command>
 struct command_topic : task {
-    command_topic(scheduler&);
+    command_topic();
     void produce(const Command&);
     void subscribe(command_handler<Command>&);
     void execute() override;
@@ -22,7 +23,7 @@ private:
 };
 
 template<typename Command>
-command_topic<Command>::command_topic(scheduler& s) : s(s) {
+command_topic<Command>::command_topic() : s(resolver::resolve<scheduler>()) {
 }
 
 template<typename Command>

@@ -6,10 +6,11 @@
 #include "event_handler.hpp"
 #include "task.hpp"
 #include "scheduler.hpp"
+#include "../bootstrap/resolver.hpp"
 
 template <typename Event>
 struct event_topic : task {
-    event_topic(scheduler&);
+    event_topic();
     void produce(const Event&);
     void subscribe(event_handler<Event>&);
     void execute() override;
@@ -23,7 +24,7 @@ private:
 };
 
 template<typename Event>
-event_topic<Event>::event_topic(scheduler& s) : s(s) {
+event_topic<Event>::event_topic() : s(resolver::resolve<scheduler>()) {
 }
 
 template <typename Event>
