@@ -5,7 +5,7 @@
 
 struct task {
     virtual ~task() = default;
-    task(uint32_t priority);
+    task(uint32_t);
     uint32_t priority() const;
     virtual void execute() = 0;
 #ifndef DEBUG
