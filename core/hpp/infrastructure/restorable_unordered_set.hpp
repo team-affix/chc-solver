@@ -1,23 +1,23 @@
-#ifndef RESTORABLE_SET_HPP
-#define RESTORABLE_SET_HPP
+#ifndef RESTORABLE_UNORDERED_SET_HPP
+#define RESTORABLE_UNORDERED_SET_HPP
 
-#include <set>
+#include <unordered_set>
 #include "../domain/interfaces/i_restorable_set.hpp"
 
 template<typename T>
-struct restorable_set : i_restorable_set<T> {
+struct restorable_unordered_set : i_restorable_set<T> {
     void insert(const T&) override;
     void erase(const T&) override;
 #ifndef DEBUG
 private:
 #endif
-    std::set<T> current;
-    std::set<T> additions;
-    std::set<T> subtractions;
+    std::unordered_set<T> current;
+    std::unordered_set<T> additions;
+    std::unordered_set<T> subtractions;
 };
 
 template<typename T>
-void restorable_set<T>::insert(const T& value) {
+void restorable_unordered_set<T>::insert(const T& value) {
     auto [_, inserted] = current.insert(value);
     if (!inserted) return;
     auto [_, subtraction_erased] = subtractions.erase(value);
@@ -26,7 +26,7 @@ void restorable_set<T>::insert(const T& value) {
 }
 
 template<typename T>
-void restorable_set<T>::erase(const T& value) {
+void restorable_unordered_set<T>::erase(const T& value) {
     auto [_, erased] = current.erase(value);
     if (!erased) return;
     auto [_, addition_erased] = additions.erase(value);
