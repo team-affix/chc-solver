@@ -7,10 +7,10 @@
 goal_resolver::goal_resolver() :
     db(resolver::resolve<i_database>()),
     lp(resolver::resolve<i_lineage_pool>()),
-    goal_resolving_event_producer(resolver::resolve<i_event_producer<goal_resolving_event>>()),
-    goal_resolved_event_producer(resolver::resolve<i_event_producer<goal_resolved_event>>()),
     goal_activator(resolver::resolve<i_goal_activator>()),
-    goal_deactivator(resolver::resolve<i_goal_deactivator>()) {
+    goal_deactivator(resolver::resolve<i_goal_deactivator>()),
+    goal_resolving_event_producer(resolver::resolve<i_event_producer<goal_resolving_event>>()),
+    goal_resolved_event_producer(resolver::resolve<i_event_producer<goal_resolved_event>>()) {
 }
 
 void goal_resolver::resolve(const resolution_lineage* rl) {

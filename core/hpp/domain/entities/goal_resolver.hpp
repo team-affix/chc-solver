@@ -18,10 +18,10 @@ private:
 #endif
     i_database& db;
     i_lineage_pool& lp;
-    i_event_producer<goal_resolving_event>& goal_resolving_event_producer;
-    i_event_producer<goal_resolved_event>& goal_resolved_event_producer;
     i_goal_activator& goal_activator;
     i_goal_deactivator& goal_deactivator;
+    i_event_producer<goal_resolving_event>& goal_resolving_event_producer;
+    i_event_producer<goal_resolved_event>& goal_resolved_event_producer;
 };
 
 #endif
