@@ -9,10 +9,8 @@ goal_resolver::goal_resolver() :
     lp(resolver::resolve<i_lineage_pool>()),
     goal_resolving_event_producer(resolver::resolve<i_event_producer<goal_resolving_event>>()),
     goal_resolved_event_producer(resolver::resolve<i_event_producer<goal_resolved_event>>()),
-    goal_activating_event_producer(resolver::resolve<i_event_producer<goal_activating_event>>()),
-    goal_activated_event_producer(resolver::resolve<i_event_producer<goal_activated_event>>()),
-    goal_deactivating_event_producer(resolver::resolve<i_event_producer<goal_deactivating_event>>()),
-    goal_deactivated_event_producer(resolver::resolve<i_event_producer<goal_deactivated_event>>()) {
+    goal_activator(resolver::resolve<i_goal_activator>()),
+    goal_deactivator(resolver::resolve<i_goal_deactivator>()) {
 }
 
 void goal_resolver::resolve(const resolution_lineage* rl) {
@@ -20,18 +18,14 @@ void goal_resolver::resolve(const resolution_lineage* rl) {
     const goal_lineage* gl = rl->parent;
     goal_resolving_event_producer.produce(goal_resolving_event{rl});
     goal_resolved_event_producer.produce(goal_resolved_event{rl});
-    goal_deactivating_event_producer.produce(goal_deactivating_event{gl});
-    goal_deactivated_event_producer.produce(goal_deactivated_event{gl});
+    goal_deactivator.deactivate(gl);
 
     // get the rule
     const rule& r = db.at(rl->idx);
     
     // signal goal activation for subgoals
-    for (size_t i = 0; i < r.body.size(); ++i) {
-        const goal_lineage* subgoal = lp.goal(rl, i);
-        goal_activating_event_producer.produce(goal_activating_event{subgoal});
-        goal_activated_event_producer.produce(goal_activated_event{subgoal});
-    }
+    for (size_t i = 0; i < r.body.size(); ++i)
+        goal_activator.activate(lp.goal(rl, i));
 }
 
 #endif
