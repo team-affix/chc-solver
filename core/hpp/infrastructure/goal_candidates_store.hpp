@@ -1,0 +1,18 @@
+#ifndef GOAL_CANDIDATES_STORE_HPP
+#define GOAL_CANDIDATES_STORE_HPP
+
+#include <unordered_map>
+#include "../domain/interfaces/i_goal_candidates_store.hpp"
+
+struct goal_candidates_store : i_goal_candidates_store {
+    void insert(const goal_lineage*, const candidate_set&) override;
+    void erase(const goal_lineage*) override;
+    void eliminate(const goal_lineage*, size_t) override;
+    void clear() override;
+    const candidate_set& at(const goal_lineage*) override;
+    size_t size() override;
+private:
+    std::unordered_map<const goal_lineage*, candidate_set> goal_candidates;
+};
+
+#endif
