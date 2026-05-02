@@ -1,14 +1,14 @@
-#include "../../../hpp/domain/data_structures/expr_printer.hpp"
+#include "../../hpp/infrastructure/expr_printer.hpp"
+#include "../../hpp/bootstrap/resolver.hpp"
 
-expr_printer::expr_printer(std::ostream& os, const std::map<uint32_t, std::string>& var_names)
-    : os(os), var_names(var_names)
+expr_printer::expr_printer(std::ostream& os)
+    : os(os), var_names(resolver::resolve<i_var_names>())
 {}
 
-void expr_printer::operator()(const expr* e) const {
+void expr_printer::print(const expr* e) const {
     if (const expr::var* v = std::get_if<expr::var>(&e->content)) {
-        auto it = var_names.find(v->index);
-        if (it != var_names.end())
-            os << it->second;
+        if (var_names.is_named(v->index))
+            os << var_names.name(v->index);
         else
             os << "?" << v->index;
         return;
@@ -27,7 +27,7 @@ void expr_printer::operator()(const expr* e) const {
         // List spine: cons(head, tail)
         if (f->name == "cons" && f->args.size() == 2) {
             os << "[";
-            operator()(f->args[0]);
+            print(f->args[0]);
             const expr* tail = f->args[1];
             while (true) {
                 const expr::functor* tf = std::get_if<expr::functor>(&tail->content);
@@ -37,11 +37,11 @@ void expr_printer::operator()(const expr* e) const {
                 }
                 if (tf && tf->name == "cons" && tf->args.size() == 2) {
                     os << ", ";
-                    operator()(tf->args[0]);
+                    print(tf->args[0]);
                     tail = tf->args[1];
                 } else {
                     os << "|";
-                    operator()(tail);
+                    print(tail);
                     os << "]";
                     break;
                 }
@@ -53,7 +53,7 @@ void expr_printer::operator()(const expr* e) const {
         os << f->name << "(";
         for (size_t i = 0; i < f->args.size(); ++i) {
             if (i > 0) os << ", ";
-            operator()(f->args[i]);
+            print(f->args[i]);
         }
         os << ")";
         return;

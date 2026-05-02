@@ -2,19 +2,17 @@
 #define EXPR_PRINTER_HPP
 
 #include <ostream>
-#include <map>
-#include <string>
-#include <cstdint>
 #include "../domain/interfaces/i_expr_printer.hpp"
+#include "../domain/interfaces/i_var_names.hpp"
 
 struct expr_printer : i_expr_printer {
-    expr_printer(std::ostream&, const std::map<uint32_t, std::string>& var_names);
+    expr_printer(std::ostream&);
     void print(const expr*) const override;
 #ifndef DEBUG
 private:
 #endif
     std::ostream& os;
-    const std::map<uint32_t, std::string>& var_names;
+    const i_var_names& var_names;
 };
 
 #endif
