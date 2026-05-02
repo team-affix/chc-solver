@@ -1,7 +1,10 @@
 #include <stdexcept>
-#include "../../../hpp/domain/data_structures/expr_pool.hpp"
+#include "../../hpp/infrastructure/expr_pool.hpp"
+#include "../../hpp/bootstrap/resolver.hpp"
+#include "../../hpp/utility/backtrackable_set_insert.hpp"
 
-expr_pool::expr_pool(trail& t) : trail_ref(t) {
+expr_pool::expr_pool() :
+    exprs(resolver::resolve<i_trail>(), {}) {
 }
 
 const expr* expr_pool::functor(const std::string& name, std::vector<const expr*> args) {
@@ -29,12 +32,19 @@ const expr* expr_pool::import(const expr* e) {
     throw std::runtime_error("Unsupported expression type");
 }
 
-size_t expr_pool::size() const {
-    return exprs.size();
-}
-
 const expr* expr_pool::intern(expr&& e) {
-    auto [it, inserted] = exprs.insert(std::move(e));
-    if (inserted) trail_ref.log([this, it]() { exprs.erase(it); });
+    // check if the expression is already in the pool
+    auto original_it = exprs.get().find(e);
+    if (original_it != exprs.get().end())
+        return &*original_it;
+
+    // if the expression is not in the pool, insert it
+    auto insert_mut = std::make_unique<
+        backtrackable_set_insert<
+        std::set<expr>>>(std::move(e));
+    exprs.mutate(std::move(insert_mut));
+    
+    // return the new expression
+    auto it = exprs.get().find(e);
     return &*it;
 }
