@@ -1,14 +1,13 @@
 #include <stdexcept>
-#include "../../../hpp/domain/data_structures/copier.hpp"
+#include "../../hpp/infrastructure/copier.hpp"
+#include "../../hpp/bootstrap/resolver.hpp"
 
-copier::copier(sequencer& seq, expr_pool& ep)
-    :
-    sequencer_ref(seq),
-    expr_pool_ref(ep) {
-
+copier::copier() :
+    var_seq_ref(resolver::resolve<i_var_sequencer>()),
+    expr_pool_ref(resolver::resolve<i_expr_pool>()) {
 }
 
-const expr* copier::operator()(const expr* e, std::map<uint32_t, uint32_t>& variable_map) {
+const expr* copier::copy(const expr* e, std::unordered_map<uint32_t, uint32_t>& variable_map) {
     // If the expression is a variable
     if (const expr::var* v = std::get_if<expr::var>(&e->content)) {
         // See if the variable has already been copied
@@ -16,7 +15,7 @@ const expr* copier::operator()(const expr* e, std::map<uint32_t, uint32_t>& vari
         
         // If the variable does not have a mapping, create one
         if (it == variable_map.end())
-            it = variable_map.insert({v->index, sequencer_ref()}).first;
+            it = variable_map.insert({v->index, var_seq_ref.next()}).first;
 
         // Return the mapped variable
         return expr_pool_ref.var(it->second);
@@ -27,7 +26,7 @@ const expr* copier::operator()(const expr* e, std::map<uint32_t, uint32_t>& vari
         std::vector<const expr*> copied_args;
         copied_args.reserve(f->args.size());
         for (const expr* arg : f->args)
-            copied_args.push_back(operator()(arg, variable_map));
+            copied_args.push_back(copy(arg, variable_map));
         return expr_pool_ref.functor(f->name, std::move(copied_args));
     }
 
