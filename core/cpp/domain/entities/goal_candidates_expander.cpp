@@ -1,11 +1,12 @@
 #include "../../../hpp/domain/entities/goal_candidates_expander.hpp"
 #include "../../../hpp/bootstrap/resolver.hpp"
+#include "../../../hpp/domain/interfaces/i_database.hpp"
 
 goal_candidates_expander::goal_candidates_expander()
     :
-    db(resolver::resolve<i_database>()),
     gcs(resolver::resolve<i_goal_candidates_store>()),
     goal_candidates_changed_producer(resolver::resolve<i_event_producer<goal_candidates_changed_event>>()) {
+    i_database& db = resolver::resolve<i_database>();
     for (size_t i = 0; i < db.size(); ++i)
         initial_candidates.insert(i);
 }
