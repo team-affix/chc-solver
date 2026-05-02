@@ -5,6 +5,7 @@
 #include <unordered_set>
 #include "../interfaces/i_cdcl.hpp"
 #include "../interfaces/i_event_producer.hpp"
+#include "../interfaces/i_cdcl_sequencer.hpp"
 #include "../events/avoidance_is_unit_event.hpp"
 #include "../events/avoidance_is_empty_event.hpp"
 #include "../../utility/tracked.hpp"
@@ -23,12 +24,12 @@ private:
 
     i_event_producer<avoidance_is_unit_event>& avoidance_is_unit_producer;
     i_event_producer<avoidance_is_empty_event>& avoidance_is_empty_producer;
+    i_cdcl_sequencer& next_avoidance_id;
 
     tracked<std::unordered_map<size_t, avoidance>> avoidances;
     tracked<std::unordered_map<const goal_lineage*, std::unordered_set<size_t>>> watched_goals;
     tracked<std::unordered_set<size_t>> unit_avoidances;
     tracked<std::unordered_set<size_t>> empty_avoidances;
-    sequencer next_avoidance_id;
 };
 
 #endif
