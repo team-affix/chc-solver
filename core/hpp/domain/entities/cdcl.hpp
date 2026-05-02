@@ -19,17 +19,23 @@ struct cdcl : i_cdcl {
 #ifndef DEBUG
 private:
 #endif
-    void upsert(size_t, const avoidance&);
+    void updated(size_t);
+    void link(const goal_lineage*, size_t);
     void erase(size_t);
 
     i_event_producer<avoidance_is_unit_event>& avoidance_is_unit_producer;
     i_event_producer<avoidance_is_empty_event>& avoidance_is_empty_producer;
     i_cdcl_sequencer& next_avoidance_id;
 
-    tracked<std::unordered_map<size_t, avoidance>> avoidances;
-    tracked<std::unordered_map<const goal_lineage*, std::unordered_set<size_t>>> watched_goals;
-    tracked<std::unordered_set<size_t>> unit_avoidances;
-    tracked<std::unordered_set<size_t>> empty_avoidances;
+    using avoidances_type = std::unordered_map<size_t, avoidance>;
+    using watched_goals_type = std::unordered_map<const goal_lineage*, std::unordered_set<size_t>>;
+    using unit_avoidances_type = std::unordered_set<size_t>;
+    using empty_avoidances_type = std::unordered_set<size_t>;
+
+    tracked<avoidances_type> avoidances;
+    tracked<watched_goals_type> watched_goals;
+    tracked<unit_avoidances_type> unit_avoidances;
+    tracked<empty_avoidances_type> empty_avoidances;
 };
 
 #endif

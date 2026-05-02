@@ -1,5 +1,11 @@
+#include <memory>
 #include "../../../hpp/domain/entities/cdcl.hpp"
 #include "../../../hpp/bootstrap/resolver.hpp"
+#include "../../../hpp/utility/backtrackable_map_insert.hpp"
+#include "../../../hpp/utility/backtrackable_map_erase.hpp"
+#include "../../../hpp/utility/backtrackable_map_at_insert.hpp"
+#include "../../../hpp/utility/backtrackable_map_at_erase.hpp"
+#include "../../../hpp/utility/backtrackable_set_insert.hpp"
 
 cdcl::cdcl() :
     avoidance_is_unit_producer(resolver::resolve<i_event_producer<avoidance_is_unit_event>>()),
@@ -19,84 +25,132 @@ void cdcl::learn(const lemma& l) {
     size_t id = next_avoidance_id.next();
 
     // 3. add the avoidance to the store
-    upsert(id, av);
+    auto insert_mut = std::make_unique<
+        backtrackable_map_insert<
+        avoidances_type>>(
+            id, av);
+    avoidances.mutate(std::move(insert_mut));
 
     // 4. get all the goals that are watching this avoidance
     //    and link the avoidance to the goals
-    for (const resolution_lineage* rl : av.decisions) {
-        
-        watched_goals[rl->parent].insert(id);
-    }
+    for (const resolution_lineage* rl : av.decisions)
+        link(rl->parent, id);
 
 }
 
-// void cdcl::constrain(const resolution_lineage* rl) {
-//     // 1. get the parent goal
-//     const goal_lineage* gl = rl->parent;
+void cdcl::constrain(const resolution_lineage* rl) {
+    // 1. get the parent goal
+    const goal_lineage* gl = rl->parent;
     
-//     // 2. get the set of avoidances that concern this resolution
-//     std::set<size_t> ids = watched_goals[gl];
+    // 2. get the set of avoidances that concern this resolution
+    const std::unordered_set<size_t>& ids = watched_goals.get().at(gl);
 
-//     // 3. for each avoidance, if the avoidance contains the resolution,
-//     //    reduce the avoidance. Else, remove the avoidance from the store.
-//     for (size_t id : ids) {
+    // 3. for each avoidance, if the avoidance contains the resolution,
+    //    reduce the avoidance. Else, remove the avoidance from the store.
+    for (size_t id : ids) {
 
-//         // 4. get the avoidance
-//         avoidance av = avoidances.at(id);
+        // 4. get the avoidance
+        const avoidance& av = avoidances.get().at(id);
 
-//         // 5. reduce the avoidance
-//         size_t erased = av.erase(rl);
+        // 5. if the avoidance contains the resolution, then it is consistent
+        if (av.decisions.contains(rl)) {
+            auto erase_mut = std::make_unique<
+                backtrackable_map_at_erase<
+                watched_goals_type>>(
+                    gl, id);
+            watched_goals.mutate(std::move(erase_mut));
+            return;
+        }
 
-//         // 6a. if the resolution was found, then it is consistent
-//         if (erased > 0)
-//             upsert(id, av);
+        // 6. if the avoidance does not contain the resolution, then it is conflicting
+        erase(id);
+    }
 
-//         // 6b. if the resolution was not found, then it is conflicting
-//         else
-//             erase(id);
-//     }
+    // 7. Remove the parent goal from the watched goals
+    auto erase_mut = std::make_unique<
+        backtrackable_map_erase<
+        watched_goals_type>>(
+            gl);
+    watched_goals.mutate(std::move(erase_mut));
+}
 
-//     // 7. Remove the parent goal from the watched goals
-//     watched_goals.erase(gl);
-// }
+void cdcl::produce_events() {
+    for (size_t id : empty_avoidances.get())
+        avoidance_is_empty_producer.produce(avoidance_is_empty_event{id});
+    for (size_t id : unit_avoidances.get())
+        avoidance_is_unit_producer.produce(avoidance_is_unit_event{id});
+}
 
-// void cdcl::emit_eliminated_candidates() {
-//     for (const resolution_lineage* rl : eliminated_resolutions)
-//         cdcl_eliminated_candidate_topic.produce(cdcl_eliminated_candidate_event{rl});
-// }
+const avoidance& cdcl::get_avoidance(size_t id) {
+    return avoidances.get().at(id);
+}
 
-// bool cdcl::check_for_conflict() {
-//     bool result = avoidances.contains({});
+void cdcl::updated(size_t id) {
+    // 1. get the avoidance
+    const avoidance& av = avoidances.get().at(id);
+
+    // 2. if the avoidance is empty, add it to the empty avoidances
+    if (av.decisions.empty()) {
+        if (empty_avoidances.get().contains(id))
+            return;
+        auto insert_mut = std::make_unique<
+            backtrackable_set_insert<
+            empty_avoidances_type>>(
+                id);
+        empty_avoidances.mutate(std::move(insert_mut));
+        avoidance_is_empty_producer.produce(avoidance_is_empty_event{id});
+    }
+    // 3. if the avoidance is singleton, add it to the unit avoidances
+    else if (av.decisions.size() == 1) {
+        if (unit_avoidances.get().contains(id))
+            return;
+        auto insert_mut = std::make_unique<
+            backtrackable_set_insert<
+            unit_avoidances_type>>(
+                id);
+        unit_avoidances.mutate(std::move(insert_mut));
+        avoidance_is_unit_producer.produce(avoidance_is_unit_event{id});
+    }
+}
+
+void cdcl::link(const goal_lineage* gl, size_t id) {
+    // insert key if it doesn't exist
+    if (!watched_goals.get().contains(gl)) {
+        auto insert_mut = std::make_unique<
+            backtrackable_map_insert<
+            watched_goals_type>>(
+                gl, std::unordered_set<size_t>{});
+        watched_goals.mutate(std::move(insert_mut));
+    }
+
+    // insert value if it doesn't exist
+    if (!watched_goals.get().at(gl).contains(id)) {
+        auto insert_mut = std::make_unique<
+            backtrackable_map_at_insert<
+            watched_goals_type>>(
+                gl, id);
+        watched_goals.mutate(std::move(insert_mut));
+    }
+}
+
+void cdcl::erase(size_t id) {
+    // 1. get the avoidance
+    const avoidance& av = avoidances.get().at(id);
+
+    // 2. for each goal that is watching this avoidance,
+    //    unlink the avoidance from the goal
+    for (const resolution_lineage* rl : av.decisions) {
+        auto erase_mut = std::make_unique<
+            backtrackable_map_at_erase<
+            watched_goals_type>>(
+                rl->parent, id);
+        watched_goals.mutate(std::move(erase_mut));
+    }
     
-//     if (result)
-//         conflicted_topic.produce(conflicted_event{});
-
-//     return result;
-// }
-
-// void cdcl::upsert(size_t id, const avoidance& av) {
-//     // 1. update the avoidance in the store
-//     avoidances[id] = av;
-
-//     // 2. if the avoidance is singleton, we have eliminated something.
-//     if (av.size() == 1) {
-//         auto [_, inserted] = eliminated_resolutions.insert(*av.begin());
-
-//         // 3. if the elimination was new, call the callback
-//         if (inserted)
-//             cdcl_eliminated_candidate_topic.produce(cdcl_eliminated_candidate_event{*av.begin()});
-//     }
-// }
-
-// void cdcl::erase(size_t id) {
-//     // 1. get the avoidance
-//     const avoidance& av = avoidances.at(id);
-
-//     // 2. for each goal that is watching this avoidance,
-//     //    unlink the avoidance from the goal
-//     for (const resolution_lineage* rl : av)
-//         watched_goals[rl->parent].erase(id);
-    
-//     // 3. remove the avoidance from the store
-//     avoidances.erase(id);
-// }
+    // 3. remove the avoidance from the store
+    auto erase_mut = std::make_unique<
+        backtrackable_map_erase<
+        avoidances_type>>(
+            id);
+    avoidances.mutate(std::move(erase_mut));
+}

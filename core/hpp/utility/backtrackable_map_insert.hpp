@@ -2,6 +2,7 @@
 #define BACKTRACKABLE_MAP_INSERT_HPP
 
 #include <utility>
+#include <cassert>
 #include "i_backtrackable_mutation.hpp"
 
 template<typename M>
@@ -22,7 +23,8 @@ backtrackable_map_insert<M>::backtrackable_map_insert(const M::key_type& key, co
 
 template<typename M>
 void backtrackable_map_insert<M>::invoke() {
-    this->ref().insert({key, std::move(value)});
+    auto [_, inserted] = this->ref().insert({key, std::move(value)});
+    assert(inserted);
 }
 
 template<typename M>

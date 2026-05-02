@@ -1,6 +1,7 @@
 #ifndef BACKTRACKABLE_SET_ERASE_HPP
 #define BACKTRACKABLE_SET_ERASE_HPP
 
+#include <cassert>
 #include "i_backtrackable_mutation.hpp"
 
 template<typename S>
@@ -20,7 +21,8 @@ backtrackable_set_erase<S>::backtrackable_set_erase(const S::value_type& value) 
 
 template<typename S>
 void backtrackable_set_erase<S>::invoke() {
-    this->ref().erase(value);
+    auto [_, erased] = this->ref().erase(value);
+    assert(erased);
 }
 
 template<typename S>

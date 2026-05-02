@@ -2,6 +2,7 @@
 #define BACKTRACKABLE_MAP_ERASE_HPP
 
 #include <utility>
+#include <cassert>
 #include "i_backtrackable_mutation.hpp"
 
 template<typename M>
@@ -20,9 +21,8 @@ backtrackable_map_erase<M>::backtrackable_map_erase(const M::key_type& key) : ke
 
 template<typename M>
 void backtrackable_map_erase<M>::invoke() {
-    auto it = this->ref().find(key);
-    value = std::move(it->second);
-    this->ref().erase(it);
+    auto [_, erased] = this->ref().erase(key);
+    assert(erased);
 }
 
 template<typename M>
