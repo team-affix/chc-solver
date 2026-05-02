@@ -6,6 +6,7 @@
 
 struct var_names : i_var_names {
     var_names();
+    bool is_named(uint32_t) const override;
     const std::string& name(uint32_t) const override;
     void set_name(uint32_t, const std::string&) override;
 private:
