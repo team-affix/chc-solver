@@ -1,0 +1,23 @@
+#ifndef ROUTER_AVOIDANCE_UNIT_EVENT_HANDLER_HPP
+#define ROUTER_AVOIDANCE_UNIT_EVENT_HANDLER_HPP
+
+#include "../../infrastructure/event_handler.hpp"
+#include "../../domain/events/avoidance_unit_event.hpp"
+#include "../../domain/interfaces/i_cdcl.hpp"
+#include "../../domain/interfaces/i_active_goal_store.hpp"
+#include "../../domain/interfaces/i_inactive_goal_store.hpp"
+#include "../../domain/interfaces/i_elimination_backlog.hpp"
+#include "../../domain/interfaces/i_active_eliminator.hpp"
+
+struct router_avoidance_unit_event_handler : event_handler<avoidance_unit_event> {
+    router_avoidance_unit_event_handler();
+    void handle(const avoidance_unit_event&) override;
+private:
+    i_cdcl& c;
+    i_active_goal_store& active_goal_store;
+    i_inactive_goal_store& inactive_goal_store;
+    i_elimination_backlog& elimination_backlog;
+    i_active_eliminator& active_eliminator;
+};
+
+#endif

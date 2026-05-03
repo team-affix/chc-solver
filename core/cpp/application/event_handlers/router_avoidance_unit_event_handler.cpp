@@ -1,14 +1,21 @@
-#include "../../../hpp/domain/entities/elimination_router.hpp"
+#include "../../../hpp/application/event_handlers/router_avoidance_unit_event_handler.hpp"
 #include "../../../hpp/bootstrap/resolver.hpp"
 
-elimination_router::elimination_router()
-    : active_goal_store(resolver::resolve<i_active_goal_store>()),
+router_avoidance_unit_event_handler::router_avoidance_unit_event_handler() :
+    c(resolver::resolve<i_cdcl>()),
+    active_goal_store(resolver::resolve<i_active_goal_store>()),
     inactive_goal_store(resolver::resolve<i_inactive_goal_store>()),
     elimination_backlog(resolver::resolve<i_elimination_backlog>()),
     active_eliminator(resolver::resolve<i_active_eliminator>()) {
 }
 
-void elimination_router::route(const resolution_lineage* rl) {
+void router_avoidance_unit_event_handler::handle(const avoidance_unit_event& e) {
+    // get the avoidance
+    const avoidance& av = c.get_avoidance(e.avoidance_id);
+    
+    // get the first resolution
+    const resolution_lineage* rl = *av.decisions.begin();
+    
     // get the parent goal
     const goal_lineage* gl = rl->parent;
 
@@ -23,5 +30,5 @@ void elimination_router::route(const resolution_lineage* rl) {
     }
 
     // if the goal is in the frontier, eliminate right now in candidate_store
-    active_eliminator.eliminate(gl, rl->idx);
+    active_eliminator.eliminate(rl);
 }

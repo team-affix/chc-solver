@@ -8,8 +8,8 @@
 #include "../../../hpp/utility/backtrackable_set_insert.hpp"
 
 cdcl::cdcl() :
-    avoidance_is_unit_producer(resolver::resolve<i_event_producer<avoidance_is_unit_event>>()),
-    avoidance_is_empty_producer(resolver::resolve<i_event_producer<avoidance_is_empty_event>>()),
+    avoidance_unit_producer(resolver::resolve<i_event_producer<avoidance_unit_event>>()),
+    avoidance_empty_producer(resolver::resolve<i_event_producer<avoidance_empty_event>>()),
     next_avoidance_id(resolver::resolve<i_cdcl_sequencer>()),
     avoidances(resolver::resolve<i_trail>(), {}),
     watched_goals(resolver::resolve<i_trail>(), {}),
@@ -76,9 +76,9 @@ void cdcl::constrain(const resolution_lineage* rl) {
 
 void cdcl::produce_events() {
     for (size_t id : empty_avoidances.get())
-        avoidance_is_empty_producer.produce(avoidance_is_empty_event{id});
+        avoidance_empty_producer.produce(avoidance_empty_event{id});
     for (size_t id : unit_avoidances.get())
-        avoidance_is_unit_producer.produce(avoidance_is_unit_event{id});
+        avoidance_unit_producer.produce(avoidance_unit_event{id});
 }
 
 const avoidance& cdcl::get_avoidance(size_t id) {
@@ -98,7 +98,7 @@ void cdcl::updated(size_t id) {
             empty_avoidances_type>>(
                 id);
         empty_avoidances.mutate(std::move(insert_mut));
-        avoidance_is_empty_producer.produce(avoidance_is_empty_event{id});
+        avoidance_empty_producer.produce(avoidance_empty_event{id});
     }
     // 3. if the avoidance is singleton, add it to the unit avoidances
     else if (av.decisions.size() == 1) {
@@ -109,7 +109,7 @@ void cdcl::updated(size_t id) {
             unit_avoidances_type>>(
                 id);
         unit_avoidances.mutate(std::move(insert_mut));
-        avoidance_is_unit_producer.produce(avoidance_is_unit_event{id});
+        avoidance_unit_producer.produce(avoidance_unit_event{id});
     }
 }
 

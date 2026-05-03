@@ -6,8 +6,8 @@
 #include "../interfaces/i_cdcl.hpp"
 #include "../interfaces/i_event_producer.hpp"
 #include "../interfaces/i_cdcl_sequencer.hpp"
-#include "../events/avoidance_is_unit_event.hpp"
-#include "../events/avoidance_is_empty_event.hpp"
+#include "../events/avoidance_unit_event.hpp"
+#include "../events/avoidance_empty_event.hpp"
 #include "../../utility/tracked.hpp"
 
 struct cdcl : i_cdcl {
@@ -23,8 +23,8 @@ private:
     void link(const goal_lineage*, size_t);
     void erase(size_t);
 
-    i_event_producer<avoidance_is_unit_event>& avoidance_is_unit_producer;
-    i_event_producer<avoidance_is_empty_event>& avoidance_is_empty_producer;
+    i_event_producer<avoidance_unit_event>& avoidance_unit_producer;
+    i_event_producer<avoidance_empty_event>& avoidance_empty_producer;
     i_cdcl_sequencer& next_avoidance_id;
 
     using avoidances_type = std::unordered_map<size_t, avoidance>;
