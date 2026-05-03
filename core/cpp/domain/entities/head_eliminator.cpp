@@ -135,24 +135,24 @@ void head_eliminator::update_rep_watches(uint32_t rep) {
     watch(new_reps, goals);
 }
 
-bool head_eliminator::visit_goal_lineage(const goal_lineage* gl) {
-    // get the candidates for this goal
-    std::unordered_set<size_t>& candidates = cs.at(gl);
+// bool head_eliminator::visit_goal_lineage(const goal_lineage* gl) {
+//     // get the candidates for this goal
+//     std::unordered_set<size_t>& candidates = cs.at(gl);
 
-    // get the expr for this goal
-    const expr* e = gs.at(gl);
+//     // get the expr for this goal
+//     const expr* e = gs.at(gl);
 
-    // get if the goal WAS unit
-    bool was_unit = candidates.size() == 1;
+//     // get if the goal WAS unit
+//     bool was_unit = candidates.size() == 1;
 
-    std::erase_if(candidates, [this, e](size_t c) {
-        const rule& r = db.at(c);
-        return !gs.applicable(e, r);
-    });
+//     std::erase_if(candidates, [this, e](size_t c) {
+//         const rule& r = db.at(c);
+//         return !gs.applicable(e, r);
+//     });
 
-    // if newly unit, push the resolution to the unit queue
-    if (!was_unit && candidates.size() == 1)
-        unit_topic.produce(lp.resolution(gl, *candidates.begin()));
+//     // if newly unit, push the resolution to the unit queue
+//     if (!was_unit && candidates.size() == 1)
+//         unit_topic.produce(lp.resolution(gl, *candidates.begin()));
 
-    return candidates.empty();
-}
+//     return candidates.empty();
+// }
