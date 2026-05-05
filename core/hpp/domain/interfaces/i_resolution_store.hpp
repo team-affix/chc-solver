@@ -8,7 +8,7 @@ struct i_resolution_store {
     virtual ~i_resolution_store() = default;
     virtual void insert(const resolution_lineage*) = 0;
     virtual void clear() = 0;
-    virtual lemma derive_lemma() = 0;
+    virtual lemma derive_lemma() const = 0;
 };
 
 #endif

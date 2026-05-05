@@ -7,7 +7,7 @@
 struct resolution_store : i_resolution_store {
     void insert(const resolution_lineage*) override;
     void clear() override;
-    lemma derive_lemma() override;
+    lemma derive_lemma() const override;
 private:
     std::unordered_set<const resolution_lineage*> resolutions;
 };

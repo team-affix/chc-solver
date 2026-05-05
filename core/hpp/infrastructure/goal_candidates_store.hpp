@@ -7,7 +7,7 @@
 struct goal_candidates_store : i_goal_candidates_store {
     void insert(const goal_lineage*, const candidate_set&) override;
     void erase(const goal_lineage*) override;
-    void eliminate(const goal_lineage*, size_t) override;
+    void eliminate(const resolution_lineage*) override;
     void clear() override;
     const candidate_set& at(const goal_lineage*) const override;
 private:

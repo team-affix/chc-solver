@@ -7,8 +7,8 @@
 struct decision_store : i_decision_store {
     void insert(const resolution_lineage*) override;
     void clear() override;
-    size_t size() override;
-    lemma derive_lemma() override;
+    size_t size() const override;
+    lemma derive_lemma() const override;
 private:
     std::unordered_set<const resolution_lineage*> decisions;
 };

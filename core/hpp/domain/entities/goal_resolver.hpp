@@ -5,10 +5,9 @@
 #include "../interfaces/i_lineage_pool.hpp"
 #include "../interfaces/i_database.hpp"
 #include "../interfaces/i_event_producer.hpp"
-#include "../interfaces/i_goal_activator.hpp"
-#include "../interfaces/i_goal_deactivator.hpp"
 #include "../events/goal_resolving_event.hpp"
-#include "../events/goal_resolved_event.hpp"
+#include "../events/goal_activating_event.hpp"
+#include "../events/goal_deactivating_event.hpp"
 
 struct goal_resolver : i_goal_resolver {
     goal_resolver();
@@ -18,10 +17,9 @@ private:
 #endif
     i_database& db;
     i_lineage_pool& lp;
-    i_goal_activator& goal_activator;
-    i_goal_deactivator& goal_deactivator;
     i_event_producer<goal_resolving_event>& goal_resolving_event_producer;
-    i_event_producer<goal_resolved_event>& goal_resolved_event_producer;
+    i_event_producer<goal_activating_event>& goal_activating_event_producer;
+    i_event_producer<goal_deactivating_event>& goal_deactivating_event_producer;
 };
 
 #endif

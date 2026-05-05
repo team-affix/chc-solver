@@ -8,6 +8,6 @@ void resolution_store::clear() {
     resolutions.clear();
 }
 
-lemma resolution_store::derive_lemma() {
+lemma resolution_store::derive_lemma() const {
     return lemma{resolutions};
 }

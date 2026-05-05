@@ -8,7 +8,7 @@ struct cdcl_sequencer : i_cdcl_sequencer {
     cdcl_sequencer();
     size_t next() override;
 private:
-    sequencer seq;
+    sequencer<size_t> seq;
 };
 
 #endif

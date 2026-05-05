@@ -5,16 +5,13 @@
 #include "../../../hpp/utility/backtrackable_map_erase.hpp"
 #include "../../../hpp/utility/backtrackable_map_at_insert.hpp"
 #include "../../../hpp/utility/backtrackable_map_at_erase.hpp"
-#include "../../../hpp/utility/backtrackable_set_insert.hpp"
 
 cdcl::cdcl() :
     avoidance_unit_producer(resolver::resolve<i_event_producer<avoidance_unit_event>>()),
     avoidance_empty_producer(resolver::resolve<i_event_producer<avoidance_empty_event>>()),
     next_avoidance_id(resolver::resolve<i_cdcl_sequencer>()),
     avoidances(resolver::resolve<i_trail>(), {}),
-    watched_goals(resolver::resolve<i_trail>(), {}),
-    unit_avoidances(resolver::resolve<i_trail>(), {}),
-    empty_avoidances(resolver::resolve<i_trail>(), {}) {
+    watched_goals(resolver::resolve<i_trail>(), {}) {
 }
 
 void cdcl::learn(const lemma& l) {
@@ -74,13 +71,6 @@ void cdcl::constrain(const resolution_lineage* rl) {
     watched_goals.mutate(std::move(erase_mut));
 }
 
-void cdcl::produce_events() {
-    for (size_t id : empty_avoidances.get())
-        avoidance_empty_producer.produce(avoidance_empty_event{id});
-    for (size_t id : unit_avoidances.get())
-        avoidance_unit_producer.produce(avoidance_unit_event{id});
-}
-
 const avoidance& cdcl::get_avoidance(size_t id) {
     return avoidances.get().at(id);
 }
@@ -91,24 +81,10 @@ void cdcl::updated(size_t id) {
 
     // 2. if the avoidance is empty, add it to the empty avoidances
     if (av.decisions.empty()) {
-        if (empty_avoidances.get().contains(id))
-            return;
-        auto insert_mut = std::make_unique<
-            backtrackable_set_insert<
-            empty_avoidances_type>>(
-                id);
-        empty_avoidances.mutate(std::move(insert_mut));
         avoidance_empty_producer.produce(avoidance_empty_event{id});
     }
     // 3. if the avoidance is singleton, add it to the unit avoidances
     else if (av.decisions.size() == 1) {
-        if (unit_avoidances.get().contains(id))
-            return;
-        auto insert_mut = std::make_unique<
-            backtrackable_set_insert<
-            unit_avoidances_type>>(
-                id);
-        unit_avoidances.mutate(std::move(insert_mut));
         avoidance_unit_producer.produce(avoidance_unit_event{id});
     }
 }

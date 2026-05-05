@@ -15,6 +15,6 @@ void active_goal_store::clear() {
     active_goals.clear();
 }
 
-bool active_goal_store::contains(const goal_lineage* gl) {
+bool active_goal_store::contains(const goal_lineage* gl) const {
     return active_goals.contains(gl);
 }

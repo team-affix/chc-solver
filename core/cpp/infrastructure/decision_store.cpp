@@ -8,10 +8,10 @@ void decision_store::clear() {
     decisions.clear();
 }
 
-size_t decision_store::size() {
+size_t decision_store::size() const {
     return decisions.size();
 }
 
-lemma decision_store::derive_lemma() {
+lemma decision_store::derive_lemma() const {
     return lemma{decisions};
 }

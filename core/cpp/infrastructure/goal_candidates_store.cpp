@@ -8,8 +8,8 @@ void goal_candidates_store::erase(const goal_lineage* gl) {
     goal_candidates.erase(gl);
 }
 
-void goal_candidates_store::eliminate(const goal_lineage* gl, size_t c) {
-    goal_candidates.at(gl).candidates.erase(c);
+void goal_candidates_store::eliminate(const resolution_lineage* rl) {
+    goal_candidates.at(rl->parent).candidates.erase(rl->idx);
 }
 
 void goal_candidates_store::clear() {
