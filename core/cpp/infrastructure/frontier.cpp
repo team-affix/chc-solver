@@ -1,27 +1,23 @@
 #include "../../hpp/infrastructure/frontier.hpp"
 
-void frontier::insert(const goal_lineage* gl, std::unique_ptr<goal> g) {
+void frontier::insert(key_type gl, value_type g) {
     goals_.emplace(gl, std::move(g));
 }
 
-bool frontier::contains(const goal_lineage* gl) const {
+bool frontier::contains(key_type gl) const {
     return goals_.count(gl) > 0;
 }
 
-std::unique_ptr<goal>& frontier::at(const goal_lineage* gl) {
+std::unordered_map<size_t, std::unique_ptr<candidate>>& frontier::at(const goal_lineage* gl) {
     return goals_.at(gl);
 }
 
-const std::unique_ptr<goal>& frontier::at(const goal_lineage* gl) const {
+const std::unordered_map<size_t, std::unique_ptr<candidate>>& frontier::at(const goal_lineage* gl) const {
     return goals_.at(gl);
 }
 
 void frontier::erase(const goal_lineage* gl) {
     goals_.erase(gl);
-}
-
-void frontier::eliminate(const resolution_lineage* rl) {
-    goals_.at(rl->parent)->candidates.erase(rl->idx);
 }
 
 void frontier::clear() {
@@ -32,7 +28,9 @@ size_t frontier::size() const {
     return goals_.size();
 }
 
-void frontier::accept(i_visitor<const std::pair<const goal_lineage* const, std::unique_ptr<goal>>&>& v) const {
-    for (const auto& entry : goals_)
-        v.visit(entry);
+void frontier::accept(i_visitor<std::pair<key_type, value_type&>>& v) {
+    for (auto& entry : goals_)
+    v.visit(
+        std::pair<key_type, value_type&>{
+            entry.first, entry.second});
 }

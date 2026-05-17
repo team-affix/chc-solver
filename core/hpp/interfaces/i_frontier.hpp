@@ -3,21 +3,23 @@
 
 #include <cstddef>
 #include <memory>
-#include <utility>
-#include "../value_objects/goal.hpp"
+#include <unordered_map>
 #include "../value_objects/lineage.hpp"
+#include "../value_objects/candidate.hpp"
 #include "i_visitor.hpp"
 
 struct i_frontier {
+    using key_type = const goal_lineage*;
+    using value_type = std::unordered_map<size_t, std::unique_ptr<candidate>>;
     virtual ~i_frontier() = default;
-    virtual void insert(const goal_lineage*, std::unique_ptr<goal>) = 0;
-    virtual bool contains(const goal_lineage*) const = 0;
-    virtual std::unique_ptr<goal>& at(const goal_lineage*) = 0;
-    virtual const std::unique_ptr<goal>& at(const goal_lineage*) const = 0;
-    virtual void erase(const goal_lineage*) = 0;
+    virtual void insert(key_type, value_type) = 0;
+    virtual bool contains(key_type) const = 0;
+    virtual value_type& at(key_type) = 0;
+    virtual const value_type& at(key_type) const = 0;
+    virtual void erase(key_type) = 0;
     virtual void clear() = 0;
     virtual size_t size() const = 0;
-    virtual void accept(i_visitor<const std::pair<const goal_lineage* const, std::unique_ptr<goal>>&>&) const = 0;
+    virtual void accept(i_visitor<std::pair<key_type, value_type&>>&) = 0;
 };
 
 #endif

@@ -1,22 +1,20 @@
 #ifndef FRONTIER_HPP
 #define FRONTIER_HPP
 
-#include <memory>
 #include <unordered_map>
-#include "../domain/interfaces/i_frontier.hpp"
+#include "../interfaces/i_frontier.hpp"
 
 struct frontier : i_frontier {
-    void insert(const goal_lineage*, std::unique_ptr<goal>) override;
-    bool contains(const goal_lineage*) const override;
-    std::unique_ptr<goal>& at(const goal_lineage*) override;
-    const std::unique_ptr<goal>& at(const goal_lineage*) const override;
-    void erase(const goal_lineage*) override;
-    void eliminate(const resolution_lineage*) override;
+    void insert(key_type, value_type) override;
+    bool contains(key_type) const override;
+    value_type& at(key_type) override;
+    const value_type& at(key_type) const override;
+    void erase(key_type) override;
     void clear() override;
     size_t size() const override;
-    void accept(i_visitor<const std::pair<const goal_lineage* const, std::unique_ptr<goal>>&>&) const override;
+    void accept(i_visitor<std::pair<key_type, value_type&>>&) override;
 private:
-    std::unordered_map<const goal_lineage*, std::unique_ptr<goal>> goals_;
+    std::unordered_map<key_type, value_type> goals_;
 };
 
 #endif
