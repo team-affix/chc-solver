@@ -9,7 +9,7 @@
 
 struct elimination_router : i_elimination_router {
     elimination_router();
-    bool route(const resolution_lineage*) override;
+    elimination_result route(const resolution_lineage*) override;
 private:
     i_deactivated_candidate_memory& dcm;
     i_active_goals& ag;

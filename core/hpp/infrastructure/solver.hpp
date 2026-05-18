@@ -4,29 +4,25 @@
 #include "../interfaces/i_solver.hpp"
 #include "../interfaces/i_sim_setup.hpp"
 #include "../interfaces/i_sim_teardown.hpp"
-
+#include "../interfaces/i_sim.hpp"
+#include "../interfaces/i_cdcl_elimination_generator.hpp"
+#include "../interfaces/i_elimination_router.hpp"
 
 struct solver : i_solver {
-    solver();
+    solver(
+        i_sim_setup& sim_setup,
+        i_sim_teardown& sim_teardown,
+        i_sim& sim,
+        i_cdcl_elimination_generator& cdcl_elimination_generator,
+        i_elimination_router& elimination_router);
     virtual ~solver();
-    bool operator()(std::optional<resolutions>&);
-protected:
-    virtual std::unique_ptr<sim> construct_sim() = 0;
-    virtual void terminate(sim&) = 0;
-
-    const database& db;
-    const goals& gl;
-    trail& t;
-    sequencer& vars;
-    unifier& bm;
-
-    expr_pool ep;
-    lineage_pool lp;
-
-    size_t max_resolutions;
-    cdcl c;
-
-    std::unique_ptr<sim> managed_sim;
+    state_machine<solver_yield> solve() override;
+private:
+    i_sim_setup& sim_setup;
+    i_sim_teardown& sim_teardown;
+    i_sim& sim;
+    i_cdcl_elimination_generator& cdcl_elimination_generator;
+    i_elimination_router& elimination_router;
 };
 
 #endif
