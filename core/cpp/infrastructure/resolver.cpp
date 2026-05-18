@@ -1,182 +1,37 @@
-#include "../../../hpp/domain/entities/resolver.hpp"
-#include "../../../hpp/bootstrap/locator.hpp"
+#include "../../hpp/infrastructure/resolver.hpp"
 
-resolver::resolver(size_t initial_goal_count) :
-    db(locator::locate<i_database>()),
-    lp(locator::locate<i_lineage_pool>()),
-    frontier(locator::locate<i_frontier>()),
-    eg(locator::locate<i_elimination_generator>()),
-    eb(locator::locate<i_elimination_backlog>()),
-    igs(locator::locate<i_inactive_goal_store>()),
-    goal_factory(locator::locate<i_factory<goal>>()),
-    candidate_factory(locator::locate<i_factory<candidate>>()),
-    goal_initializer(locator::locate<i_goal_initializer>()),
-    candidate_initializer(locator::locate<i_candidate_initializer>()),
-    resolving_producer(locator::locate<i_event_producer<resolving_event>>()),
-    resolved_producer(locator::locate<i_event_producer<resolved_event>>()),
-    goal_activating_producer(locator::locate<i_event_producer<goal_activating_event>>()),
-    goal_activated_producer(locator::locate<i_event_producer<goal_activated_event>>()),
-    goal_deactivating_producer(locator::locate<i_event_producer<goal_deactivating_event>>()),
-    goal_deactivated_producer(locator::locate<i_event_producer<goal_deactivated_event>>()),
-    resolve_yielded_producer(locator::locate<i_event_producer<resolve_yielded_event>>()),
-    candidate_activating_producer(locator::locate<i_event_producer<candidate_activating_event>>()),
-    candidate_activated_producer(locator::locate<i_event_producer<candidate_activated_event>>()),
-    candidate_deactivating_producer(locator::locate<i_event_producer<candidate_deactivating_event>>()),
-    candidate_deactivated_producer(locator::locate<i_event_producer<candidate_deactivated_event>>()),
-    initial_goal_count(initial_goal_count),
-    resolve_state_machine(std::nullopt) {
+resolver::resolver(
+    const i_database& db,
+    i_lineage_pool& lp,
+    i_goal_activator& goal_activator,
+    i_goal_deactivator& goal_deactivator,
+    i_candidate_activator& candidate_activator,
+    i_goal_candidates_acceptor& gca,
+    i_goal_candidate_deactivator_visitor& gcdv)
+    :
+    db(db),
+    lp(lp),
+    goal_activator(goal_activator),
+    goal_deactivator(goal_deactivator),
+    candidate_activator(candidate_activator),
+    gca(gca),
+    gcdv(gcdv) {
 }
 
-void resolver::init_resolve(const resolution_lineage* rl) {
-    size_t body_size = rl ? db.at(rl->idx).body.size() : initial_goal_count;
-    
-    // start the state machine
-    resolve_state_machine = resolve(rl, body_size);
-    
-    // yield to start the state machine
-    resolve_yielded_producer.produce({});
-}
-
-void resolver::resume() {
-    // resume the state machine
-    resolve_state_machine->resume();
-
-    // if the state machine is not done, yield
-    if (!resolve_state_machine->done())
-        resolve_yielded_producer.produce({});
-}
-
-state_machine<void> resolver::resolve(const resolution_lineage* rl, size_t body_size) {
-    // set up the goal initializer
-    goal_initializer.seed_expansion(rl);
-    
-    // emit resolving event
-    resolving_producer.produce({rl});
-    co_await std::suspend_always{};
-
-    // process constrained eliminations
-    auto sm0 = process_constrained_eliminations(rl);
-    while (!sm0.done()) {
-        sm0.resume();
-        co_await std::suspend_always{};
+void resolver::resolve(const resolution_lineage* rl) {
+    // 1. get the rule from db
+    const rule& r = db.at(rl->idx);
+    // 2. activate the subgoals
+    for (int i = 0; i < r.body.size(); ++i) {
+        const goal_lineage* gl = lp.goal(rl, i);
+        goal_activator.activate(gl);
+        for (int j = 0; j < db.size(); ++j)
+            candidate_activator.try_activate(lp.resolution(gl, j));
     }
-
-    // activate goals
-    auto sm1 = activate_goals(rl, body_size);
-
-    // wait for the goals to be activated
-    while (!sm1.done()) {
-        sm1.resume();
-        co_await std::suspend_always{};
-    }
-
-    // if rl is nullptr, emit resolved event
-    if (!rl) {
-        resolved_producer.produce({rl});
-        co_return;
-    }
-
-    // deactivate parent goal
-    auto sm2 = deactivate_goal(rl->parent);
-
-    // wait for the parent goal to be deactivated
-    while (!sm2.done()) {
-        sm2.resume();
-        co_await std::suspend_always{};
-    }
-
-    // emit resolved event
-    resolved_producer.produce({rl});
-}
-
-state_machine<void> resolver::activate_goals(const resolution_lineage* rl, size_t body_size) {
-    // activate goals
-    for (size_t i = 0; i < body_size; ++i) {
-        
-    }
-}
-
-state_machine<void> resolver::activate_candidates(const goal_lineage* gl, goal& g) {
-    // activate candidates
-    for (size_t j = 0; j < db.size(); ++j) {
-        // get the candidate lineage
-        const resolution_lineage* candidate_rl = lp.resolution(gl, j);
-
-        // check if the candidate is eliminated by cdcl
-        if (eb.contains(candidate_rl))
-            continue;
-
-        // make the candidate
-        auto c = candidate_factory.make();
-
-        // insert the candidate into the frontier
-        g.candidates.insert({j, std::move(c)});
-
-        // initialize the candidate
-        candidate_initializer.initialize(candidate_rl);
-        
-        // emit candidate activating event
-        candidate_activating_producer.produce({candidate_rl});
-        co_await std::suspend_always{};
-
-        // emit candidate activated event
-        candidate_activated_producer.produce({candidate_rl});
-        co_await std::suspend_always{};
-    }
-
-    // if the goal has no candidates, emit goal candidates empty event
-    if (g.candidates.empty()) {
-        goal_candidates_empty_producer.produce({gl});
-        co_await std::suspend_always{};
-    }
-}
-
-state_machine<void> resolver::deactivate_goal(const goal_lineage* parent_gl) {
-    // get parent goal
-    auto& parent_goal = frontier.at(parent_gl);
-    
-    // emit goal_deactivating_event
-    goal_deactivating_producer.produce({parent_gl});
-    co_await std::suspend_always{};
-
-    // deactivate candidates
-    auto sm0 = deactivate_candidates(parent_gl, *parent_goal);
-
-    // wait for the candidates to be deactivated
-    while (!sm0.done()) {
-        sm0.resume();
-        co_await std::suspend_always{};
-    }
-
-    // erase the parent goal
-    frontier.erase(parent_gl);
-
-    // emit goal_deactivated_event
-    goal_deactivated_producer.produce({parent_gl});
-    co_await std::suspend_always{};
-}
-
-state_machine<void> resolver::deactivate_candidates(const goal_lineage* parent_gl, goal& parent_goal) {
-    // deactivate parent candidates
-    for (auto it = parent_goal.candidates.begin(); it != parent_goal.candidates.end();) {
-        // get the index
-        size_t idx = it->first;
-
-        // pre-advance the iterator before erasure
-        auto curr = it++;
-
-        // erase the candidate
-        parent_goal.candidates.erase(curr);
-
-        // get the candidate lineage
-        const resolution_lineage* candidate_rl = lp.resolution(parent_gl, idx);
-
-        // emit candidate deactivating event
-        candidate_deactivating_producer.produce({candidate_rl});
-        co_await std::suspend_always{};
-
-        // emit candidate deactivated event
-        candidate_deactivated_producer.produce({candidate_rl});
-        co_await std::suspend_always{};
-    }
+    // get parent goal lineage
+    const goal_lineage* gl = rl->parent;
+    // 3. deactivate all candidates of parent goal
+    gca.accept(gl, gcdv);
+    // 4. deactivate the parent goal
+    goal_deactivator.deactivate(gl);
 }

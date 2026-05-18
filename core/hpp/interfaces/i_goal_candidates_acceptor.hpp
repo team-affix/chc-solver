@@ -6,7 +6,7 @@
 
 struct i_goal_candidates_acceptor {
     virtual ~i_goal_candidates_acceptor() = default;
-    virtual void accept(i_visitor<const resolution_lineage*>&) = 0;
+    virtual void accept(const goal_lineage*, i_visitor<const resolution_lineage*>&) = 0;
 };
 
 #endif
