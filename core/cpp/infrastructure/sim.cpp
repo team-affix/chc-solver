@@ -55,7 +55,8 @@ sim_termination sim::run() {
                 ug.push(gl);
         }
         // 4. resolve given rl
-        r.resolve(rl);
+        if (!r.resolve(rl))
+            return sim_termination::conflicted;
     }
     return sim_termination::depth_exceeded;
 }
