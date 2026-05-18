@@ -6,7 +6,7 @@
 class i_elimination_backlog {
 public:
     virtual ~i_elimination_backlog() = default;
-    virtual void push(const resolution_lineage*) = 0;
+    virtual void insert(const resolution_lineage*) = 0;
     virtual bool contains(const resolution_lineage*) = 0;
     virtual void constrain(const resolution_lineage*) = 0;
 };
