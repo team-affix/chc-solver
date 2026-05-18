@@ -5,9 +5,8 @@ resolver::resolver(
     i_lineage_pool& lp,
     i_goal_activator& goal_activator,
     i_goal_deactivator& goal_deactivator,
-    i_candidate_activator& candidate_activator,
-    i_goal_candidates_acceptor& gca,
-    i_goal_candidate_deactivator_visitor& gcdv,
+    i_get_goal_rules& ggr,
+    i_get_goal_candidates& ggc,
     i_conflict_detector& cd,
     i_unit_goal_detector& ugd,
     i_unit_goals& ug)
@@ -16,9 +15,8 @@ resolver::resolver(
     lp(lp),
     goal_activator(goal_activator),
     goal_deactivator(goal_deactivator),
-    candidate_activator(candidate_activator),
-    gca(gca),
-    gcdv(gcdv),
+    ggr(ggr),
+    ggc(ggc),
     cd(cd),
     ugd(ugd),
     ug(ug) {
@@ -31,6 +29,8 @@ bool resolver::resolve(const resolution_lineage* rl) {
     for (int i = 0; i < r.body.size(); ++i) {
         const goal_lineage* gl = lp.goal(rl, i);
         goal_activator.activate(gl);
+        // get the rules for the goal
+        auto& rules = ggr.get(gl);
         for (int j = 0; j < db.size(); ++j)
             candidate_activator.try_activate(lp.resolution(gl, j));
         // check for conflicts
