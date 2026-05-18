@@ -11,6 +11,7 @@
 #include "../interfaces/i_copier.hpp"
 #include "../interfaces/i_expr_pool.hpp"
 #include "../utility/state_machine.hpp"
+#include "../value_objects/unify_head.hpp"
 
 struct mhu_elimination_generator : i_mhu_elimination_generator {
     virtual ~mhu_elimination_generator() = default;
@@ -21,7 +22,7 @@ struct mhu_elimination_generator : i_mhu_elimination_generator {
         i_bind_map&,
         i_copier&,
         i_expr_pool&);
-    bool add_head(const resolution_lineage*, const expr*, const expr*) override;
+    void add_head(const resolution_lineage*, unify_head*) override;
     void remove_head(const resolution_lineage*) override;
     state_machine<const resolution_lineage*> constrain(const resolution_lineage*) override;
 private:
@@ -39,7 +40,7 @@ private:
     i_copier& copier_;
     i_expr_pool& expr_pool_;
     
-    std::unordered_map<const resolution_lineage*, candidate*> candidates;
+    std::unordered_map<const resolution_lineage*, unify_head*> heads_;
     std::unordered_map<uint32_t, std::unordered_set<const resolution_lineage*>> rep_to_rls_;
     std::unordered_map<const resolution_lineage*, std::unordered_set<uint32_t>> rl_to_reps_;
 };

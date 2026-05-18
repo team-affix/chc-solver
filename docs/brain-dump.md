@@ -114,4 +114,102 @@ Open question: in the future, candidates will actually need data FROM their pare
 
 Maybe, each goal contains not only the `const expr*` but also a `size_t` meaning the subgoal index of the candidate. Then, maybe we could have a reason for supplying.
 
+---
 
+Candidate OWNS the unify_head:
+
+1. We seed the unification for the candidate manually ourselves, after creating the unify_head for the candidate. THEN, we add the ALREADY SEEDED head to the `mhu`.
+
+2. IF the unification fails, it will fail before we have added anything to the mhu, meaning we don't get the oscillation case where we add it and immediately have to remove it again. This is also in line with how CDCL pre-eliminations PREVENT us from adding the candidate to the frontier. In this case, we construct the unify_head BEFORE constructing the rest of the candidate.
+
+3. Only thing is, we wanted it to be the case where we supply the `unique_ptr<goal>` to `factory<candidate>` to construct them, since we are looking for a reason to supply goal. However, if we just use the expr from the goal before calling to `i_candidate_factory::make(unify_head)`, then we once again broke this. So maybe the candidate factory only SOMETIMES makes the actual candidate.
+
+4. Oh, how about this: suppose that we always construct the candidate. However, sometimes unification will have failed, and we see that AFTER candidate construction finishes. Maybe, people could override what sets this boolean.
+
+5. Or how about this. We always construct the candidate with just the unify_head, but don't seed the unification during creation? Then, we violate the rule that the goal must be supplied during creation of the candidate.
+
+6. We definitely should know whether candidate is viable before going the whole mile of constructing it.
+
+7. Can the activation of a goal fail? Answer: maybe, if ALL candidates of that goal are eliminated when producing the goal, then we want to indicate to the system that we are conflicted. We could do this by just considering it to have "failed goal creation" and return std::nullopt. Then, the caller can know that we are conflicted early........... and we can have the symmetry that goal AND candidate creation can fail.
+
+I want the symmetry to be:
+
+`i_goal_factory::make(candidate&, size_t)`
+`i_candidate_factory::make(goal&, size_t)`
+
+I don't want to have to handle errors right away when creating the candidate. Instead, I would prefer to check after the fact. In fact, this could make sense in both cases: construct a goal using `i_goal_factory` and if it comes back WITH NO CANDIDATES, then we consider situation to be conflicting. Construct a candidate using `i_candidate_factory` and if it comes back as unify failed, then the candidate is eliminated. ~~Goal candidates being empty is a concept which is stored in the goal.~~ This is wrong, since goal just contains information for the goal itself, not information pertaining to potential forward paths (candidates).
+
+I want ALL information pertaining to a goal to be consumed in the process of thinking about forward paths.
+
+There is an asymmetry which is that production of goals can never fail.
+
+Look, which do I believe in more:
+1. The expr should be supplied to the candidate during construction, and it should spawn its own unify_head from that
+
+OR
+
+2. We need to check unifiability BEFORE creating the candidate.
+
+
+
+Well, let's think: we need to construct the translation map first and copy into it first to THEN attempt unification, to THEN know whether it failed. This is a LOT of setup to do BEFORE construction of a candidate.
+
+Can't do a slanted interface tower, since that incurs runtime costs when casting between types (like i_goal vs. i_weighted). Unless we do `i_weighted : i_goal` and it truly is a data-less interface.
+
+So I suppose it would look like:
+```
+struct i_goal {
+    const expr* e() const;
+};
+struct i_weighted_goal : i_goal {
+    double weight() const;
+};
+struct goal {
+    const expr* e() const override {return exp;}
+private:
+    const expr* exp;
+};
+struct weighted_goal : i_weighted_goal {
+    const expr* e() const override {return exp;}
+    double weight() const override {return w;}
+private:
+    const expr* exp;
+    const double w;
+};
+```
+
+```
+struct i_candidate {
+    unordered_map<uint32_t, uint32_t>& tm() const;
+};
+struct i_weighted_candidate : i_goal {
+    double child_weights() const;
+};
+struct candidate {
+    auto& tm() const override {return trm;}
+private:
+    unordered_map<uint32_t, uint32_t> trm;
+};
+struct weighted_goal : i_weighted_goal {
+    const expr* e() const override {return exp;}
+    double weight() const override {return w;}
+private:
+    const expr* exp;
+    const double w;
+};
+```
+
+I mean, or we could entirely do away with the whole goal in the middle.....
+
+```
+i_candidate_factory::make(candidate&, size_t, size_t)
+```
+
+---
+
+In reality, to decouple the candidate factory from the database, we will probably need to do this:
+
+`i_goal_factory::make(candidate&, size_t)`
+`i_candidate_factory::make(goal&, const rule&)`
+
+now in reality, I think it is more important to follow efficiency. So we will create the unify_head first, and supply it to the constructor for the candidate. If we do this though, then it is breaking encapsulation a bit where the caller of candidate_factory supplies the specific members of a candidate. However, in the case of extended candidates, we will not be able to supply those fields manually. Thus once again, it seems that we will need to supply the information of a goal to construct the derived candidate.
