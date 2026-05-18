@@ -1,7 +1,6 @@
 #ifndef LINEAGE_HPP
 #define LINEAGE_HPP
 
-#include <cstddef>
 #include <compare>
 #include "expr.hpp"
 #include "rule.hpp"

@@ -1,10 +1,10 @@
 #include "../../hpp/infrastructure/lineage_pool.hpp"
 
-const goal_lineage* lineage_pool::goal(const resolution_lineage* parent, size_t idx) {
+const goal_lineage* lineage_pool::goal(const resolution_lineage* parent, const expr* idx) {
     return intern(goal_lineage{parent, idx});
 }
 
-const resolution_lineage* lineage_pool::resolution(const goal_lineage* parent, size_t idx) {
+const resolution_lineage* lineage_pool::resolution(const goal_lineage* parent, const rule* idx) {
     return intern(resolution_lineage{parent, idx});
 }
 
