@@ -5,7 +5,7 @@
 
 struct i_candidate_activator {
     virtual ~i_candidate_activator() = default;
-    virtual bool activate(const resolution_lineage*) = 0;
+    virtual void try_activate(const resolution_lineage*) = 0;
 };
 
 #endif

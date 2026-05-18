@@ -5,7 +5,7 @@
 
 struct i_goal_activator {
     virtual ~i_goal_activator() = default;
-    virtual bool activate(const goal_lineage*) = 0;
+    virtual void activate(const goal_lineage*) = 0;
 };
 
 #endif
