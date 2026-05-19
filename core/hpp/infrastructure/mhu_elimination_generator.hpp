@@ -4,11 +4,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include "../interfaces/i_mhu_elimination_generator.hpp"
-#include "../interfaces/i_unifier.hpp"
-#include "../interfaces/i_factory.hpp"
 #include "../interfaces/i_bind_map.hpp"
-#include "../interfaces/i_overlay_bind_map.hpp"
-#include "../interfaces/i_copier.hpp"
 #include "../interfaces/i_expr_pool.hpp"
 #include "../utility/state_machine.hpp"
 #include "../value_objects/unify_head.hpp"
@@ -16,11 +12,7 @@
 struct mhu_elimination_generator : i_mhu_elimination_generator {
     virtual ~mhu_elimination_generator() = default;
     mhu_elimination_generator(
-        i_factory<i_unifier, i_bind_map&>&,
-        i_factory<i_bind_map>&,
-        i_factory<i_overlay_bind_map, i_bind_map&, i_bind_map&>&,
         i_bind_map&,
-        i_copier&,
         i_expr_pool&);
     void add_head(const resolution_lineage*, unify_head, const std::unordered_set<uint32_t>&) override;
     void remove_head(const resolution_lineage*) override;
@@ -33,11 +25,7 @@ private:
     std::unordered_set<uint32_t> unlink(const resolution_lineage*);
     void extract_child_reps(const expr*, std::unordered_set<uint32_t>&);
     
-    i_factory<i_unifier, i_bind_map&>& unifier_factory_;
-    i_factory<i_bind_map>& bind_map_factory_;
-    i_factory<i_overlay_bind_map, i_bind_map&, i_bind_map&>& overlay_bind_map_factory_;
     i_bind_map& common_;
-    i_copier& copier_;
     i_expr_pool& expr_pool_;
     
     std::unordered_map<const resolution_lineage*, unify_head> heads_;

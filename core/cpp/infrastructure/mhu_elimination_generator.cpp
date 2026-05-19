@@ -1,18 +1,9 @@
 #include "../../hpp/infrastructure/mhu_elimination_generator.hpp"
-#include "../../hpp/interfaces/i_factory.hpp"
 
 mhu_elimination_generator::mhu_elimination_generator(
-    i_factory<i_unifier, i_bind_map&>& unifier_factory_,
-    i_factory<i_bind_map>& bind_map_factory_,
-    i_factory<i_overlay_bind_map, i_bind_map&, i_bind_map&>& overlay_bind_map_factory_,
     i_bind_map& common_,
-    i_copier& copier_,
     i_expr_pool& expr_pool_) :
-    unifier_factory_(unifier_factory_),
-    bind_map_factory_(bind_map_factory_),
-    overlay_bind_map_factory_(overlay_bind_map_factory_),
     common_(common_),
-    copier_(copier_),
     expr_pool_(expr_pool_) {
 }
 
