@@ -6,11 +6,10 @@
 #include "../value_objects/mcts_choice.hpp"
 
 struct mcts_choice_generator_candidate_visitor : i_mcts_choice_generator_candidate_visitor {
-    mcts_choice_generator_candidate_visitor(size_t);
+    mcts_choice_generator_candidate_visitor(std::vector<mcts_choice>& internal_choices);
     void visit(const rule*) override;
-    const std::vector<mcts_choice>& choices() const;
 private:
-    std::vector<mcts_choice> internal_choices;
+    std::vector<mcts_choice>& internal_choices;
 };
 
 #endif

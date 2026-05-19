@@ -7,11 +7,10 @@
 #include "../value_objects/mcts_choice.hpp"
 
 struct mcts_choice_generator_goal_visitor : i_visitor<const goal_lineage*> {
-    mcts_choice_generator_goal_visitor(size_t);
+    mcts_choice_generator_goal_visitor(std::vector<mcts_choice>& internal_choices);
     void visit(const goal_lineage*) override;
-    const std::vector<mcts_choice>& choices() const;
 private:
-    std::vector<mcts_choice> internal_choices;
+    std::vector<mcts_choice>& internal_choices;
 };
 
 #endif
