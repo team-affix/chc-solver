@@ -2,10 +2,9 @@
 #define VAR_SEQUENCER_CPP
 
 #include "../../hpp/infrastructure/var_sequencer.hpp"
-#include "../../hpp/bootstrap/locator.hpp"
 
-var_sequencer::var_sequencer() :
-    seq(locator::locate<i_trail>()) {
+var_sequencer::var_sequencer(i_trail& t) :
+    seq(t) {
 }
 
 uint32_t var_sequencer::next() {

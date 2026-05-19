@@ -1,8 +1,7 @@
 #include "../../hpp/infrastructure/cdcl_sequencer.hpp"
-#include "../../hpp/bootstrap/locator.hpp"
 
-cdcl_sequencer::cdcl_sequencer() :
-    seq(locator::locate<i_trail>()) {
+cdcl_sequencer::cdcl_sequencer(i_trail& t) :
+    seq(t) {
 }
 
 size_t cdcl_sequencer::next() {
