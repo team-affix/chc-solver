@@ -1,0 +1,27 @@
+#include <gtest/gtest.h>
+#include "../../../core/hpp/infrastructure/bind_map_factory.hpp"
+#include "../../../core/hpp/infrastructure/overlay_bind_map_factory.hpp"
+#include "../../../core/hpp/infrastructure/unifier_factory.hpp"
+#include "../../../core/hpp/infrastructure/unifier.hpp"
+#include "../../../core/hpp/infrastructure/bind_map.hpp"
+
+class FactoriesIntegrationTest : public ::testing::Test {
+protected:
+    bind_map_factory bmf;
+    overlay_bind_map_factory obmf;
+    unifier_factory uf;
+
+    bind_map local;
+    bind_map remote;
+    expr var0{expr::var{0}};
+    expr func{expr::functor{"f", {}}};
+};
+
+TEST_F(FactoriesIntegrationTest, UnifierFromFactoriesUnifiesThroughOverlay) {
+    auto overlay = obmf.make(local, remote);
+    auto u = uf.make(*overlay);
+
+    std::unordered_set<uint32_t> rep_changed;
+    EXPECT_TRUE(u->unify(&var0, &func, rep_changed));
+    EXPECT_EQ(local.whnf(&var0), &func);
+}
