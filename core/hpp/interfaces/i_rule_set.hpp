@@ -6,9 +6,9 @@
 
 struct i_rule_set {
     virtual ~i_rule_set() = default;
-    virtual void insert(rule) = 0;
-    virtual void erase(rule) = 0;
-    virtual void accept(i_visitor<const rule&>&) const = 0;
+    virtual void insert(const rule*) = 0;
+    virtual void erase(const rule*) = 0;
+    virtual void accept(i_visitor<const rule*>&) const = 0;
     virtual size_t size() const = 0;
 };
 
